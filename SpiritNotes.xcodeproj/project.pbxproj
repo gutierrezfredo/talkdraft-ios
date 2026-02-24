@@ -1,0 +1,621 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B27CA017958B6C9837E0CD0F /* Profile.swift */; };
+		17E040AD14496C21A9124F36 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 6C64C36244B9569D33C87877 /* Supabase */; };
+		1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 361A242AA196C15612B45852 /* RevenueCat */; };
+		34234B19B65275543186A076 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587B53DD2B6AC5F837C853ED /* HomeView.swift */; };
+		446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */; };
+		5F857DFC90F1493E71C5AFB4 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDC2CE5AACA579DFB110D46 /* LoginView.swift */; };
+		69054A65C2119235B6BE552C /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7858F881DAAF27F4B2FF7735 /* Category.swift */; };
+		6E0273F665B4CE62E68ED2BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 915FE9525353BEA289D8AA98 /* Assets.xcassets */; };
+		725201F7707944E813502375 /* SpiritNotesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B1BB2A81B5BBFB5D312B8D /* SpiritNotesTests.swift */; };
+		7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */; };
+		91B309C3032F6B06F9B7B3D0 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EEF5E55B9B545AE11B32F7 /* AIService.swift */; };
+		92A38F6EFB0308A5529B3B2D /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA70C5683C9381F5539D92E /* AudioRecorder.swift */; };
+		94BF895084A93F3659803982 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */; };
+		94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BBB0647806A651166D8EF95 /* AuthStore.swift */; };
+		A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8049F37077144512EDEEBA4D /* TranscriptionService.swift */; };
+		B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68133FC4C6E34CF64D6AABEE /* NoteStore.swift */; };
+		C848B776A5270BAAB083B87A /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58371FD88EA32F22C2D26955 /* Note.swift */; };
+		D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */; };
+		E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D93BFD3DBD41D29239AE7B79 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1F389DFE8CD11EFB425A4B8F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5ABC2BF114A31959D65A544F;
+			remoteInfo = SpiritNotes;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
+		2CA70C5683C9381F5539D92E /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		42BD501ADB4E20564B0011C8 /* SpiritNotes.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SpiritNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		50B1BB2A81B5BBFB5D312B8D /* SpiritNotesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpiritNotesTests.swift; sourceTree = "<group>"; };
+		57EEF5E55B9B545AE11B32F7 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
+		58371FD88EA32F22C2D26955 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
+		587B53DD2B6AC5F837C853ED /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		68133FC4C6E34CF64D6AABEE /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
+		6BBB0647806A651166D8EF95 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
+		7858F881DAAF27F4B2FF7735 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
+		8049F37077144512EDEEBA4D /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
+		915FE9525353BEA289D8AA98 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		9C1BDE9DB17E504C19C6A600 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A490AB207CCF96EC1CD546FF /* SpiritNotesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpiritNotesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		AEDC2CE5AACA579DFB110D46 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B27CA017958B6C9837E0CD0F /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpiritNotesApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E113A50B2BE64E6A72DEEAC7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				17E040AD14496C21A9124F36 /* Supabase in Frameworks */,
+				1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0ADD564B7B1350528F7C4377 = {
+			isa = PBXGroup;
+			children = (
+				961566AB8EF56F193389E4FD /* SpiritNotes */,
+				4D059242E8BBA662C75927E0 /* SpiritNotesTests */,
+				EBF829A4EFB4103FFDF49BDF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		24DCF0A57BF77DB781C18F3D /* Components */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		2F8DB22348B7304324618EAE /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				AEDC2CE5AACA579DFB110D46 /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		32312D2A7F36219AEB6E5581 /* Record */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Record;
+			sourceTree = "<group>";
+		};
+		4D059242E8BBA662C75927E0 /* SpiritNotesTests */ = {
+			isa = PBXGroup;
+			children = (
+				50B1BB2A81B5BBFB5D312B8D /* SpiritNotesTests.swift */,
+			);
+			path = SpiritNotesTests;
+			sourceTree = "<group>";
+		};
+		58793B9653993C6F64EF6071 /* Stores */ = {
+			isa = PBXGroup;
+			children = (
+				6BBB0647806A651166D8EF95 /* AuthStore.swift */,
+				68133FC4C6E34CF64D6AABEE /* NoteStore.swift */,
+				A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */,
+			);
+			path = Stores;
+			sourceTree = "<group>";
+		};
+		5AA4C9EAEAF42C73CEDD095E /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				587B53DD2B6AC5F837C853ED /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		641F37F0B3DD65C1D69641EB /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		6E50E177E3977DAB9AB5D5FB /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				57EEF5E55B9B545AE11B32F7 /* AIService.swift */,
+				8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */,
+				2CA70C5683C9381F5539D92E /* AudioRecorder.swift */,
+				0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */,
+				8049F37077144512EDEEBA4D /* TranscriptionService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		6FCCEE06D98B22E16E22258C /* Categories */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Categories;
+			sourceTree = "<group>";
+		};
+		893DD7162E970156AE4278D9 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		961566AB8EF56F193389E4FD /* SpiritNotes */ = {
+			isa = PBXGroup;
+			children = (
+				F5F03BBDDEFFD505AC6C3D11 /* App */,
+				24DCF0A57BF77DB781C18F3D /* Components */,
+				B5E555A8EB2C067822924A0B /* Models */,
+				6E50E177E3977DAB9AB5D5FB /* Services */,
+				58793B9653993C6F64EF6071 /* Stores */,
+				641F37F0B3DD65C1D69641EB /* Utils */,
+				F1B26F487700FF52D4A06CCA /* Views */,
+			);
+			path = SpiritNotes;
+			sourceTree = "<group>";
+		};
+		B5E555A8EB2C067822924A0B /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				7858F881DAAF27F4B2FF7735 /* Category.swift */,
+				58371FD88EA32F22C2D26955 /* Note.swift */,
+				B27CA017958B6C9837E0CD0F /* Profile.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D4DF2C3189BDB6534B39B583 /* NoteDetail */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = NoteDetail;
+			sourceTree = "<group>";
+		};
+		D5CB52DF8DE6C0924DDA6E1F /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		EBF829A4EFB4103FFDF49BDF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				42BD501ADB4E20564B0011C8 /* SpiritNotes.app */,
+				A490AB207CCF96EC1CD546FF /* SpiritNotesTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F1B26F487700FF52D4A06CCA /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				2F8DB22348B7304324618EAE /* Auth */,
+				6FCCEE06D98B22E16E22258C /* Categories */,
+				5AA4C9EAEAF42C73CEDD095E /* Home */,
+				D4DF2C3189BDB6534B39B583 /* NoteDetail */,
+				32312D2A7F36219AEB6E5581 /* Record */,
+				893DD7162E970156AE4278D9 /* Search */,
+				D5CB52DF8DE6C0924DDA6E1F /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F5F03BBDDEFFD505AC6C3D11 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				915FE9525353BEA289D8AA98 /* Assets.xcassets */,
+				9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */,
+				9C1BDE9DB17E504C19C6A600 /* Info.plist */,
+				D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5ABC2BF114A31959D65A544F /* SpiritNotes */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A286F772A38DD6F86DDEBA4 /* Build configuration list for PBXNativeTarget "SpiritNotes" */;
+			buildPhases = (
+				7FD0CE9F4B3A6A2FAF8371B9 /* Sources */,
+				25B6C3E7F611550BC0E0A580 /* Resources */,
+				E113A50B2BE64E6A72DEEAC7 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SpiritNotes;
+			packageProductDependencies = (
+				6C64C36244B9569D33C87877 /* Supabase */,
+				361A242AA196C15612B45852 /* RevenueCat */,
+			);
+			productName = SpiritNotes;
+			productReference = 42BD501ADB4E20564B0011C8 /* SpiritNotes.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7D353D5902FEECDF902397C3 /* SpiritNotesTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6BE79AF7E3818AD4E1B7367C /* Build configuration list for PBXNativeTarget "SpiritNotesTests" */;
+			buildPhases = (
+				2C646318994658D17730B81F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D9066471EE594064ABE57F30 /* PBXTargetDependency */,
+			);
+			name = SpiritNotesTests;
+			packageProductDependencies = (
+			);
+			productName = SpiritNotesTests;
+			productReference = A490AB207CCF96EC1CD546FF /* SpiritNotesTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1F389DFE8CD11EFB425A4B8F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = ADF9CCAAC1C1959FD70E0519 /* Build configuration list for PBXProject "SpiritNotes" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 0ADD564B7B1350528F7C4377;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2A19AD9C63F9FD2316CEA00E /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+				5CA8A1C3F73C89A0D4357749 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5ABC2BF114A31959D65A544F /* SpiritNotes */,
+				7D353D5902FEECDF902397C3 /* SpiritNotesTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		25B6C3E7F611550BC0E0A580 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6E0273F665B4CE62E68ED2BB /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2C646318994658D17730B81F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				725201F7707944E813502375 /* SpiritNotesTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7FD0CE9F4B3A6A2FAF8371B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91B309C3032F6B06F9B7B3D0 /* AIService.swift in Sources */,
+				D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */,
+				92A38F6EFB0308A5529B3B2D /* AudioRecorder.swift in Sources */,
+				94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */,
+				69054A65C2119235B6BE552C /* Category.swift in Sources */,
+				446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */,
+				34234B19B65275543186A076 /* HomeView.swift in Sources */,
+				5F857DFC90F1493E71C5AFB4 /* LoginView.swift in Sources */,
+				C848B776A5270BAAB083B87A /* Note.swift in Sources */,
+				B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */,
+				12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */,
+				94BF895084A93F3659803982 /* SettingsStore.swift in Sources */,
+				E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */,
+				7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */,
+				A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D9066471EE594064ABE57F30 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5ABC2BF114A31959D65A544F /* SpiritNotes */;
+			targetProxy = D93BFD3DBD41D29239AE7B79 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0E113DAF391BE73AE82D1E2E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		488F7358C202C22825B3BCC6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = SpiritNotes/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pleymob.spiritnotes;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		619F691347CE82BB770B0D41 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = SpiritNotes/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pleymob.spiritnotes;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		AAF6B9B10B00E7D3221FBDD1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pleymob.SpiritNotesTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SpiritNotes.app/SpiritNotes";
+			};
+			name = Release;
+		};
+		D732AD9B3B806DD53BA24E1D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.pleymob.SpiritNotesTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SpiritNotes.app/SpiritNotes";
+			};
+			name = Debug;
+		};
+		FF3349D8FD3289A78AFEFC29 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1A286F772A38DD6F86DDEBA4 /* Build configuration list for PBXNativeTarget "SpiritNotes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				488F7358C202C22825B3BCC6 /* Debug */,
+				619F691347CE82BB770B0D41 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6BE79AF7E3818AD4E1B7367C /* Build configuration list for PBXNativeTarget "SpiritNotesTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D732AD9B3B806DD53BA24E1D /* Debug */,
+				AAF6B9B10B00E7D3221FBDD1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ADF9CCAAC1C1959FD70E0519 /* Build configuration list for PBXProject "SpiritNotes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF3349D8FD3289A78AFEFC29 /* Debug */,
+				0E113DAF391BE73AE82D1E2E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2A19AD9C63F9FD2316CEA00E /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+		5CA8A1C3F73C89A0D4357749 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		361A242AA196C15612B45852 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A19AD9C63F9FD2316CEA00E /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+		6C64C36244B9569D33C87877 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5CA8A1C3F73C89A0D4357749 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 1F389DFE8CD11EFB425A4B8F /* Project object */;
+}
