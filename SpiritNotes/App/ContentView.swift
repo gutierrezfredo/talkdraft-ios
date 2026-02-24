@@ -4,12 +4,7 @@ struct ContentView: View {
     @Environment(AuthStore.self) private var authStore
 
     var body: some View {
-        Group {
-            if authStore.isAuthenticated {
-                HomeView()
-            } else {
-                LoginView()
-            }
-        }
+        // Show home directly for now (auth will be wired up later)
+        HomeView()
     }
 }

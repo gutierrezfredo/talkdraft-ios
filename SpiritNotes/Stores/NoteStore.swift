@@ -12,6 +12,11 @@ final class NoteStore {
         return notes.filter { $0.categoryId == categoryId }
     }
 
+    func loadMockData() {
+        categories = MockData.categories
+        notes = MockData.notes
+    }
+
     func fetchNotes() async throws {
         // TODO: Fetch from Supabase
     }

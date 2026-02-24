@@ -17,12 +17,15 @@
 		6E0273F665B4CE62E68ED2BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 915FE9525353BEA289D8AA98 /* Assets.xcassets */; };
 		725201F7707944E813502375 /* SpiritNotesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50B1BB2A81B5BBFB5D312B8D /* SpiritNotesTests.swift */; };
 		7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */; };
+		8122A30BCFDB7A5FF1393B78 /* NoteCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */; };
 		91B309C3032F6B06F9B7B3D0 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EEF5E55B9B545AE11B32F7 /* AIService.swift */; };
 		92A38F6EFB0308A5529B3B2D /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA70C5683C9381F5539D92E /* AudioRecorder.swift */; };
 		94BF895084A93F3659803982 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */; };
 		94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BBB0647806A651166D8EF95 /* AuthStore.swift */; };
 		A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8049F37077144512EDEEBA4D /* TranscriptionService.swift */; };
+		B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41925CEEAC033F67F18E9F4A /* Colors.swift */; };
 		B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68133FC4C6E34CF64D6AABEE /* NoteStore.swift */; };
+		BFAB7C2D2E8106E7331369B6 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FB29A614C2AEB676FFF744 /* MockData.swift */; };
 		C848B776A5270BAAB083B87A /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58371FD88EA32F22C2D26955 /* Note.swift */; };
 		D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */; };
 		E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */; };
@@ -41,6 +44,8 @@
 /* Begin PBXFileReference section */
 		0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
 		2CA70C5683C9381F5539D92E /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
+		41925CEEAC033F67F18E9F4A /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		42BD501ADB4E20564B0011C8 /* SpiritNotes.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SpiritNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		50B1BB2A81B5BBFB5D312B8D /* SpiritNotesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpiritNotesTests.swift; sourceTree = "<group>"; };
 		57EEF5E55B9B545AE11B32F7 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
@@ -59,6 +64,7 @@
 		AEDC2CE5AACA579DFB110D46 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		B27CA017958B6C9837E0CD0F /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpiritNotesApp.swift; sourceTree = "<group>"; };
+		E6FB29A614C2AEB676FFF744 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +92,7 @@
 		24DCF0A57BF77DB781C18F3D /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -134,6 +141,8 @@
 		641F37F0B3DD65C1D69641EB /* Utils */ = {
 			isa = PBXGroup;
 			children = (
+				41925CEEAC033F67F18E9F4A /* Colors.swift */,
+				E6FB29A614C2AEB676FFF744 /* MockData.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -285,7 +294,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					5ABC2BF114A31959D65A544F = {
+						DevelopmentTeam = H83F573KQB;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = ADF9CCAAC1C1959FD70E0519 /* Build configuration list for PBXProject "SpiritNotes" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -340,10 +355,13 @@
 				92A38F6EFB0308A5529B3B2D /* AudioRecorder.swift in Sources */,
 				94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */,
 				69054A65C2119235B6BE552C /* Category.swift in Sources */,
+				B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */,
 				446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */,
 				34234B19B65275543186A076 /* HomeView.swift in Sources */,
 				5F857DFC90F1493E71C5AFB4 /* LoginView.swift in Sources */,
+				BFAB7C2D2E8106E7331369B6 /* MockData.swift in Sources */,
 				C848B776A5270BAAB083B87A /* Note.swift in Sources */,
+				8122A30BCFDB7A5FF1393B78 /* NoteCard.swift in Sources */,
 				B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */,
 				12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */,
 				94BF895084A93F3659803982 /* SettingsStore.swift in Sources */,
@@ -409,7 +427,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -425,7 +443,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = SpiritNotes/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -444,7 +464,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = SpiritNotes/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -541,7 +563,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

@@ -12,6 +12,9 @@ struct SpiritNotesApp: App {
                 .environment(authStore)
                 .environment(noteStore)
                 .environment(settingsStore)
+                .onAppear {
+                    noteStore.loadMockData()
+                }
         }
     }
 }
