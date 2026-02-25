@@ -16,9 +16,8 @@ struct NoteDetailView: View {
     @State private var pendingRewriteResult: String?
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
-    @State private var keyboardHeight: CGFloat = 0
     @State private var typewriterTask: Task<Void, Never>?
-    @FocusState private var contentFocused: Bool
+    @State private var contentFocused = false
 
     init(note: Note) {
         self.noteId = note.id
@@ -44,43 +43,46 @@ struct NoteDetailView: View {
         return URL(string: urlString)
     }
 
+    private var isTranscribing: Bool {
+        editedContent == "Transcribing…"
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Background
             (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
-            // Scrollable content
             ScrollView {
                 VStack(spacing: 0) {
-                    // Audio pill + date
                     metadataRow
                         .padding(.top, 12)
 
-                    // Audio player (expandable)
                     if audioExpanded, audioURL != nil {
                         audioPlayerView
                             .padding(.top, 12)
                             .padding(.horizontal, 24)
                     }
 
-                    // Title
                     titleField
                         .padding(.top, 20)
                         .padding(.horizontal, 24)
 
-                    // Content
-                    contentField
-                        .padding(.top, 28)
-                        .padding(.horizontal, 24)
+                    if isTranscribing {
+                        transcribingIndicator
+                            .padding(.top, 40)
+                    } else {
+                        contentField
+                            .padding(.top, 28)
+                            .padding(.horizontal, 24)
 
-                    // Tap zone below content to focus editor
-                    Color.clear
-                        .frame(minHeight: 500)
-                        .contentShape(Rectangle())
-                        .onTapGesture { contentFocused = true }
+                        // Tap zone below content to focus editor
+                        Color.clear
+                            .frame(minHeight: 500)
+                            .contentShape(Rectangle())
+                            .onTapGesture { contentFocused = true }
+                    }
                 }
-                .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 60 : 120)
+                .padding(.bottom, 120)
             }
             .scrollDismissesKeyboard(.interactively)
 
@@ -90,7 +92,7 @@ struct NoteDetailView: View {
                 LinearGradient(
                     colors: [
                         .clear,
-                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground),
+                        colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -100,19 +102,29 @@ struct NoteDetailView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
-            // Bottom bar: action buttons or keyboard toolbar
-            if keyboardHeight > 0 {
-                keyboardBar
-                    .padding(.bottom, keyboardHeight - bottomSafeArea + 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Bottom bar
+            if keyboardVisible {
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 40)
+
+                    bottomBar
+                        .padding(.vertical, 4)
+                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.95))
+                }
             } else {
                 bottomBar
                     .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .ignoresSafeArea(.keyboard)
         .toolbar {
             if hasChanges {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -202,14 +214,6 @@ struct NoteDetailView: View {
             player.stop()
         }
         .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                keyboardHeight = frame.height
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardHeight = 0
-        }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
                 if oldValue == "Transcribing…" {
@@ -347,123 +351,101 @@ struct NoteDetailView: View {
             .contentTransition(.opacity)
     }
 
+    // MARK: - Transcribing Indicator
+
+    private var transcribingIndicator: some View {
+        Text("Transcribing…")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .phaseAnimator([false, true]) { content, pulse in
+                content.opacity(pulse ? 0.3 : 1.0)
+            } animation: { _ in
+                .easeInOut(duration: 1.2)
+            }
+    }
+
     // MARK: - Content
 
     private var contentField: some View {
-        TextField("Start typing...", text: $editedContent, axis: .vertical)
-            .font(.body)
-            .lineSpacing(6)
-            .focused($contentFocused)
-            .contentTransition(.opacity)
+        ExpandingTextView(
+            text: $editedContent,
+            isFocused: $contentFocused,
+            font: .preferredFont(forTextStyle: .body),
+            lineSpacing: 6,
+            placeholder: "Start typing..."
+        )
     }
 
-    // MARK: - Keyboard Bar
-
-    private var keyboardBar: some View {
-        HStack(spacing: 12) {
-            Button {
-                showCategoryPicker = true
-            } label: {
-                Image(systemName: "tag")
-                    .font(.callout)
-                    .foregroundStyle(
-                        category != nil ? Color(hex: category!.color) : .secondary
-                    )
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                showRewriteSheet = true
-            } label: {
-                Image(systemName: "wand.and.stars")
-                    .font(.callout)
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                shareText()
-            } label: {
-                Image(systemName: "arrowshape.turn.up.right")
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Button {
-                contentFocused = false
-            } label: {
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-    }
-
-    private var bottomSafeArea: CGFloat {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.keyWindow else { return 0 }
-        return window.safeAreaInsets.bottom
-    }
+    private var keyboardVisible: Bool { contentFocused }
 
     // MARK: - Bottom Bar
 
     private var bottomBar: some View {
-        HStack(spacing: 40) {
-            // Tag (left — same position as Upload on home)
+        HStack(spacing: keyboardVisible ? 12 : 40) {
+            // Tag
             Button {
                 showCategoryPicker = true
             } label: {
                 Image(systemName: "tag")
-                    .font(.title3)
+                    .font(keyboardVisible ? .callout : .title3)
                     .foregroundStyle(
                         category != nil ? Color(hex: category!.color) : .secondary
                     )
-                    .frame(width: 56, height: 56)
+                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
             .sensoryFeedback(.selection, trigger: showCategoryPicker)
 
-            // Rewrite (center — same position as Record on home)
+            // Rewrite
             Button {
                 showRewriteSheet = true
             } label: {
-                Image(systemName: "wand.and.stars")
-                    .font(.title)
-                    .foregroundStyle(.white)
-                    .frame(width: 72, height: 72)
-                    .background(Circle().fill(Color.brand))
-                    .glassEffect(.regular.interactive(), in: .circle)
+                if keyboardVisible {
+                    Image(systemName: "wand.and.stars")
+                        .font(.callout)
+                        .foregroundStyle(Color.brand)
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.title)
+                        .foregroundStyle(.white)
+                        .frame(width: 72, height: 72)
+                        .background(Circle().fill(Color.brand))
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
             }
             .buttonStyle(.plain)
 
-            // Share (right — same position as Search on home)
+            // Share
             Button {
                 shareText()
             } label: {
                 Image(systemName: "arrowshape.turn.up.right")
-                    .font(.title3)
+                    .font(keyboardVisible ? .callout : .title3)
                     .foregroundStyle(.primary)
-                    .frame(width: 56, height: 56)
+                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+
+            if keyboardVisible {
+                Spacer()
+
+                Button {
+                    contentFocused = false
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.bottom, 0)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, keyboardVisible ? 16 : 20)
         .contentShape(Rectangle())
     }
 
