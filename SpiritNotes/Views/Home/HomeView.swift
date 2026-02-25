@@ -87,7 +87,7 @@ struct HomeView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
-                        Text("Settings") // TODO: SettingsView
+                        SettingsView()
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -105,17 +105,36 @@ struct HomeView: View {
     // MARK: - Greeting
 
     private var greeting: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Hey! 👋")
-                .font(.subheadline)
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text("Say it ")
+            Text("messy")
                 .foregroundStyle(.secondary)
-            Text("What's on your mind?")
-                .font(.title)
-                .fontWeight(.bold)
+                .overlay(alignment: .bottom) {
+                    ScribbleUnderline()
+                        .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        .foregroundStyle(.secondary.opacity(0.5))
+                        .frame(height: 8)
+                        .offset(y: 4)
+                }
+            Text(". ")
+            Text("Read it ")
+            Text("clean")
+                .foregroundStyle(Color.brand)
+                .overlay(alignment: .bottom) {
+                    SmoothArcUnderline()
+                        .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .foregroundStyle(Color.brand)
+                        .frame(height: 5)
+                        .offset(y: 2)
+                }
+            Text(".")
         }
+        .font(.title3)
+        .fontWeight(.semibold)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.top, 8)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Category Chips
@@ -219,6 +238,51 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Greeting Underlines
+
+private struct ScribbleUnderline: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        var path = Path()
+        // Single continuous wobbly line (gentle)
+        path.move(to: CGPoint(x: 0, y: h * 0.5))
+        path.addCurve(
+            to: CGPoint(x: w * 0.2, y: h * 0.35),
+            control1: CGPoint(x: w * 0.05, y: h * 0.7),
+            control2: CGPoint(x: w * 0.12, y: h * 0.2)
+        )
+        path.addCurve(
+            to: CGPoint(x: w * 0.45, y: h * 0.65),
+            control1: CGPoint(x: w * 0.28, y: h * 0.45),
+            control2: CGPoint(x: w * 0.35, y: h * 0.75)
+        )
+        path.addCurve(
+            to: CGPoint(x: w * 0.7, y: h * 0.3),
+            control1: CGPoint(x: w * 0.55, y: h * 0.55),
+            control2: CGPoint(x: w * 0.62, y: h * 0.2)
+        )
+        path.addCurve(
+            to: CGPoint(x: w, y: h * 0.5),
+            control1: CGPoint(x: w * 0.78, y: h * 0.4),
+            control2: CGPoint(x: w * 0.9, y: h * 0.7)
+        )
+        return path
+    }
+}
+
+private struct SmoothArcUnderline: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: rect.height))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.width, y: rect.height),
+            control: CGPoint(x: rect.width * 0.5, y: 0)
+        )
+        return path
+    }
+}
+
 // MARK: - Category Chip
 
 private struct CategoryChip: View {
@@ -243,7 +307,7 @@ private struct CategoryChip: View {
                 )
                 .overlay(
                     Capsule()
-                        .strokeBorder(isSelected ? color : .clear, lineWidth: 2)
+                        .strokeBorder(isSelected ? color : .clear, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
