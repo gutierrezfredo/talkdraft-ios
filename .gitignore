@@ -27,3 +27,5 @@ Package.resolved
 
 # Secrets
 .env
+.playwright-mcp/
+supabase/
