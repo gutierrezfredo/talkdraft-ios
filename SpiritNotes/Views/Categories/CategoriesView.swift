@@ -8,11 +8,11 @@ struct CategoriesView: View {
     @State private var categoryToDelete: Category?
 
     private var backgroundColor: Color {
-        colorScheme == .dark ? .warmBackgroundDark : .warmBackground
+        colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
     private var cardColor: Color {
-        colorScheme == .dark ? .cardSurfaceDark : .white
+        colorScheme == .dark ? .darkSurface : .white
     }
 
     var body: some View {
@@ -205,7 +205,7 @@ struct CategoryFormSheet: View {
                             .padding(.horizontal, 16)
                             .frame(height: 56)
                             .background(
-                                colorScheme == .dark ? Color.cardSurfaceDark : .white
+                                colorScheme == .dark ? Color.darkSurface : .white
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 24))
                     }
@@ -245,7 +245,7 @@ struct CategoryFormSheet: View {
                         }
                         .padding(16)
                         .background(
-                            colorScheme == .dark ? Color.cardSurfaceDark : .white
+                            colorScheme == .dark ? Color.darkSurface : .white
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 24))
                     }
@@ -255,7 +255,7 @@ struct CategoryFormSheet: View {
                 .padding(.top, 8)
             }
             .background(
-                (colorScheme == .dark ? Color.warmBackgroundDark : .warmBackground)
+                (colorScheme == .dark ? Color.darkBackground : .warmBackground)
                     .ignoresSafeArea()
             )
             .navigationTitle(isEditing ? "Edit Category" : "New Category")

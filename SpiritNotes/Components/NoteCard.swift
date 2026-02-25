@@ -28,7 +28,7 @@ struct NoteCard: View {
             // Title
             if let title = note.title, !title.isEmpty {
                 Text(title)
-                    .font(.headline)
+                    .font(.system(.headline, design: .serif))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }
@@ -51,7 +51,7 @@ struct NoteCard: View {
                     .padding(.vertical, 3)
                     .background(
                         Capsule()
-                            .fill(isDark ? Color(hex: "#1f1f1f") : .white)
+                            .fill(isDark ? Color.darkBackground : .white)
                     )
             }
         }

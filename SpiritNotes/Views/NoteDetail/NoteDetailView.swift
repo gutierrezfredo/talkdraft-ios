@@ -39,7 +39,7 @@ struct NoteDetailView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             // Background
-            (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground)
+            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
             // Scrollable content
@@ -82,7 +82,7 @@ struct NoteDetailView: View {
                 LinearGradient(
                     colors: [
                         .clear,
-                        (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground),
+                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -214,7 +214,7 @@ struct NoteDetailView: View {
                     .padding(.vertical, 6)
                     .background(
                         Capsule()
-                            .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : Color(hex: "#EDE5E2"))
+                            .fill(colorScheme == .dark ? Color.darkSurface : Color(hex: "#EDE5E2"))
                     )
                 }
                 .buttonStyle(.plain)
@@ -292,7 +292,7 @@ struct NoteDetailView: View {
 
     private var titleField: some View {
         TextField("Untitled", text: $editedTitle, axis: .vertical)
-            .font(.system(size: 28, weight: .bold))
+            .font(.system(size: 28, weight: .bold, design: .serif))
             .multilineTextAlignment(.center)
             .autocorrectionDisabled()
     }
@@ -438,7 +438,7 @@ private struct CategoryPickerSheet: View {
                                 .padding(.vertical, 14)
                                 .background(
                                     Capsule()
-                                        .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                                 )
                                 .overlay(
                                     Capsule()
@@ -462,7 +462,7 @@ private struct CategoryPickerSheet: View {
                             .frame(width: 44, height: 44)
                             .background(
                                 Circle()
-                                    .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+                                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                             )
                     }
                     .buttonStyle(.plain)
@@ -505,51 +505,6 @@ private struct CategoryPickerSheet: View {
         .onAppear {
             selectedCategoryId = note.categoryId
         }
-    }
-}
-
-// MARK: - Flow Layout
-
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = arrange(proposal: proposal, subviews: subviews)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = arrange(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
-                proposal: .unspecified
-            )
-        }
-    }
-
-    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
-        let maxWidth = proposal.width ?? .infinity
-        var positions: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var maxX: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            positions.append(CGPoint(x: x, y: y))
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-            maxX = max(maxX, x - spacing)
-        }
-
-        return (CGSize(width: maxX, height: y + rowHeight), positions)
     }
 }
 

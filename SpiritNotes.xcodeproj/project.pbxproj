@@ -32,6 +32,7 @@
 		BBC77B6F32C169F1CFBEDFD6 /* CategoryChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16ACBED0F40888753BD49C63 /* CategoryChip.swift */; };
 		BFAB7C2D2E8106E7331369B6 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FB29A614C2AEB676FFF744 /* MockData.swift */; };
 		C848B776A5270BAAB083B87A /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58371FD88EA32F22C2D26955 /* Note.swift */; };
+		CDFBFD8E0C18772C83EBC3D6 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1176157ED9AD7F84C9AD17A5 /* FlowLayout.swift */; };
 		D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */; };
 		E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */; };
 		F6FF22C1E20EBE9F1935BD0E /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183E583EACE764AECF68C73F /* RecordView.swift */; };
@@ -49,6 +50,7 @@
 
 /* Begin PBXFileReference section */
 		0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
+		1176157ED9AD7F84C9AD17A5 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		16ACBED0F40888753BD49C63 /* CategoryChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChip.swift; sourceTree = "<group>"; };
 		183E583EACE764AECF68C73F /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		2CA70C5683C9381F5539D92E /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				16ACBED0F40888753BD49C63 /* CategoryChip.swift */,
+				1176157ED9AD7F84C9AD17A5 /* FlowLayout.swift */,
 				3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */,
 			);
 			path = Components;
@@ -377,6 +380,7 @@
 				BBC77B6F32C169F1CFBEDFD6 /* CategoryChip.swift in Sources */,
 				B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */,
 				446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */,
+				CDFBFD8E0C18772C83EBC3D6 /* FlowLayout.swift in Sources */,
 				34234B19B65275543186A076 /* HomeView.swift in Sources */,
 				5F857DFC90F1493E71C5AFB4 /* LoginView.swift in Sources */,
 				BFAB7C2D2E8106E7331369B6 /* MockData.swift in Sources */,

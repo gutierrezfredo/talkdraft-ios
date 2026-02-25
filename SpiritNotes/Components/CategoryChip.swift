@@ -18,7 +18,7 @@ struct CategoryChip: View {
                 .padding(.vertical, 10)
                 .background(
                     Capsule()
-                        .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white)
+                        .fill(colorScheme == .dark ? Color.darkSurface : .white)
                 )
                 .overlay(
                     Capsule()
