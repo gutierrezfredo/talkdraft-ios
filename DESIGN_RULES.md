@@ -89,29 +89,22 @@ System semantic colors are the default. Custom brand colors are allowed for iden
 | Destructive | `.red` |
 | Backgrounds | System-managed |
 
-### Custom Colors (branding)
+### Brand Colors
 
-If using custom brand colors:
-- Define them in `Assets.xcassets` with **both light and dark variants**
-- Reference via `Color("BrandPrimary")` — never inline hex in views
-- `Color(hex:)` helper is allowed only for **user-defined data** (e.g., category colors from the database)
+- Brand violet `#7C3AED` defined as `Color.brand` in `Colors.swift`
+- Warm background `#F8F2F0` defined as `Color.warmBackground` for light mode
+- `Color(hex:)` helper for user-defined data (category colors from database)
+- Category-tinted card backgrounds use `Color.blended(opacity:isDark:)` — 14% light, 10% dark
 - Never replace system semantic colors — use brand colors alongside them
 - Test in both light mode, dark mode, and increased contrast
-
-```
-Assets.xcassets/
-├── BrandPrimary.colorset/     (light + dark variants)
-├── BrandSecondary.colorset/   (light + dark variants)
-└── BrandAccent.colorset/      (light + dark variants)
-```
 
 ---
 
 ## Materials & Liquid Glass (iOS 26)
 
 - Navigation bars and toolbars get Liquid Glass automatically
-- Use `.glassEffect(.regular.interactive(), in: shape)` for custom glass surfaces
-- Use `.regularMaterial` or `.ultraThinMaterial` for translucent surfaces
+- **All custom interactive surfaces** (buttons, cards, chips) must use `.glassEffect(.regular.interactive(), in: shape)` — never `.regularMaterial` for tappable elements
+- `.regularMaterial` / `.ultraThinMaterial` only for non-interactive overlays (e.g., fade gradients, dimming layers)
 - Never set manual background colors on navigation elements — let the system handle it
 
 ---
@@ -128,10 +121,9 @@ Assets.xcassets/
 
 ## Layout
 
-- Use `List` for scrollable content — not `ScrollView` with manual `VStack`
-- Use `.listStyle(.insetGrouped)` as default
-- Use `Form` for settings and input screens
-- Use `Section` with headers/footers for grouping
+- Home screen uses `ScrollView` + `LazyVGrid` (2-column card grid) for visual browsing
+- Detail/settings screens use `List` with `.listStyle(.insetGrouped)` or `Form`
+- Use `Section` with headers/footers for grouping in lists
 - Use `ContentUnavailableView` for empty states
 - Use `.searchable()` for search — never custom search bars
 
@@ -139,19 +131,20 @@ Assets.xcassets/
 
 ## Buttons & Actions
 
-- Primary actions: `.buttonStyle(.borderedProminent)`
-- Secondary actions: `.buttonStyle(.bordered)`
+- **Default to `.buttonStyle(.plain)`** for custom buttons — never rely on the system blue accent tint
+- Style buttons explicitly with brand colors, `.glassEffect()`, or foreground/background modifiers
+- Use `.borderedProminent` or `.bordered` only for system-styled form/alert buttons where the default tint is intentional
 - Destructive actions: `.tint(.red)`
 - Use `.buttonBorderShape(.capsule)` or `.roundedRectangle` as appropriate
 - Use `.controlSize(.large)` for prominent actions
 - Toolbar actions: `.toolbar { ToolbarItem { } }`
-- Never build custom button views with manual padding/background
 
 ---
 
 ## Menus & Selection
 
-- Use `Menu` for filter/option dropdowns — not custom sheets or chip bars
+- Home category filter uses horizontal scrollable pill chips (brand-colored capsules)
+- Use `Menu` for compact option dropdowns where chip bar is not appropriate
 - Use `Picker` for single selection from a set of options
 - Use `.confirmationDialog()` for destructive action confirmation
 - Use `.alert()` for simple confirmations

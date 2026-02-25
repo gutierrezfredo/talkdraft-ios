@@ -71,6 +71,71 @@ enum MockData {
                 createdAt: Date().addingTimeInterval(-86400 * 5),
                 updatedAt: Date().addingTimeInterval(-86400 * 5)
             ),
+            Note(
+                id: UUID(),
+                categoryId: personal,
+                title: "Book recommendations",
+                content: "Check out Atomic Habits by James Clear and Deep Work by Cal Newport. Both recommended by multiple people this week.",
+                source: .text,
+                createdAt: Date().addingTimeInterval(-86400 * 6),
+                updatedAt: Date().addingTimeInterval(-86400 * 6)
+            ),
+            Note(
+                id: UUID(),
+                categoryId: ideas,
+                title: "Voice journal feature",
+                content: "What if users could set a daily reminder to record a voice journal entry? Auto-transcribe and tag by mood.",
+                source: .voice,
+                durationSeconds: 55,
+                createdAt: Date().addingTimeInterval(-86400 * 7),
+                updatedAt: Date().addingTimeInterval(-86400 * 7)
+            ),
+            Note(
+                id: UUID(),
+                categoryId: work,
+                title: "Sprint retro notes",
+                content: "Velocity improved 15% this sprint. Main blocker was the auth migration. Need to timebox research tasks better.",
+                source: .voice,
+                durationSeconds: 180,
+                createdAt: Date().addingTimeInterval(-86400 * 8),
+                updatedAt: Date().addingTimeInterval(-86400 * 8)
+            ),
+            Note(
+                id: UUID(),
+                categoryId: personal,
+                title: "Recipe — pasta aglio e olio",
+                content: "Garlic, olive oil, chili flakes, parsley, spaghetti. Cook garlic low and slow. Save pasta water for emulsion.",
+                source: .text,
+                createdAt: Date().addingTimeInterval(-86400 * 9),
+                updatedAt: Date().addingTimeInterval(-86400 * 9)
+            ),
+            Note(
+                id: UUID(),
+                categoryId: ideas,
+                title: "Collaboration mode",
+                content: "Shared notebooks where multiple people can add voice notes to the same category. Like a shared brain dump space.",
+                source: .voice,
+                durationSeconds: 40,
+                createdAt: Date().addingTimeInterval(-86400 * 10),
+                updatedAt: Date().addingTimeInterval(-86400 * 10)
+            ),
+            Note(
+                id: UUID(),
+                title: "Random thought",
+                content: "The gap between knowing what to do and actually doing it is where most people get stuck.",
+                source: .text,
+                createdAt: Date().addingTimeInterval(-86400 * 11),
+                updatedAt: Date().addingTimeInterval(-86400 * 11)
+            ),
+            Note(
+                id: UUID(),
+                categoryId: work,
+                title: "API rate limits",
+                content: "Groq free tier is 30 requests per minute. Need to add queuing or switch to a paid plan before launch.",
+                source: .text,
+                createdAt: Date().addingTimeInterval(-86400 * 12),
+                updatedAt: Date().addingTimeInterval(-86400 * 12)
+            ),
         ]
     }
 }

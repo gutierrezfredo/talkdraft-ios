@@ -29,6 +29,7 @@
 		C848B776A5270BAAB083B87A /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58371FD88EA32F22C2D26955 /* Note.swift */; };
 		D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */; };
 		E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */; };
+		F6FF22C1E20EBE9F1935BD0E /* RecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183E583EACE764AECF68C73F /* RecordView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +44,7 @@
 
 /* Begin PBXFileReference section */
 		0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
+		183E583EACE764AECF68C73F /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		2CA70C5683C9381F5539D92E /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
 		41925CEEAC033F67F18E9F4A /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
@@ -108,6 +110,7 @@
 		32312D2A7F36219AEB6E5581 /* Record */ = {
 			isa = PBXGroup;
 			children = (
+				183E583EACE764AECF68C73F /* RecordView.swift */,
 			);
 			path = Record;
 			sourceTree = "<group>";
@@ -364,6 +367,7 @@
 				8122A30BCFDB7A5FF1393B78 /* NoteCard.swift in Sources */,
 				B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */,
 				12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */,
+				F6FF22C1E20EBE9F1935BD0E /* RecordView.swift in Sources */,
 				94BF895084A93F3659803982 /* SettingsStore.swift in Sources */,
 				E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */,
 				7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */,

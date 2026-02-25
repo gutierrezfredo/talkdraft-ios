@@ -1,60 +1,65 @@
 import SwiftUI
 
-struct NoteRow: View {
+struct NoteCard: View {
     let note: Note
     let category: Category?
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var isDark: Bool { colorScheme == .dark }
+
+    private var cardBackground: Color {
+        guard let category else {
+            return isDark ? Color(hex: "#111111") : .white
+        }
+        return Color(hex: category.color)
+            .blended(opacity: isDark ? 0.10 : 0.14, isDark: isDark)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                if let title = note.title, !title.isEmpty {
-                    Text(title)
-                        .font(.headline)
-                        .lineLimit(1)
-                }
+            // Date
+            Text(note.createdAt, style: .relative)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
-                Spacer()
-
-                if note.source == .voice {
-                    Image(systemName: "waveform")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            // Title
+            if let title = note.title, !title.isEmpty {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
             }
 
+            // Content preview
             Text(note.content)
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
+                .lineLimit(3)
 
-            HStack {
-                Text(note.createdAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            Spacer(minLength: 0)
 
-                if let category {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Label(category.name, systemImage: "circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color(hex: category.color))
-                }
-
-                if let duration = note.durationSeconds {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text(formattedDuration(duration))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
+            // Footer
+            if let category {
+                Text(category.name)
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color(hex: category.color))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill(isDark ? Color(hex: "#1f1f1f") : .white)
+                    )
             }
         }
-        .padding(.vertical, 2)
+        .padding(14)
+        .frame(minHeight: 170, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(cardBackground)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    private func formattedDuration(_ seconds: Double) -> String {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
-    }
 }
