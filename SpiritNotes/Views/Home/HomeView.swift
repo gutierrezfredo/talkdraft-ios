@@ -51,64 +51,49 @@ struct HomeView: View {
                         // Category chips
                         categoryChips
 
-                        // Notes grid
-                        if filteredNotes.isEmpty {
-                            emptyState
-                        } else {
-                            LazyVGrid(columns: columns, spacing: 8) {
-                                ForEach(filteredNotes) { note in
-                                    let category = noteStore.categories.first { $0.id == note.categoryId }
-                                    NoteCard(
-                                        note: note,
-                                        category: category,
-                                        selectionMode: isSelecting,
-                                        isSelected: selectedIds.contains(note.id)
-                                    )
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        guard !isSwiping else { return }
-                                        if isSelecting {
-                                            toggleSelection(note.id)
-                                        } else {
-                                            if isSearching {
-                                                searchFocused = false
-                                                keyboardHeight = 0
+                        // Notes grid + swipeable area
+                        VStack(spacing: 0) {
+                            if filteredNotes.isEmpty {
+                                emptyState
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 8) {
+                                    ForEach(filteredNotes) { note in
+                                        let category = noteStore.categories.first { $0.id == note.categoryId }
+                                        NoteCard(
+                                            note: note,
+                                            category: category,
+                                            selectionMode: isSelecting,
+                                            isSelected: selectedIds.contains(note.id)
+                                        )
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            guard !isSwiping else { return }
+                                            if isSelecting {
+                                                toggleSelection(note.id)
+                                            } else {
+                                                if isSearching {
+                                                    searchFocused = false
+                                                    keyboardHeight = 0
+                                                }
+                                                selectedNote = note
                                             }
-                                            selectedNote = note
+                                        }
+                                        .onLongPressGesture {
+                                            enterSelection(note.id)
                                         }
                                     }
-                                    .onLongPressGesture {
-                                        enterSelection(note.id)
-                                    }
                                 }
+                                .padding(.horizontal, 12)
                             }
-                            .padding(.horizontal, 12)
+
+                            // Fill remaining space
+                            Color.clear
+                                .frame(maxWidth: .infinity, minHeight: 300)
                         }
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(categorySwipeGesture)
                     }
                     .padding(.bottom, 120)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 30)
-                            .onChanged { _ in
-                                isSwiping = true
-                            }
-                            .onEnded { value in
-                                let horizontal = value.predictedEndTranslation.width
-                                let vertical = abs(value.predictedEndTranslation.height)
-
-                                if abs(horizontal) > vertical * 1.5 {
-                                    if horizontal < 0 {
-                                        cycleCategory(forward: true)
-                                    } else {
-                                        cycleCategory(forward: false)
-                                    }
-                                }
-
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                    isSwiping = false
-                                }
-                            }
-                    )
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .refreshable {
@@ -629,6 +614,29 @@ struct HomeView: View {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.keyWindow else { return 0 }
         return window.safeAreaInsets.bottom
+    }
+
+    private var categorySwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onChanged { _ in
+                isSwiping = true
+            }
+            .onEnded { value in
+                let horizontal = value.predictedEndTranslation.width
+                let vertical = abs(value.predictedEndTranslation.height)
+
+                if abs(horizontal) > vertical * 1.5 {
+                    if horizontal < 0 {
+                        cycleCategory(forward: true)
+                    } else {
+                        cycleCategory(forward: false)
+                    }
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    isSwiping = false
+                }
+            }
     }
 
     private func cycleCategory(forward: Bool) {

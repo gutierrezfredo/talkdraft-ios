@@ -68,7 +68,7 @@ struct NoteDetailView: View {
 
                     // Tap zone below content to focus editor
                     Color.clear
-                        .frame(height: 100)
+                        .frame(minHeight: 500)
                         .contentShape(Rectangle())
                         .onTapGesture { contentFocused = true }
                 }
@@ -459,9 +459,10 @@ private struct CategoryPickerSheet: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
                             .background(
-                                Circle()
+                                Capsule()
                                     .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                             )
                     }
@@ -513,7 +514,7 @@ private struct CategoryPickerSheet: View {
 private struct RewriteTone: Identifiable {
     let id: String
     let label: String
-    let icon: String
+    let emoji: String
 }
 
 private struct ToneGroup: Identifiable {
@@ -524,26 +525,26 @@ private struct ToneGroup: Identifiable {
 
 private let toneGroups: [ToneGroup] = [
     ToneGroup(id: "practical", label: "Practical", tones: [
-        RewriteTone(id: "clean-up", label: "Clean up", icon: "sparkles"),
-        RewriteTone(id: "sharpen", label: "Sharpen", icon: "bolt"),
-        RewriteTone(id: "structure", label: "Structure", icon: "list.bullet"),
-        RewriteTone(id: "formalize", label: "Formalize", icon: "briefcase"),
+        RewriteTone(id: "clean-up", label: "Clean up", emoji: "✨"),
+        RewriteTone(id: "sharpen", label: "Sharpen", emoji: "⚡"),
+        RewriteTone(id: "structure", label: "Structure", emoji: "📋"),
+        RewriteTone(id: "formalize", label: "Formalize", emoji: "👔"),
     ]),
     ToneGroup(id: "playful", label: "Playful", tones: [
-        RewriteTone(id: "flirty", label: "Flirty", icon: "heart"),
-        RewriteTone(id: "for-kids", label: "For kids", icon: "face.smiling"),
-        RewriteTone(id: "hype", label: "Hype", icon: "flame"),
-        RewriteTone(id: "poetic", label: "Poetic", icon: "leaf"),
-        RewriteTone(id: "sarcastic", label: "Sarcastic", icon: "eyeglasses"),
+        RewriteTone(id: "flirty", label: "Flirty", emoji: "😘"),
+        RewriteTone(id: "for-kids", label: "For kids", emoji: "🧒"),
+        RewriteTone(id: "hype", label: "Hype", emoji: "🔥"),
+        RewriteTone(id: "poetic", label: "Poetic", emoji: "🍃"),
+        RewriteTone(id: "sarcastic", label: "Sarcastic", emoji: "😏"),
     ]),
     ToneGroup(id: "occasions", label: "Occasions", tones: [
-        RewriteTone(id: "birthday", label: "Birthday", icon: "gift"),
-        RewriteTone(id: "holiday", label: "Holiday", icon: "snowflake"),
-        RewriteTone(id: "thank-you", label: "Thank you", icon: "hand.thumbsup"),
-        RewriteTone(id: "congratulations", label: "Congrats", icon: "trophy"),
-        RewriteTone(id: "apology", label: "Apology", icon: "hand.raised"),
-        RewriteTone(id: "love-letter", label: "Love letter", icon: "heart.text.clipboard"),
-        RewriteTone(id: "wedding-toast", label: "Wedding toast", icon: "wineglass"),
+        RewriteTone(id: "birthday", label: "Birthday", emoji: "🎂"),
+        RewriteTone(id: "holiday", label: "Holiday", emoji: "❄️"),
+        RewriteTone(id: "thank-you", label: "Thank you", emoji: "🙏"),
+        RewriteTone(id: "congratulations", label: "Congrats", emoji: "🏆"),
+        RewriteTone(id: "apology", label: "Apology", emoji: "💐"),
+        RewriteTone(id: "love-letter", label: "Love letter", emoji: "💌"),
+        RewriteTone(id: "wedding-toast", label: "Wedding toast", emoji: "🥂"),
     ]),
 ]
 
@@ -635,7 +636,7 @@ private struct RewriteSheet: View {
                         .padding(14)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+                                .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                         )
                         .padding(.horizontal, 20)
                 }
@@ -682,7 +683,7 @@ private struct RewriteSheet: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: tone.icon)
+                Text(tone.emoji)
                     .font(.caption)
                 Text(tone.label)
                     .font(.subheadline)
@@ -693,7 +694,7 @@ private struct RewriteSheet: View {
             .padding(.vertical, 14)
             .background(
                 Capsule()
-                    .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
             )
             .overlay(
                 Capsule()
