@@ -98,51 +98,48 @@ struct NoteDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 8) {
-                    if hasChanges {
-                        Button {
-                            saveChanges()
-                        } label: {
-                            Image(systemName: "checkmark")
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
-                                .frame(width: 36, height: 36)
-                                .background(Circle().fill(Color.brand))
-                        }
-                        .buttonStyle(.plain)
-                        .sensoryFeedback(.success, trigger: hasChanges)
-                    }
-
-                    Menu {
-                        if note.audioUrl != nil {
-                            Button {
-                                // TODO: Download audio
-                            } label: {
-                                Label("Download Audio", systemImage: "arrow.down.circle")
-                            }
-                        }
-
-                        if note.originalContent != nil {
-                            Button {
-                                restoreOriginal()
-                            } label: {
-                                Label("Restore Original", systemImage: "arrow.uturn.backward")
-                            }
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            showDeleteConfirmation = true
-                        } label: {
-                            Label("Delete Note", systemImage: "trash")
-                        }
+            if hasChanges {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        saveChanges()
                     } label: {
-                        Image(systemName: "ellipsis")
-                            .fontWeight(.medium)
-                            .frame(width: 36, height: 36)
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.brand)
                     }
+                    .sensoryFeedback(.success, trigger: hasChanges)
+                }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    if note.audioUrl != nil {
+                        Button {
+                            // TODO: Download audio
+                        } label: {
+                            Label("Download Audio", systemImage: "arrow.down.circle")
+                        }
+                    }
+
+                    if note.originalContent != nil {
+                        Button {
+                            restoreOriginal()
+                        } label: {
+                            Label("Restore Original", systemImage: "arrow.uturn.backward")
+                        }
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Note", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .fontWeight(.medium)
+                        .frame(width: 36, height: 36)
                 }
             }
         }
@@ -167,8 +164,18 @@ struct NoteDetailView: View {
             .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showRewriteSheet) {
-            RewriteSheet()
-                .presentationDetents([.medium, .large])
+            RewriteSheet(content: editedContent, language: note.language) { rewrittenText in
+                // Save original before overwriting
+                if note.originalContent == nil {
+                    var updated = note
+                    updated.originalContent = editedContent
+                    noteStore.updateNote(updated)
+                }
+                editedContent = rewrittenText
+                saveChanges()
+            }
+            .presentationDetents([.large])
+            .presentationBackground(.ultraThinMaterial)
         }
         .onDisappear {
             player.stop()
@@ -452,7 +459,7 @@ private struct CategoryPickerSheet: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundStyle(.secondary)
-                            .frame(width: 40, height: 40)
+                            .frame(width: 44, height: 44)
                             .background(
                                 Circle()
                                     .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
@@ -461,6 +468,7 @@ private struct CategoryPickerSheet: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
+                .padding(.bottom, 8)
 
                 // Remove category
                 if selectedCategoryId != nil {
@@ -545,25 +553,280 @@ private struct FlowLayout: Layout {
     }
 }
 
-// MARK: - Rewrite Sheet (Stub)
+// MARK: - Rewrite Sheet
+
+private struct RewriteTone: Identifiable {
+    let id: String
+    let label: String
+    let icon: String
+}
+
+private struct ToneGroup: Identifiable {
+    let id: String
+    let label: String
+    let tones: [RewriteTone]
+}
+
+private let toneGroups: [ToneGroup] = [
+    ToneGroup(id: "practical", label: "Practical", tones: [
+        RewriteTone(id: "clean-up", label: "Clean up", icon: "sparkles"),
+        RewriteTone(id: "sharpen", label: "Sharpen", icon: "bolt"),
+        RewriteTone(id: "structure", label: "Structure", icon: "list.bullet"),
+        RewriteTone(id: "formalize", label: "Formalize", icon: "briefcase"),
+    ]),
+    ToneGroup(id: "playful", label: "Playful", tones: [
+        RewriteTone(id: "flirty", label: "Flirty", icon: "heart"),
+        RewriteTone(id: "for-kids", label: "For kids", icon: "face.smiling"),
+        RewriteTone(id: "hype", label: "Hype", icon: "flame"),
+        RewriteTone(id: "poetic", label: "Poetic", icon: "leaf"),
+        RewriteTone(id: "sarcastic", label: "Sarcastic", icon: "eyeglasses"),
+    ]),
+    ToneGroup(id: "occasions", label: "Occasions", tones: [
+        RewriteTone(id: "birthday", label: "Birthday", icon: "gift"),
+        RewriteTone(id: "holiday", label: "Holiday", icon: "snowflake"),
+        RewriteTone(id: "thank-you", label: "Thank you", icon: "hand.thumbsup"),
+        RewriteTone(id: "congratulations", label: "Congrats", icon: "trophy"),
+        RewriteTone(id: "apology", label: "Apology", icon: "hand.raised"),
+        RewriteTone(id: "love-letter", label: "Love letter", icon: "heart.text.clipboard"),
+        RewriteTone(id: "wedding-toast", label: "Wedding toast", icon: "wineglass"),
+    ]),
+]
 
 private struct RewriteSheet: View {
+    let content: String
+    let language: String?
+    let onAccept: (String) -> Void
+
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var selectedToneId: String?
+    @State private var customInstructions = ""
+    @State private var rewrittenText = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @FocusState private var customFocused: Bool
+
+    private enum SheetState {
+        case selection, loading, preview
+    }
+
+    private var state: SheetState {
+        if isLoading { return .loading }
+        if !rewrittenText.isEmpty { return .preview }
+        return .selection
+    }
+
+    private var canRewrite: Bool {
+        selectedToneId != nil || !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     var body: some View {
         NavigationStack {
-            ContentUnavailableView {
-                Label("AI Rewrite", systemImage: "wand.and.stars")
-            } description: {
-                Text("Rewrite with different tones coming soon.")
+            Group {
+                switch state {
+                case .selection:
+                    selectionView
+                case .loading:
+                    loadingView
+                case .preview:
+                    previewView
+                }
             }
-            .navigationTitle("Rewrite")
+            .navigationTitle(state == .preview ? "Preview" : "Rewrite")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Cancel") { dismiss() }
                 }
             }
+        }
+    }
+
+    // MARK: - Selection
+
+    private var selectionView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                ForEach(toneGroups) { group in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(group.label.uppercased())
+                            .font(.footnote)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 20)
+
+                        FlowLayout(spacing: 8) {
+                            ForEach(group.tones) { tone in
+                                tonePill(tone)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                }
+
+                // Custom instructions
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("CUSTOM INSTRUCTIONS")
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+
+                    TextField("e.g. Keep my Dominican slang", text: $customInstructions, axis: .vertical)
+                        .font(.body)
+                        .lineLimit(1...4)
+                        .focused($customFocused)
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+                        )
+                        .padding(.horizontal, 20)
+                }
+
+                // Error
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 20)
+                }
+
+                // Rewrite button
+                Button {
+                    performRewrite()
+                } label: {
+                    Text("Rewrite")
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            Capsule().fill(Color.brand)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(!canRewrite)
+                .opacity(canRewrite ? 1 : 0.4)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func tonePill(_ tone: RewriteTone) -> some View {
+        let isSelected = selectedToneId == tone.id
+        return Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                selectedToneId = selectedToneId == tone.id ? nil : tone.id
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: tone.icon)
+                    .font(.caption)
+                Text(tone.label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .foregroundStyle(isSelected ? Color.brand : .primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(isSelected ? Color.brand : .clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: isSelected)
+    }
+
+    // MARK: - Loading
+
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(Color.brand)
+                .scaleEffect(1.5)
+            Text("Rewriting...")
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Preview
+
+    private var previewView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                Text(rewrittenText)
+                    .font(.body)
+                    .lineSpacing(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+            }
+
+            VStack(spacing: 12) {
+                Button {
+                    onAccept(rewrittenText)
+                    dismiss()
+                } label: {
+                    Text("Accept")
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            Capsule().fill(Color.brand)
+                        )
+                }
+                .buttonStyle(.plain)
+                .sensoryFeedback(.success, trigger: rewrittenText)
+
+                Button {
+                    rewrittenText = ""
+                } label: {
+                    Text("Try another")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - API
+
+    private func performRewrite() {
+        customFocused = false
+        errorMessage = nil
+        isLoading = true
+
+        Task {
+            do {
+                let result = try await AIService.rewrite(
+                    content: content,
+                    tone: selectedToneId,
+                    customInstructions: customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? nil : customInstructions,
+                    language: language
+                )
+                rewrittenText = result
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
         }
     }
 }
