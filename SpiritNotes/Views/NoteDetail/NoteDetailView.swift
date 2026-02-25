@@ -5,7 +5,8 @@ struct NoteDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
-    let note: Note
+    private let noteId: UUID
+    private let initialNote: Note
 
     @State private var editedTitle: String
     @State private var editedContent: String
@@ -18,9 +19,14 @@ struct NoteDetailView: View {
     @FocusState private var contentFocused: Bool
 
     init(note: Note) {
-        self.note = note
+        self.noteId = note.id
+        self.initialNote = note
         self._editedTitle = State(initialValue: note.title ?? "")
         self._editedContent = State(initialValue: note.content)
+    }
+
+    private var note: Note {
+        noteStore.notes.first { $0.id == noteId } ?? initialNote
     }
 
     private var hasChanges: Bool {
@@ -168,7 +174,7 @@ struct NoteDetailView: View {
                 note: note,
                 categories: noteStore.categories
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.medium, .large])
             .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showRewriteSheet) {
@@ -486,80 +492,83 @@ private struct CategoryPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // Category grid
-                FlowLayout(spacing: 8) {
-                    ForEach(categories) { cat in
-                        let isSelected = selectedCategoryId == cat.id
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Category grid
+                    FlowLayout(spacing: 8) {
+                        ForEach(categories) { cat in
+                            let isSelected = selectedCategoryId == cat.id
+                            Button {
+                                selectedCategoryId = cat.id
+                                var updated = note
+                                updated.categoryId = cat.id
+                                updated.updatedAt = Date()
+                                noteStore.updateNote(updated)
+                                dismiss()
+                            } label: {
+                                Text(cat.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(Color(hex: cat.color))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .frame(maxWidth: 180)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        Capsule()
+                                            .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .strokeBorder(
+                                                isSelected ? Color(hex: cat.color) : .clear,
+                                                lineWidth: 2
+                                            )
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // Add category button
                         Button {
-                            selectedCategoryId = cat.id
-                            var updated = note
-                            updated.categoryId = cat.id
-                            updated.updatedAt = Date()
-                            noteStore.updateNote(updated)
-                            dismiss()
+                            showAddCategory = true
                         } label: {
-                            Text(cat.name)
+                            Image(systemName: "plus")
                                 .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color(hex: cat.color))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 14)
                                 .background(
                                     Capsule()
                                         .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                                 )
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(
-                                            isSelected ? Color(hex: cat.color) : .clear,
-                                            lineWidth: 2
-                                        )
-                                )
                         }
                         .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
 
-                    // Add category button
-                    Button {
-                        showAddCategory = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(
-                                Capsule()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                            )
+                    // Remove category
+                    if selectedCategoryId != nil {
+                        Button {
+                            selectedCategoryId = nil
+                            var updated = note
+                            updated.categoryId = nil
+                            updated.updatedAt = Date()
+                            noteStore.updateNote(updated)
+                            dismiss()
+                        } label: {
+                            Text("Remove category")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-
-                // Remove category
-                if selectedCategoryId != nil {
-                    Button {
-                        selectedCategoryId = nil
-                        var updated = note
-                        updated.categoryId = nil
-                        updated.updatedAt = Date()
-                        noteStore.updateNote(updated)
-                        dismiss()
-                    } label: {
-                        Text("Remove category")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Spacer()
+                .padding(.top, 20)
             }
-            .padding(.top, 20)
             .navigationTitle("Move to category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -570,7 +579,14 @@ private struct CategoryPickerSheet: View {
             .sensoryFeedback(.selection, trigger: selectedCategoryId)
         }
         .sheet(isPresented: $showAddCategory) {
-            CategoryFormSheet(mode: .add)
+            CategoryFormSheet(mode: .add) { newCategory in
+                selectedCategoryId = newCategory.id
+                var updated = note
+                updated.categoryId = newCategory.id
+                updated.updatedAt = Date()
+                noteStore.updateNote(updated)
+                dismiss()
+            }
         }
         .onAppear {
             selectedCategoryId = note.categoryId

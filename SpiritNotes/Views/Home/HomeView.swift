@@ -185,7 +185,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showCategoryPicker) {
             bulkCategoryPicker
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
@@ -488,46 +488,49 @@ struct HomeView: View {
 
     private var bulkCategoryPicker: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                FlowLayout(spacing: 8) {
-                    ForEach(noteStore.categories) { cat in
-                        Button {
-                            noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
-                            UINotificationFeedbackGenerator().notificationOccurred(.success)
-                            exitSelection()
-                            showCategoryPicker = false
-                        } label: {
-                            Text(cat.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color(hex: cat.color))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(
-                                    Capsule()
-                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                )
+            ScrollView {
+                VStack(spacing: 20) {
+                    FlowLayout(spacing: 8) {
+                        ForEach(noteStore.categories) { cat in
+                            Button {
+                                noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
+                                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                exitSelection()
+                                showCategoryPicker = false
+                            } label: {
+                                Text(cat.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(Color(hex: cat.color))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .frame(maxWidth: 180)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        Capsule()
+                                            .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
-                }
-                .padding(.horizontal, 20)
+                    .padding(.horizontal, 20)
 
-                Button {
-                    noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    exitSelection()
-                    showCategoryPicker = false
-                } label: {
-                    Text("Remove category")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        exitSelection()
+                        showCategoryPicker = false
+                    } label: {
+                        Text("Remove category")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-
-                Spacer()
+                .padding(.top, 20)
             }
-            .padding(.top, 20)
             .navigationTitle("Move to Category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

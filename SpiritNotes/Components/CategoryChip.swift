@@ -14,6 +14,9 @@ struct CategoryChip: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundStyle(color)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 180)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(
