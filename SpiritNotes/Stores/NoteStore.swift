@@ -1,5 +1,9 @@
 import Foundation
 import Observation
+import os
+import Supabase
+
+private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "NoteStore")
 
 @MainActor
 @Observable
@@ -7,73 +11,268 @@ final class NoteStore {
     var notes: [Note] = []
     var categories: [Category] = []
     var selectedCategoryId: UUID?
+    var isLoading = false
 
     var filteredNotes: [Note] {
         guard let categoryId = selectedCategoryId else { return notes }
         return notes.filter { $0.categoryId == categoryId }
     }
 
-    func loadMockData() {
-        categories = MockData.categories
-        notes = MockData.notes
-    }
+    // MARK: - Fetch
 
     func refresh() async {
-        // TODO: Fetch notes + categories from Supabase
+        isLoading = true
+        defer { isLoading = false }
+
+        async let fetchedNotes: () = fetchNotes()
+        async let fetchedCategories: () = fetchCategories()
+        _ = try? await (fetchedNotes, fetchedCategories)
     }
 
     func fetchNotes() async throws {
-        // TODO: Fetch from Supabase
+        let fetched: [Note] = try await supabase
+            .from("notes")
+            .select()
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+        notes = fetched
     }
 
     func fetchCategories() async throws {
-        // TODO: Fetch from Supabase
+        let fetched: [Category] = try await supabase
+            .from("categories")
+            .select()
+            .order("sort_order", ascending: true)
+            .execute()
+            .value
+        categories = fetched
     }
+
+    // MARK: - Note CRUD
 
     func addNote(_ note: Note) {
         notes.insert(note, at: 0)
+
+        Task {
+            do {
+                try await supabase
+                    .from("notes")
+                    .insert(note)
+                    .execute()
+            } catch {
+                logger.error("addNote failed: \(error)")
+                // Rollback on failure
+                notes.removeAll { $0.id == note.id }
+            }
+        }
     }
 
     func updateNote(_ note: Note) {
-        if let index = notes.firstIndex(where: { $0.id == note.id }) {
-            notes[index] = note
+        guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
+        let previous = notes[index]
+        notes[index] = note
+
+        Task {
+            do {
+                try await supabase
+                    .from("notes")
+                    .update(note)
+                    .eq("id", value: note.id)
+                    .execute()
+            } catch {
+                // Rollback on failure
+                if let i = notes.firstIndex(where: { $0.id == note.id }) {
+                    notes[i] = previous
+                }
+            }
         }
     }
 
     func removeNote(id: UUID) {
-        notes.removeAll { $0.id == id }
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        let removed = notes.remove(at: index)
+
+        Task {
+            do {
+                try await supabase
+                    .from("notes")
+                    .delete()
+                    .eq("id", value: id)
+                    .execute()
+            } catch {
+                // Rollback on failure
+                notes.insert(removed, at: min(index, notes.count))
+            }
+        }
     }
 
     func removeNotes(ids: Set<UUID>) {
+        let removed = notes.filter { ids.contains($0.id) }
         notes.removeAll { ids.contains($0.id) }
-        // TODO: Batch delete from Supabase
+
+        Task {
+            do {
+                try await supabase
+                    .from("notes")
+                    .delete()
+                    .in("id", values: Array(ids))
+                    .execute()
+            } catch {
+                // Rollback on failure
+                notes.append(contentsOf: removed)
+                notes.sort { $0.createdAt > $1.createdAt }
+            }
+        }
     }
 
     func moveNotes(ids: Set<UUID>, toCategoryId categoryId: UUID?) {
+        var previousValues: [(UUID, UUID?)] = []
         for i in notes.indices where ids.contains(notes[i].id) {
+            previousValues.append((notes[i].id, notes[i].categoryId))
             notes[i].categoryId = categoryId
             notes[i].updatedAt = Date()
         }
-        // TODO: Batch update in Supabase
+
+        Task {
+            do {
+                let update = NoteCategoryUpdate(categoryId: categoryId, updatedAt: Date())
+                try await supabase
+                    .from("notes")
+                    .update(update)
+                    .in("id", values: Array(ids))
+                    .execute()
+            } catch {
+                // Rollback on failure
+                for (noteId, prevCategoryId) in previousValues {
+                    if let i = notes.firstIndex(where: { $0.id == noteId }) {
+                        notes[i].categoryId = prevCategoryId
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Transcription
+
+    func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?) {
+        Task {
+            do {
+                let audioData = try Data(contentsOf: audioFileURL)
+                let fileName = audioFileURL.lastPathComponent
+
+                let service = TranscriptionService()
+                let result = try await service.transcribe(
+                    audioData: audioData,
+                    fileName: fileName,
+                    language: language,
+                    userId: userId
+                )
+
+                // Update note with transcription
+                guard var note = notes.first(where: { $0.id == id }) else { return }
+                note.content = result.text
+                note.language = result.language
+                if let audioUrl = result.audioUrl {
+                    note.audioUrl = audioUrl
+                }
+                if let duration = result.durationSeconds {
+                    note.durationSeconds = duration
+                }
+                note.updatedAt = Date()
+
+                // Quick title from transcription (until AI title arrives)
+                let quickTitle = result.text.count > 50
+                    ? String(result.text.prefix(50)).trimmingCharacters(in: .whitespaces) + "…"
+                    : result.text
+                note.title = quickTitle
+
+                updateNote(note)
+
+                // Generate AI title in background
+                generateTitle(for: id, content: result.text, language: result.language)
+            } catch {
+                // Update note to show transcription failed
+                guard var note = notes.first(where: { $0.id == id }) else { return }
+                note.content = "Transcription failed — tap to edit"
+                note.updatedAt = Date()
+                updateNote(note)
+            }
+        }
+    }
+
+    // MARK: - AI Title
+
+    func generateTitle(for noteId: UUID, content: String, language: String?) {
+        Task {
+            do {
+                let aiTitle = try await AIService.generateTitle(for: content, language: language)
+                guard var note = notes.first(where: { $0.id == noteId }) else { return }
+                note.title = aiTitle
+                note.updatedAt = Date()
+                updateNote(note)
+            } catch {
+                // AI title failed — keep the quick title, no big deal
+            }
+        }
     }
 
     // MARK: - Category CRUD
 
     func addCategory(_ category: Category) {
         categories.append(category)
+
+        Task {
+            do {
+                try await supabase
+                    .from("categories")
+                    .insert(category)
+                    .execute()
+            } catch {
+                categories.removeAll { $0.id == category.id }
+            }
+        }
     }
 
     func updateCategory(_ category: Category) {
-        if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            categories[index] = category
+        guard let index = categories.firstIndex(where: { $0.id == category.id }) else { return }
+        let previous = categories[index]
+        categories[index] = category
+
+        Task {
+            do {
+                try await supabase
+                    .from("categories")
+                    .update(category)
+                    .eq("id", value: category.id)
+                    .execute()
+            } catch {
+                if let i = categories.firstIndex(where: { $0.id == category.id }) {
+                    categories[i] = previous
+                }
+            }
         }
     }
 
     func removeCategory(id: UUID) {
-        categories.removeAll { $0.id == id }
-        // Unassign notes from deleted category
+        guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
+        let removed = categories.remove(at: index)
+
+        // Unassign notes locally
         for i in notes.indices where notes[i].categoryId == id {
             notes[i].categoryId = nil
+        }
+
+        Task {
+            do {
+                try await supabase
+                    .from("categories")
+                    .delete()
+                    .eq("id", value: id)
+                    .execute()
+            } catch {
+                categories.insert(removed, at: min(index, categories.count))
+            }
         }
     }
 
@@ -82,5 +281,38 @@ final class NoteStore {
         for i in categories.indices {
             categories[i].sortOrder = i
         }
+
+        // Persist new sort orders
+        let updates = categories.map { ($0.id, $0.sortOrder) }
+        Task {
+            for (catId, order) in updates {
+                let sortUpdate = CategorySortUpdate(sortOrder: order)
+                try? await supabase
+                    .from("categories")
+                    .update(sortUpdate)
+                    .eq("id", value: catId)
+                    .execute()
+            }
+        }
+    }
+}
+
+// MARK: - Partial Update Models
+
+private struct NoteCategoryUpdate: Encodable {
+    let categoryId: UUID?
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case categoryId = "category_id"
+        case updatedAt = "updated_at"
+    }
+}
+
+private struct CategorySortUpdate: Encodable {
+    let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case sortOrder = "sort_order"
     }
 }

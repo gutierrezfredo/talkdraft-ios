@@ -156,6 +156,7 @@ struct CategoryFormSheet: View {
     }
 
     let mode: Mode
+    @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
@@ -290,6 +291,7 @@ struct CategoryFormSheet: View {
         case .add:
             let category = Category(
                 id: UUID(),
+                userId: authStore.user?.id,
                 name: trimmedName,
                 color: selectedColor,
                 sortOrder: noteStore.categories.count,
