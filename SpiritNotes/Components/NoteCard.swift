@@ -28,7 +28,7 @@ struct NoteCard: View {
             // Title
             if let title = note.title, !title.isEmpty {
                 Text(title)
-                    .font(.system(.headline, design: .serif))
+                    .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }

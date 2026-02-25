@@ -243,7 +243,7 @@ struct HomeView: View {
                         .offset(y: 2)
                 }
         }
-        .font(.system(.title3, design: .serif))
+        .font(.title3)
         .fontWeight(.semibold)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)

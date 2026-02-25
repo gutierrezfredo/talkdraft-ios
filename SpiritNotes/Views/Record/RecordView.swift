@@ -76,7 +76,7 @@ struct RecordView: View {
             Spacer()
 
             Text("Record")
-                .font(.system(.headline, design: .serif))
+                .font(.headline)
                 .foregroundStyle(.white)
 
             Spacer()

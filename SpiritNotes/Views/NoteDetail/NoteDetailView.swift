@@ -292,7 +292,7 @@ struct NoteDetailView: View {
 
     private var titleField: some View {
         TextField("Untitled", text: $editedTitle, axis: .vertical)
-            .font(.system(size: 28, weight: .bold, design: .serif))
+            .font(.system(size: 28, weight: .bold))
             .multilineTextAlignment(.center)
             .autocorrectionDisabled()
     }
