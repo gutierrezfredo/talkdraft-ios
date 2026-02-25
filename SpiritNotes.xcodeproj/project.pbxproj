@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0370CD86E215C5D5F0AD6B5D /* NoteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8330635DA94F3104140DBE /* NoteDetailView.swift */; };
 		12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B27CA017958B6C9837E0CD0F /* Profile.swift */; };
 		17E040AD14496C21A9124F36 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 6C64C36244B9569D33C87877 /* Supabase */; };
 		1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 361A242AA196C15612B45852 /* RevenueCat */; };
@@ -23,8 +24,10 @@
 		94BF895084A93F3659803982 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */; };
 		94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BBB0647806A651166D8EF95 /* AuthStore.swift */; };
 		A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8049F37077144512EDEEBA4D /* TranscriptionService.swift */; };
+		B302C023C7B5EFCE4D689583 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E8BF17D2FE54D8E88E51BC /* SearchView.swift */; };
 		B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41925CEEAC033F67F18E9F4A /* Colors.swift */; };
 		B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68133FC4C6E34CF64D6AABEE /* NoteStore.swift */; };
+		BBC77B6F32C169F1CFBEDFD6 /* CategoryChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16ACBED0F40888753BD49C63 /* CategoryChip.swift */; };
 		BFAB7C2D2E8106E7331369B6 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FB29A614C2AEB676FFF744 /* MockData.swift */; };
 		C848B776A5270BAAB083B87A /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58371FD88EA32F22C2D26955 /* Note.swift */; };
 		D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */; };
@@ -44,6 +47,7 @@
 
 /* Begin PBXFileReference section */
 		0D8DCA9F10110B87D8C10458 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
+		16ACBED0F40888753BD49C63 /* CategoryChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChip.swift; sourceTree = "<group>"; };
 		183E583EACE764AECF68C73F /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		2CA70C5683C9381F5539D92E /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
@@ -55,8 +59,10 @@
 		587B53DD2B6AC5F837C853ED /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		68133FC4C6E34CF64D6AABEE /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
 		6BBB0647806A651166D8EF95 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
+		71E8BF17D2FE54D8E88E51BC /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		7858F881DAAF27F4B2FF7735 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		8049F37077144512EDEEBA4D /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		8A8330635DA94F3104140DBE /* NoteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailView.swift; sourceTree = "<group>"; };
 		8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		915FE9525353BEA289D8AA98 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -94,6 +100,7 @@
 		24DCF0A57BF77DB781C18F3D /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				16ACBED0F40888753BD49C63 /* CategoryChip.swift */,
 				3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */,
 			);
 			path = Components;
@@ -172,6 +179,7 @@
 		893DD7162E970156AE4278D9 /* Search */ = {
 			isa = PBXGroup;
 			children = (
+				71E8BF17D2FE54D8E88E51BC /* SearchView.swift */,
 			);
 			path = Search;
 			sourceTree = "<group>";
@@ -203,6 +211,7 @@
 		D4DF2C3189BDB6534B39B583 /* NoteDetail */ = {
 			isa = PBXGroup;
 			children = (
+				8A8330635DA94F3104140DBE /* NoteDetailView.swift */,
 			);
 			path = NoteDetail;
 			sourceTree = "<group>";
@@ -358,6 +367,7 @@
 				92A38F6EFB0308A5529B3B2D /* AudioRecorder.swift in Sources */,
 				94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */,
 				69054A65C2119235B6BE552C /* Category.swift in Sources */,
+				BBC77B6F32C169F1CFBEDFD6 /* CategoryChip.swift in Sources */,
 				B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */,
 				446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */,
 				34234B19B65275543186A076 /* HomeView.swift in Sources */,
@@ -365,9 +375,11 @@
 				BFAB7C2D2E8106E7331369B6 /* MockData.swift in Sources */,
 				C848B776A5270BAAB083B87A /* Note.swift in Sources */,
 				8122A30BCFDB7A5FF1393B78 /* NoteCard.swift in Sources */,
+				0370CD86E215C5D5F0AD6B5D /* NoteDetailView.swift in Sources */,
 				B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */,
 				12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */,
 				F6FF22C1E20EBE9F1935BD0E /* RecordView.swift in Sources */,
+				B302C023C7B5EFCE4D689583 /* SearchView.swift in Sources */,
 				94BF895084A93F3659803982 /* SettingsStore.swift in Sources */,
 				E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */,
 				7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */,

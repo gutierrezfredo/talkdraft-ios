@@ -9,6 +9,10 @@ struct RecordView: View {
 
     let categoryId: UUID?
 
+    init(categoryId: UUID?) {
+        self.categoryId = categoryId
+    }
+
     private let maxDurationSeconds = 180 // 3 min free
 
     var body: some View {

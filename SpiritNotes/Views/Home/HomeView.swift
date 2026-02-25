@@ -11,6 +11,8 @@ struct HomeView: View {
     @State private var selectedCategory: UUID?
     @State private var showRecordView = false
     @State private var sortOrder: NoteSortOrder = .updatedAt
+    @State private var showSearch = false
+    @Namespace private var namespace
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -51,20 +53,22 @@ struct HomeView: View {
                     }
                     .padding(.bottom, 120) // space for floating button
                 }
+                .refreshable {
+                    await noteStore.refresh()
+                }
 
-                // Bottom blur edge
+                // Bottom fade
                 VStack {
                     Spacer()
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .frame(height: 90)
-                        .mask(
-                            LinearGradient(
-                                colors: [.clear, .black],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 90)
                 }
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -94,11 +98,15 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(for: Note.self) { note in
-                Text(note.title ?? "Note Detail") // TODO: NoteDetailView
+                NoteDetailView(note: note)
             }
-            .fullScreenCover(isPresented: $showRecordView) {
-                RecordView(categoryId: selectedCategory)
+            .navigationDestination(isPresented: $showSearch) {
+                SearchView()
             }
+        }
+        .fullScreenCover(isPresented: $showRecordView) {
+            RecordView(categoryId: selectedCategory)
+                .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
     }
 
@@ -174,8 +182,16 @@ struct HomeView: View {
 
     private var floatingButtons: some View {
         HStack(spacing: 40) {
-            // Spacer to balance the layout (same width as search button)
-            Color.clear.frame(width: 56, height: 56)
+            // Upload audio button (left)
+            Button {
+                // TODO: Import audio file
+            } label: {
+                Image(systemName: "icloud.and.arrow.up")
+                    .fontWeight(.medium)
+                    .frame(width: 56, height: 56)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
 
             // Record button (center)
             Button {
@@ -189,10 +205,11 @@ struct HomeView: View {
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+            .matchedTransitionSource(id: "record", in: namespace)
 
             // Search button (right)
             Button {
-                // TODO: Navigate to search
+                showSearch = true
             } label: {
                 Image(systemName: "magnifyingglass")
                     .fontWeight(.medium)
@@ -202,6 +219,8 @@ struct HomeView: View {
             .buttonStyle(.plain)
         }
         .padding(.bottom, 12)
+        .padding(.horizontal, 20)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Helpers
@@ -219,34 +238,3 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Category Chip
-
-private struct CategoryChip: View {
-    let name: String
-    let color: Color
-    let isSelected: Bool
-    let action: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Button(action: action) {
-            Text(name)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(color)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule()
-                        .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white)
-                )
-                .overlay(
-                    Capsule()
-                        .strokeBorder(isSelected ? color : .clear, lineWidth: 2)
-                )
-        }
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: isSelected)
-    }
-}

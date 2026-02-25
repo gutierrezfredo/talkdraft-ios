@@ -225,31 +225,43 @@ private final class BandBridge: Sendable {
 }
 
 // MARK: - FFT Processor (pre-allocated buffers, called on audio thread)
+// Symmetric bar visualization: compute half bars from center outward,
+// apply edge blending + dampening, then mirror for symmetry.
 
 private final class FFTProcessor: @unchecked Sendable {
     private let fftSize: Int
     private let halfSize: Int
     private let bandCount: Int
+    private let halfBandCount: Int
     private let log2n: vDSP_Length
     private let fftSetup: FFTSetup
 
-    // Pre-allocated buffers — reused every callback, zero heap allocation per call
+    // Pre-allocated buffers — zero heap allocation per callback
     private var window: [Float]
     private var windowedData: [Float]
     private var realp: [Float]
     private var imagp: [Float]
     private var magnitudes: [Float]
-    private var sqrtMagnitudes: [Float]
+    private var dbMagnitudes: [Float]
+    private var halfBars: [Float]
     private var bands: [Float]
 
-    // Pre-computed band bin ranges and frequency tilt weights
+    // Pre-computed bin ranges for the half-bar set
     private let bandRanges: [(start: Int, end: Int)]
-    private let bandTilts: [Float]
+
+    // dB-to-byte conversion constants (matches Web Audio getByteFrequencyData)
+    private let dbMin: Float = -100
+    private let dbRange: Float = 70       // -100 to -30
+    private let noiseFloorByte: Float = 80
+    private let byteRange: Float = 175    // 255 - 80
+
+    private let skipBins = 5
 
     init(fftSize: Int, bandCount: Int) {
         self.fftSize = fftSize
         self.halfSize = fftSize / 2
         self.bandCount = bandCount
+        self.halfBandCount = (bandCount + 1) / 2
         self.log2n = vDSP_Length(log2(Float(fftSize)))
         self.fftSetup = vDSP_create_fftsetup(self.log2n, FFTRadix(kFFTRadix2))!
 
@@ -260,28 +272,22 @@ private final class FFTProcessor: @unchecked Sendable {
         realp = [Float](repeating: 0, count: fftSize / 2)
         imagp = [Float](repeating: 0, count: fftSize / 2)
         magnitudes = [Float](repeating: 0, count: fftSize / 2)
-        sqrtMagnitudes = [Float](repeating: 0, count: fftSize / 2)
+        dbMagnitudes = [Float](repeating: 0, count: fftSize / 2)
+        halfBars = [Float](repeating: 0, count: (bandCount + 1) / 2)
         bands = [Float](repeating: 0, count: bandCount)
 
+        // Map half-bars across usable bins (skip low rumble)
+        let usableBins = fftSize / 2 - skipBins
+        let half = (bandCount + 1) / 2
         var ranges = [(start: Int, end: Int)]()
-        var tilts = [Float]()
-        let half = fftSize / 2
-        // Cap at ~40% of Nyquist (~8-10kHz) — voice has no content above that
-        let maxBin = half * 2 / 5
-        for band in 0..<bandCount {
-            let startRatio = pow(Float(band) / Float(bandCount), 2.0)
-            let nextRatio = pow(Float(band + 1) / Float(bandCount), 2.0)
-            let startBin = max(1, Int(startRatio * Float(maxBin)))
-            let endBin = max(startBin, min(maxBin - 1, Int(nextRatio * Float(maxBin))))
-            ranges.append((startBin, endBin))
-
-            // Frequency tilt: attenuate low bands, boost high bands
-            // Low bands (voice fundamental) are naturally ~20dB louder than highs
-            let t = Float(band) / Float(bandCount - 1)
-            tilts.append(0.35 + t * 0.65)
+        for i in 0..<half {
+            let startFrac = pow(Float(i) / Float(half), 2.0)
+            let endFrac = pow(Float(i + 1) / Float(half), 2.0)
+            let start = skipBins + Int(startFrac * Float(usableBins))
+            let end = max(start + 1, skipBins + Int(endFrac * Float(usableBins)))
+            ranges.append((start, min(end, fftSize / 2 - 1)))
         }
         bandRanges = ranges
-        bandTilts = tilts
     }
 
     deinit {
@@ -297,13 +303,13 @@ private final class FFTProcessor: @unchecked Sendable {
 
         // Apply Hann window via vectorized multiply
         vDSP_vmul(channelData, 1, window, 1, &windowedData, 1, vDSP_Length(frameCount))
+        // Zero-fill remainder
         if frameCount < fftSize {
-            for i in frameCount..<fftSize {
-                windowedData[i] = 0
-            }
+            var zero: Float = 0
+            vDSP_vfill(&zero, &windowedData + frameCount, 1, vDSP_Length(fftSize - frameCount))
         }
 
-        // Pack into split complex format
+        // Pack into split complex
         windowedData.withUnsafeBufferPointer { dataPtr in
             dataPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfSize) {
                 complexPtr in
@@ -316,21 +322,60 @@ private final class FFTProcessor: @unchecked Sendable {
         var split = DSPSplitComplex(realp: &realp, imagp: &imagp)
         vDSP_fft_zrip(fftSetup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
 
-        // Compute magnitudes
+        // Squared magnitudes
         vDSP_zvmags(&split, 1, &magnitudes, 1, vDSP_Length(halfSize))
-        var halfSizeLen = Int32(halfSize)
-        vvsqrtf(&sqrtMagnitudes, magnitudes, &halfSizeLen)
 
-        // Map to logarithmic frequency bands, normalize to 0–1
-        for band in 0..<bandCount {
-            let range = bandRanges[band]
+        // Convert to dB in bulk: 10*log10(mag) = 20*log10(sqrt(mag))
+        // Normalize by FFT size squared to match Web Audio convention
+        var fftNorm = Float(fftSize * fftSize)
+        vDSP_vsdiv(magnitudes, 1, &fftNorm, &magnitudes, 1, vDSP_Length(halfSize))
+        var halfSizeI = Int32(halfSize)
+        // log10 of squared magnitudes, then multiply by 10 = same as 20*log10(magnitude)
+        var floor: Float = 1e-20
+        vDSP_vthr(magnitudes, 1, &floor, &magnitudes, 1, vDSP_Length(halfSize))
+        vvlog10f(&dbMagnitudes, magnitudes, &halfSizeI)
+        var ten: Float = 10
+        vDSP_vsmul(dbMagnitudes, 1, &ten, &dbMagnitudes, 1, vDSP_Length(halfSize))
+
+        // Step 1: Map dB magnitudes to half-bars with noise floor
+        let half = halfBandCount
+        for i in 0..<half {
+            let range = bandRanges[i]
             var sum: Float = 0
+            var count: Float = 0
             for bin in range.start...range.end {
-                sum += sqrtMagnitudes[bin]
+                let byte = max(0, min(255, 255 * (dbMagnitudes[bin] - dbMin) / dbRange))
+                let floored = byte > noiseFloorByte ? byte - noiseFloorByte : 0
+                sum += floored
+                count += 1
             }
-            let avg = sum / Float(range.end - range.start + 1)
-            let db = 20 * log10(max(avg, 1e-10))
-            bands[band] = max(0, min(1, (db + 50) / 40 * bandTilts[band]))
+            halfBars[i] = min(1, sum / count / byteRange)
+        }
+
+        // Step 2: Edge blending — pull outer bars toward average energy
+        var totalEnergy: Float = 0
+        for i in 0..<half { totalEnergy += halfBars[i] }
+        let avgEnergy = totalEnergy / Float(half)
+
+        for i in 0..<half {
+            let edgeness = Float(i) / Float(half)
+            let blendFactor = edgeness * 0.2
+            halfBars[i] = halfBars[i] * (1 - blendFactor) + avgEnergy * blendFactor
+        }
+
+        // Step 3: Monotonic constraint + edge dampening
+        for i in 1..<half {
+            halfBars[i] = min(halfBars[i], halfBars[i - 1])
+            let edgeDampen: Float = 1 - (Float(i) / Float(half)) * 0.5
+            halfBars[i] *= edgeDampen
+        }
+
+        // Step 4: Mirror — center bars are loudest
+        for i in 0..<half {
+            bands[half - 1 - i] = halfBars[i]
+            if half + i < bandCount {
+                bands[half + i] = halfBars[i]
+            }
         }
 
         return bands

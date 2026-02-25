@@ -6,5 +6,6 @@ struct ContentView: View {
     var body: some View {
         // Show home directly for now (auth will be wired up later)
         HomeView()
+            .ignoresSafeArea(.keyboard)
     }
 }

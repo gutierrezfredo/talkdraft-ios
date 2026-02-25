@@ -54,7 +54,7 @@ struct NoteCard: View {
             }
         }
         .padding(14)
-        .frame(minHeight: 170, alignment: .top)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(cardBackground)

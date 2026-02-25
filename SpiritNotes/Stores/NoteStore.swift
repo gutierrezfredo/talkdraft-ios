@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class NoteStore {
     var notes: [Note] = []
@@ -15,6 +16,10 @@ final class NoteStore {
     func loadMockData() {
         categories = MockData.categories
         notes = MockData.notes
+    }
+
+    func refresh() async {
+        // TODO: Fetch notes + categories from Supabase
     }
 
     func fetchNotes() async throws {
