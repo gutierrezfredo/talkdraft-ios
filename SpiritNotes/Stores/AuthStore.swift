@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-@Observable
+@MainActor @Observable
 final class AuthStore {
     var isAuthenticated = false
     var isLoading = false

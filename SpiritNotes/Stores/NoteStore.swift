@@ -43,4 +43,31 @@ final class NoteStore {
     func removeNote(id: UUID) {
         notes.removeAll { $0.id == id }
     }
+
+    // MARK: - Category CRUD
+
+    func addCategory(_ category: Category) {
+        categories.append(category)
+    }
+
+    func updateCategory(_ category: Category) {
+        if let index = categories.firstIndex(where: { $0.id == category.id }) {
+            categories[index] = category
+        }
+    }
+
+    func removeCategory(id: UUID) {
+        categories.removeAll { $0.id == id }
+        // Unassign notes from deleted category
+        for i in notes.indices where notes[i].categoryId == id {
+            notes[i].categoryId = nil
+        }
+    }
+
+    func moveCategory(from source: IndexSet, to destination: Int) {
+        categories.move(fromOffsets: source, toOffset: destination)
+        for i in categories.indices {
+            categories[i].sortOrder = i
+        }
+    }
 }

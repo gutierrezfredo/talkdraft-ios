@@ -7,6 +7,13 @@ extension Color {
     /// Warm light-mode background matching Expo design.
     static let warmBackground = Color(hex: "#F8F2F0")
 
+    /// Dark-mode equivalent warm background.
+    static let warmBackgroundDark = Color(hex: "#1A1A1A")
+
+    /// Card surface colors.
+    static let cardSurface = Color(.systemBackground)
+    static let cardSurfaceDark = Color(hex: "#2A2A2A")
+
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
         let scanner = Scanner(string: hex)

@@ -11,7 +11,9 @@
 		12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B27CA017958B6C9837E0CD0F /* Profile.swift */; };
 		17E040AD14496C21A9124F36 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 6C64C36244B9569D33C87877 /* Supabase */; };
 		1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 361A242AA196C15612B45852 /* RevenueCat */; };
+		33272DDE44AB6EA78B1AD07B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6566E361F9CF057F3CFF00 /* SettingsView.swift */; };
 		34234B19B65275543186A076 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587B53DD2B6AC5F837C853ED /* HomeView.swift */; };
+		40B8686B1811030BF46C3230 /* CategoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B115C154E076E0198379AE68 /* CategoriesView.swift */; };
 		446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */; };
 		5F857DFC90F1493E71C5AFB4 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDC2CE5AACA579DFB110D46 /* LoginView.swift */; };
 		69054A65C2119235B6BE552C /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7858F881DAAF27F4B2FF7735 /* Category.swift */; };
@@ -64,12 +66,14 @@
 		8049F37077144512EDEEBA4D /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		8A8330635DA94F3104140DBE /* NoteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailView.swift; sourceTree = "<group>"; };
 		8E48BEFC1FCF8CEB61C3924C /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
+		8E6566E361F9CF057F3CFF00 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		915FE9525353BEA289D8AA98 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		9C1BDE9DB17E504C19C6A600 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A490AB207CCF96EC1CD546FF /* SpiritNotesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpiritNotesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		AEDC2CE5AACA579DFB110D46 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B115C154E076E0198379AE68 /* CategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoriesView.swift; sourceTree = "<group>"; };
 		B27CA017958B6C9837E0CD0F /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpiritNotesApp.swift; sourceTree = "<group>"; };
 		E6FB29A614C2AEB676FFF744 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
@@ -172,6 +176,7 @@
 		6FCCEE06D98B22E16E22258C /* Categories */ = {
 			isa = PBXGroup;
 			children = (
+				B115C154E076E0198379AE68 /* CategoriesView.swift */,
 			);
 			path = Categories;
 			sourceTree = "<group>";
@@ -219,6 +224,7 @@
 		D5CB52DF8DE6C0924DDA6E1F /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				8E6566E361F9CF057F3CFF00 /* SettingsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -366,6 +372,7 @@
 				D337E92B253956C1EB2F83A2 /* AudioPlayer.swift in Sources */,
 				92A38F6EFB0308A5529B3B2D /* AudioRecorder.swift in Sources */,
 				94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */,
+				40B8686B1811030BF46C3230 /* CategoriesView.swift in Sources */,
 				69054A65C2119235B6BE552C /* Category.swift in Sources */,
 				BBC77B6F32C169F1CFBEDFD6 /* CategoryChip.swift in Sources */,
 				B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */,
@@ -381,6 +388,7 @@
 				F6FF22C1E20EBE9F1935BD0E /* RecordView.swift in Sources */,
 				B302C023C7B5EFCE4D689583 /* SearchView.swift in Sources */,
 				94BF895084A93F3659803982 /* SettingsStore.swift in Sources */,
+				33272DDE44AB6EA78B1AD07B /* SettingsView.swift in Sources */,
 				E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */,
 				7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */,
 				A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */,
