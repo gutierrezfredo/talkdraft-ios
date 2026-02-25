@@ -156,6 +156,7 @@ struct CategoryFormSheet: View {
     }
 
     let mode: Mode
+    var onCreated: ((Category) -> Void)?
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(\.colorScheme) private var colorScheme
@@ -211,6 +212,11 @@ struct CategoryFormSheet: View {
                                 colorScheme == .dark ? Color.darkSurface : .white
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 24))
+                            .onChange(of: name) { _, newValue in
+                                if newValue.count > 50 {
+                                    name = String(newValue.prefix(50))
+                                }
+                            }
                     }
 
                     // MARK: - Color Picker
@@ -303,6 +309,7 @@ struct CategoryFormSheet: View {
             withAnimation(.snappy) {
                 noteStore.addCategory(category)
             }
+            onCreated?(category)
         case .edit(var category):
             category.name = trimmedName
             category.color = selectedColor

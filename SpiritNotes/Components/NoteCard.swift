@@ -47,6 +47,7 @@ struct NoteCard: View {
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(Color(hex: category.color))
+                    .lineLimit(1)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(
@@ -56,7 +57,7 @@ struct NoteCard: View {
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .top)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(cardBackground)
