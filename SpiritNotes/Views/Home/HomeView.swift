@@ -161,7 +161,6 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showRecordView) {
             RecordView(categoryId: selectedCategory)
-                .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
         .fileImporter(
             isPresented: $showAudioImporter,
@@ -504,7 +503,7 @@ struct HomeView: View {
                                     .foregroundStyle(Color(hex: cat.color))
                                     .lineLimit(1)
                                     .truncationMode(.tail)
-                                    .frame(maxWidth: 180)
+                                    .frame(maxWidth: 200)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 14)
                                     .background(

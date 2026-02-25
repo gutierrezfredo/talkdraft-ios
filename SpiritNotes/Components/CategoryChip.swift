@@ -16,7 +16,7 @@ struct CategoryChip: View {
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: 180)
+                .frame(maxWidth: 200)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(

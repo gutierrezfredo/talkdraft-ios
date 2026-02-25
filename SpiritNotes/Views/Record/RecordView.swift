@@ -11,49 +11,52 @@ struct RecordView: View {
     @State private var errorMessage = ""
 
     let categoryId: UUID?
-
-    init(categoryId: UUID?) {
-        self.categoryId = categoryId
-    }
+    @State private var savedNote: Note?
 
     private let maxDurationSeconds = 180 // 3 min free
 
     var body: some View {
-        ZStack {
-            (colorScheme == .dark ? Color.darkBackground : Color.brand)
-                .ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                (colorScheme == .dark ? Color.darkBackground : Color.brand)
+                    .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // Header
-                header
-                    .padding(.top, 16)
+                VStack(spacing: 0) {
+                    // Header
+                    header
+                        .padding(.top, 16)
 
-                Spacer()
+                    Spacer()
 
-                // Timer
-                timer
-                    .padding(.bottom, 8)
+                    // Timer
+                    timer
+                        .padding(.bottom, 8)
 
-                // Max duration label
-                Text("Max \(formattedDuration(maxDurationSeconds))")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.bottom, 48)
+                    // Max duration label
+                    Text("Max \(formattedDuration(maxDurationSeconds))")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.bottom, 48)
 
-                // Audio level bars
-                AudioLevelBars(
-                    bands: recorder.frequencyBands,
-                    isActive: recorder.isRecording && !recorder.isPaused,
-                    barColor: colorScheme == .dark ? .brand : .white
-                )
-                .frame(height: 140)
-                .padding(.horizontal, 24)
+                    // Audio level bars
+                    AudioLevelBars(
+                        bands: recorder.frequencyBands,
+                        isActive: recorder.isRecording && !recorder.isPaused,
+                        barColor: colorScheme == .dark ? .brand : .white
+                    )
+                    .frame(height: 140)
+                    .padding(.horizontal, 24)
 
-                Spacer()
+                    Spacer()
 
-                // Controls
-                controls
-                    .padding(.bottom, 48)
+                    // Controls
+                    controls
+                        .padding(.bottom, 48)
+                }
+            }
+            .navigationBarHidden(true)
+            .navigationDestination(item: $savedNote) { note in
+                NoteDetailView(note: note)
             }
         }
         .alert("Recording Error", isPresented: $showError) {
@@ -66,6 +69,11 @@ struct RecordView: View {
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: recorder.isRecording)
         .sensoryFeedback(.selection, trigger: recorder.isPaused)
+        .onChange(of: savedNote) { _, newValue in
+            if newValue == nil && !recorder.isRecording {
+                dismiss()
+            }
+        }
     }
 
     // MARK: - Header
@@ -190,7 +198,7 @@ struct RecordView: View {
             userId: userId,
             categoryId: categoryId,
             title: nil,
-            content: "Recording saved — transcription pending",
+            content: "Transcribing…",
             source: .voice,
             audioUrl: audioURL.absoluteString,
             durationSeconds: Int(duration),
@@ -198,12 +206,13 @@ struct RecordView: View {
             updatedAt: Date()
         )
         noteStore.addNote(note)
-        dismiss()
 
         // Transcribe in background
         Task.detached {
             await MainActor.run { noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId) }
         }
+
+        savedNote = note
     }
 }
 

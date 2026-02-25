@@ -203,6 +203,16 @@ struct NoteDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardHeight = 0
         }
+        .onChange(of: note.content) { oldValue, newValue in
+            if editedContent == oldValue {
+                editedContent = newValue
+            }
+        }
+        .onChange(of: note.title) { oldValue, newValue in
+            if editedTitle == (oldValue ?? "") {
+                editedTitle = newValue ?? ""
+            }
+        }
     }
 
     // MARK: - Metadata Row
@@ -512,7 +522,7 @@ private struct CategoryPickerSheet: View {
                                     .foregroundStyle(Color(hex: cat.color))
                                     .lineLimit(1)
                                     .truncationMode(.tail)
-                                    .frame(maxWidth: 180)
+                                    .frame(maxWidth: 200)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 14)
                                     .background(
@@ -543,6 +553,10 @@ private struct CategoryPickerSheet: View {
                                 .background(
                                     Capsule()
                                         .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                                 )
                         }
                         .buttonStyle(.plain)
