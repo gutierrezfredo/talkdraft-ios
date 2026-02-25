@@ -5,6 +5,7 @@ struct RecordView: View {
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var recorder = AudioRecorder()
     @State private var showError = false
     @State private var errorMessage = ""
@@ -19,7 +20,8 @@ struct RecordView: View {
 
     var body: some View {
         ZStack {
-            Color.brand.ignoresSafeArea()
+            (colorScheme == .dark ? Color.darkBackground : Color.brand)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Header
@@ -41,7 +43,8 @@ struct RecordView: View {
                 // Audio level bars
                 AudioLevelBars(
                     bands: recorder.frequencyBands,
-                    isActive: recorder.isRecording && !recorder.isPaused
+                    isActive: recorder.isRecording && !recorder.isPaused,
+                    barColor: colorScheme == .dark ? .brand : .white
                 )
                 .frame(height: 140)
                 .padding(.horizontal, 24)
@@ -209,6 +212,7 @@ struct RecordView: View {
 private struct AudioLevelBars: View {
     let bands: [Float]
     let isActive: Bool
+    var barColor: Color = .white
 
     private let barWidth: CGFloat = 8
     private let barSpacing: CGFloat = 6
@@ -222,7 +226,7 @@ private struct AudioLevelBars: View {
                 let height = minHeight + level * (maxHeight - minHeight)
 
                 RoundedRectangle(cornerRadius: barWidth / 2)
-                    .fill(.white)
+                    .fill(barColor)
                     .frame(width: barWidth, height: max(minHeight, min(maxHeight, height)))
                     .animation(.easeOut(duration: 0.08), value: bands[index])
             }
