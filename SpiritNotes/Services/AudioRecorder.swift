@@ -242,8 +242,9 @@ private final class FFTProcessor: @unchecked Sendable {
     private var sqrtMagnitudes: [Float]
     private var bands: [Float]
 
-    // Pre-computed band bin ranges
+    // Pre-computed band bin ranges and frequency tilt weights
     private let bandRanges: [(start: Int, end: Int)]
+    private let bandTilts: [Float]
 
     init(fftSize: Int, bandCount: Int) {
         self.fftSize = fftSize
@@ -263,6 +264,7 @@ private final class FFTProcessor: @unchecked Sendable {
         bands = [Float](repeating: 0, count: bandCount)
 
         var ranges = [(start: Int, end: Int)]()
+        var tilts = [Float]()
         let half = fftSize / 2
         for band in 0..<bandCount {
             let startRatio = pow(Float(band) / Float(bandCount), 2.0)
@@ -270,8 +272,14 @@ private final class FFTProcessor: @unchecked Sendable {
             let startBin = max(1, Int(startRatio * Float(half)))
             let endBin = max(startBin, min(half - 1, Int(nextRatio * Float(half))))
             ranges.append((startBin, endBin))
+
+            // Frequency tilt: attenuate low bands, boost high bands
+            // Low bands (voice fundamental) are naturally ~20dB louder than highs
+            let t = Float(band) / Float(bandCount - 1)
+            tilts.append(0.35 + t * 0.65)
         }
         bandRanges = ranges
+        bandTilts = tilts
     }
 
     deinit {
@@ -320,7 +328,7 @@ private final class FFTProcessor: @unchecked Sendable {
             }
             let avg = sum / Float(range.end - range.start + 1)
             let db = 20 * log10(max(avg, 1e-10))
-            bands[band] = max(0, min(1, (db + 50) / 40))
+            bands[band] = max(0, min(1, (db + 50) / 40 * bandTilts[band]))
         }
 
         return bands
