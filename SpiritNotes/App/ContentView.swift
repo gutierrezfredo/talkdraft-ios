@@ -13,8 +13,24 @@ struct ContentView: View {
     }
 
     var body: some View {
-        // Show home directly for now (auth will be wired up later)
-        HomeView()
-            .preferredColorScheme(colorScheme)
+        Group {
+            if authStore.isLoading {
+                // Splash / loading
+                ZStack {
+                    Color.darkBackground.ignoresSafeArea()
+                    ProgressView()
+                        .tint(Color.brand)
+                        .scaleEffect(1.5)
+                }
+            } else if authStore.isAuthenticated {
+                HomeView()
+            } else {
+                LoginView()
+            }
+        }
+        .preferredColorScheme(colorScheme)
+        .task {
+            await authStore.initialize()
+        }
     }
 }

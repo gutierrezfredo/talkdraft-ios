@@ -92,11 +92,19 @@ struct NoteDetailView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
-            // Bottom action bar
-            bottomBar
-                .padding(.bottom, 12)
+            // Bottom bar: action buttons or keyboard toolbar
+            if keyboardHeight > 0 {
+                keyboardBar
+                    .padding(.bottom, keyboardHeight - bottomSafeArea + 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                bottomBar
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .ignoresSafeArea(.keyboard)
         .toolbar {
             if hasChanges {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -304,6 +312,67 @@ struct NoteDetailView: View {
             .font(.body)
             .lineSpacing(6)
             .focused($contentFocused)
+    }
+
+    // MARK: - Keyboard Bar
+
+    private var keyboardBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                showCategoryPicker = true
+            } label: {
+                Image(systemName: "tag")
+                    .font(.callout)
+                    .foregroundStyle(
+                        category != nil ? Color(hex: category!.color) : .secondary
+                    )
+                    .frame(width: 40, height: 40)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showRewriteSheet = true
+            } label: {
+                Image(systemName: "wand.and.stars")
+                    .font(.callout)
+                    .foregroundStyle(Color.brand)
+                    .frame(width: 40, height: 40)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                shareText()
+            } label: {
+                Image(systemName: "arrowshape.turn.up.right")
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .frame(width: 40, height: 40)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                contentFocused = false
+            } label: {
+                Image(systemName: "keyboard.chevron.compact.down")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 40)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private var bottomSafeArea: CGFloat {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.keyWindow else { return 0 }
+        return window.safeAreaInsets.bottom
     }
 
     // MARK: - Bottom Bar
