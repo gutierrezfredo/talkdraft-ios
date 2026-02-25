@@ -25,6 +25,7 @@ struct HomeView: View {
     @State private var showCategoryPicker = false
     @State private var showAudioImporter = false
     @State private var showAddCategory = false
+    @State private var pendingNote: Note?
     @State private var keyboardHeight: CGFloat = 0
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
@@ -159,8 +160,15 @@ struct HomeView: View {
                 NoteDetailView(note: note)
             }
         }
-        .fullScreenCover(isPresented: $showRecordView) {
-            RecordView(categoryId: selectedCategory)
+        .fullScreenCover(isPresented: $showRecordView, onDismiss: {
+            if let note = pendingNote {
+                selectedNote = note
+                pendingNote = nil
+            }
+        }) {
+            RecordView(categoryId: selectedCategory) { savedNote in
+                pendingNote = savedNote
+            }
         }
         .fileImporter(
             isPresented: $showAudioImporter,

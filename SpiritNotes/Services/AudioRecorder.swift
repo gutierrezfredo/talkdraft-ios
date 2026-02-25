@@ -3,6 +3,17 @@ import AVFoundation
 import Observation
 import os
 
+enum RecordingError: LocalizedError {
+    case formatUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .formatUnavailable:
+            "Audio format unavailable"
+        }
+    }
+}
+
 @Observable
 final class AudioRecorder {
     var isRecording = false
@@ -153,18 +164,25 @@ private final class AudioPipeline: @unchecked Sendable {
             return
         }
 
-        // Create M4A file matching the tap's native PCM format
+        // Target format: mono 16kHz — optimal for Whisper
+        guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1) else {
+            throw RecordingError.formatUnavailable
+        }
+
+        let converter = AVAudioConverter(from: tapFormat, to: outputFormat)!
+
+        // Create M4A file: mono 16kHz AAC
         let fileSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: tapFormat.sampleRate,
-            AVNumberOfChannelsKey: tapFormat.channelCount,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+            AVSampleRateKey: 16_000.0,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey: 48_000,
         ]
         let file = try AVAudioFile(
             forWriting: fileURL,
             settings: fileSettings,
-            commonFormat: tapFormat.commonFormat,
-            interleaved: tapFormat.isInterleaved
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
         )
         self.audioFile = file
 
@@ -177,7 +195,21 @@ private final class AudioPipeline: @unchecked Sendable {
             let isPaused = paused.withLock { $0 }
             guard !isPaused else { return }
 
-            try? file.write(from: buffer)
+            // Convert to mono 16kHz before writing
+            let ratio = outputFormat.sampleRate / buffer.format.sampleRate
+            let convertedFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+            guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: convertedFrameCount) else { return }
+
+            var error: NSError?
+            converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            if error == nil {
+                try? file.write(from: convertedBuffer)
+            }
+
+            // FFT uses original buffer for visualization
             let bands = processor.process(buffer: buffer)
             bridge.write(bands)
         }

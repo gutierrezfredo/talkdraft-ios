@@ -180,13 +180,6 @@ final class NoteStore {
                     note.durationSeconds = duration
                 }
                 note.updatedAt = Date()
-
-                // Quick title from transcription (until AI title arrives)
-                let quickTitle = result.text.count > 50
-                    ? String(result.text.prefix(50)).trimmingCharacters(in: .whitespaces) + "…"
-                    : result.text
-                note.title = quickTitle
-
                 updateNote(note)
 
                 // Generate AI title in background

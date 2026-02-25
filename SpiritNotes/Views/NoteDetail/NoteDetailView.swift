@@ -16,6 +16,7 @@ struct NoteDetailView: View {
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
     @State private var keyboardHeight: CGFloat = 0
+    @State private var typewriterTask: Task<Void, Never>?
     @FocusState private var contentFocused: Bool
 
     init(note: Note) {
@@ -205,13 +206,31 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
-                editedContent = newValue
+                if oldValue == "Transcribing…" {
+                    revealContent(newValue)
+                } else {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        editedContent = newValue
+                    }
+                }
             }
         }
         .onChange(of: note.title) { oldValue, newValue in
             if editedTitle == (oldValue ?? "") {
-                editedTitle = newValue ?? ""
+                withAnimation(.easeOut(duration: 0.4)) {
+                    editedTitle = newValue ?? ""
+                }
             }
+        }
+        .onChange(of: contentFocused) { _, focused in
+            if focused, typewriterTask != nil {
+                typewriterTask?.cancel()
+                typewriterTask = nil
+                editedContent = note.content
+            }
+        }
+        .onDisappear {
+            typewriterTask?.cancel()
         }
     }
 
@@ -319,6 +338,7 @@ struct NoteDetailView: View {
             .font(.system(size: 28, weight: .bold))
             .multilineTextAlignment(.center)
             .autocorrectionDisabled()
+            .contentTransition(.opacity)
     }
 
     // MARK: - Content
@@ -328,6 +348,7 @@ struct NoteDetailView: View {
             .font(.body)
             .lineSpacing(6)
             .focused($contentFocused)
+            .contentTransition(.opacity)
     }
 
     // MARK: - Keyboard Bar
@@ -438,6 +459,34 @@ struct NoteDetailView: View {
         .padding(.bottom, 0)
         .padding(.horizontal, 20)
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Typewriter
+
+    private func revealContent(_ text: String) {
+        typewriterTask?.cancel()
+        editedContent = ""
+
+        typewriterTask = Task {
+            var revealed = ""
+            var wordBuffer = ""
+
+            for char in text {
+                wordBuffer.append(char)
+                if char == " " || char == "\n" {
+                    revealed += wordBuffer
+                    wordBuffer = ""
+                    editedContent = revealed
+                    try? await Task.sleep(for: .milliseconds(30))
+                    if Task.isCancelled { return }
+                }
+            }
+
+            if !Task.isCancelled {
+                editedContent = text
+                typewriterTask = nil
+            }
+        }
     }
 
     // MARK: - Helpers
