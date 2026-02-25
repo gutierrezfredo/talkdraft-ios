@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AuthStore.self) private var authStore
+    @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
 
     private var colorScheme: ColorScheme? {
@@ -31,6 +32,11 @@ struct ContentView: View {
         .preferredColorScheme(colorScheme)
         .task {
             await authStore.initialize()
+        }
+        .onChange(of: authStore.isAuthenticated) { _, authenticated in
+            if authenticated {
+                Task { await noteStore.refresh() }
+            }
         }
     }
 }

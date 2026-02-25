@@ -8,7 +8,9 @@ enum NoteSortOrder: String, CaseIterable {
 }
 
 struct HomeView: View {
+    @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedCategory: UUID?
     @State private var showRecordView = false
@@ -590,14 +592,16 @@ struct HomeView: View {
             let asset = AVURLAsset(url: destinationURL)
             let duration = CMTimeGetSeconds(asset.duration)
 
+            let noteId = UUID()
             let note = Note(
-                id: UUID(),
+                id: noteId,
+                userId: authStore.user?.id,
                 categoryId: selectedCategory,
                 title: sourceURL.deletingPathExtension().lastPathComponent,
                 content: "Imported audio — pending transcription.",
                 source: .voice,
                 audioUrl: destinationURL.path,
-                durationSeconds: duration.isFinite ? duration : nil,
+                durationSeconds: duration.isFinite ? Int(duration) : nil,
                 createdAt: .now,
                 updatedAt: .now
             )
@@ -605,6 +609,11 @@ struct HomeView: View {
             withAnimation(.snappy) {
                 noteStore.addNote(note)
             }
+
+            // Transcribe in background
+            let language = settingsStore.language == "auto" ? nil : settingsStore.language
+            let userId = authStore.user?.id
+            noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
         } catch {
             // TODO: Surface error to user
         }

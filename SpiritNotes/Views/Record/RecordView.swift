@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct RecordView: View {
+    @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.dismiss) private var dismiss
     @State private var recorder = AudioRecorder()
     @State private var showError = false
@@ -176,20 +178,29 @@ struct RecordView: View {
     private func stopAndSave() {
         guard let audioURL = recorder.stopRecording() else { return }
         let duration = recorder.elapsedSeconds
+        let userId = authStore.user?.id
+        let language = settingsStore.language == "auto" ? nil : settingsStore.language
 
+        let noteId = UUID()
         let note = Note(
-            id: UUID(),
+            id: noteId,
+            userId: userId,
             categoryId: categoryId,
             title: nil,
             content: "Recording saved — transcription pending",
             source: .voice,
             audioUrl: audioURL.absoluteString,
-            durationSeconds: duration,
+            durationSeconds: Int(duration),
             createdAt: Date(),
             updatedAt: Date()
         )
         noteStore.addNote(note)
         dismiss()
+
+        // Transcribe in background
+        Task.detached {
+            await MainActor.run { noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId) }
+        }
     }
 }
 
