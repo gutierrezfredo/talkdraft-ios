@@ -23,6 +23,18 @@ struct SettingsView: View {
 
                 SettingsSection("General") {
                     NavigationLink {
+                        CategoriesView()
+                    } label: {
+                        SettingsRow(
+                            icon: "folder",
+                            title: "Categories"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    NavigationLink {
                         LanguagePickerView()
                     } label: {
                         SettingsRow(
@@ -42,18 +54,6 @@ struct SettingsView: View {
                             icon: "circle.lefthalf.filled",
                             title: "Appearance",
                             value: settingsStore.theme.displayName
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    SettingsDivider()
-
-                    NavigationLink {
-                        CategoriesView()
-                    } label: {
-                        SettingsRow(
-                            icon: "folder",
-                            title: "Categories"
                         )
                     }
                     .buttonStyle(.plain)

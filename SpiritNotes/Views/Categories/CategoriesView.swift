@@ -11,23 +11,56 @@ struct CategoriesView: View {
         colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
-    private var cardColor: Color {
-        colorScheme == .dark ? .darkSurface : .white
-    }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if noteStore.categories.isEmpty {
-                    emptyState
-                } else {
-                    categoryList
+        List {
+            if noteStore.categories.isEmpty {
+                emptyState
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(noteStore.categories) { category in
+                    let noteCount = noteStore.notes.filter { $0.categoryId == category.id }.count
+
+                    Button {
+                        editingCategory = category
+                    } label: {
+                        HStack(spacing: 14) {
+                            Circle()
+                                .fill(Color(hex: category.color))
+                                .frame(width: 14, height: 14)
+
+                            Text(category.name)
+                                .font(.body)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+
+                            Spacer()
+
+                            Text("\(noteCount)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            categoryToDelete = category
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 40)
         }
+        .contentMargins(.top, 0)
+        .scrollContentBackground(.hidden)
         .background(backgroundColor.ignoresSafeArea())
         .navigationTitle("Categories")
         .navigationBarTitleDisplayMode(.inline)
@@ -66,66 +99,6 @@ struct CategoriesView: View {
             let count = noteStore.notes.filter { $0.categoryId == categoryToDelete?.id }.count
             Text("This will unassign \(count) note\(count == 1 ? "" : "s") from this category. Notes won't be deleted.")
         }
-    }
-
-    // MARK: - Category List
-
-    private var categoryList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(noteStore.categories.enumerated()), id: \.element.id) { index, category in
-                let noteCount = noteStore.notes.filter { $0.categoryId == category.id }.count
-
-                Button {
-                    editingCategory = category
-                } label: {
-                    HStack(spacing: 14) {
-                        Circle()
-                            .fill(Color(hex: category.color))
-                            .frame(width: 14, height: 14)
-
-                        Text(category.name)
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-
-                        Spacer()
-
-                        Text("\(noteCount)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 16)
-                    .frame(height: 56)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button {
-                        editingCategory = category
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-
-                    Button(role: .destructive) {
-                        categoryToDelete = category
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-
-                if index < noteStore.categories.count - 1 {
-                    Divider()
-                        .padding(.leading, 44)
-                }
-            }
-        }
-        .background(cardColor)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
     // MARK: - Empty State
@@ -271,14 +244,22 @@ struct CategoryFormSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .fontWeight(.semibold)
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button {
                         save()
                         dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.brand)
                     }
-                    .fontWeight(.semibold)
                     .disabled(!isValid)
                 }
             }
