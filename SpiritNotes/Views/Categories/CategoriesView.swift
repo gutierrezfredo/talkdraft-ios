@@ -161,6 +161,7 @@ struct CategoryFormSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""
     @State private var selectedColor: String = "#3B82F6"
+    @FocusState private var isNameFocused: Bool
 
     private let colorOptions: [(String, String)] = [
         ("#3B82F6", "Blue"),
@@ -200,6 +201,7 @@ struct CategoryFormSheet: View {
                             .padding(.horizontal, 16)
 
                         TextField("Category name", text: $name)
+                            .focused($isNameFocused)
                             .font(.body)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 16)
@@ -279,6 +281,7 @@ struct CategoryFormSheet: View {
                 name = category.name
                 selectedColor = category.color
             }
+            isNameFocused = true
         }
     }
 

@@ -6,19 +6,22 @@
 
 | View | Location | Status |
 |------|----------|--------|
-| HomeView | `Views/Home/HomeView.swift` | Built — List, category menu, search, record button |
+| HomeView | `Views/Home/HomeView.swift` | Built — greeting, category chips, notes grid, search, bulk select, audio import |
 | LoginView | `Views/Auth/LoginView.swift` | Placeholder |
-| RecordView | `Views/Record/` | Not started |
-| NoteDetailView | `Views/NoteDetail/` | Not started |
-| SearchView | `Views/Search/` | Not started (using .searchable on Home) |
-| SettingsView | `Views/Settings/` | Not started |
-| CategoriesView | `Views/Categories/` | Not started |
+| RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
+| NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
+| SearchView | `Views/Search/` | Built — integrated into HomeView |
+| SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links |
+| CategoriesView | `Views/Categories/` | Built — CRUD with color picker, category form sheet |
 
 ### Components
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| NoteRow | `Components/NoteCard.swift` | List row: title, content preview, date, category, voice indicator |
+| NoteCard | `Components/NoteCard.swift` | Grid card: title, content preview, date, category, voice indicator |
+| CategoryChip | `Components/CategoryChip.swift` | Capsule pill with color, selection border |
+| CategoryFormSheet | `Views/Categories/CategoriesView.swift` | Add/edit category with name field and 12-color grid picker |
+| FlowLayout | `Components/FlowLayout.swift` | Custom Layout for wrapping pill grids |
 
 ### Models
 
@@ -42,29 +45,52 @@
 |---------|----------|-------------|
 | SupabaseClient | `Services/SupabaseClient.swift` | Supabase connection — stub |
 | TranscriptionService | `Services/TranscriptionService.swift` | Groq Whisper — stub |
-| AIService | `Services/AIService.swift` | Title gen, rewrite, translate — stub |
-| AudioRecorder | `Services/AudioRecorder.swift` | AVFoundation recording — stub |
-| AudioPlayer | `Services/AudioPlayer.swift` | AVFoundation playback — stub |
+| AIService | `Services/AIService.swift` | Rewrite via Supabase edge function (Gemini Flash). Title gen + translate stubs |
+| AudioRecorder | `Services/AudioRecorder.swift` | AVAudioEngine recording + real-time FFT visualization |
+| AudioPlayer | `Services/AudioPlayer.swift` | AVAudioPlayer playback with seek |
 
 ## Planned Features
 
 - [ ] Supabase auth (sign in / sign up / sign out)
 - [ ] Fetch notes and categories from Supabase
-- [ ] Voice recording with AVFoundation
+- [x] Voice recording with AVFoundation + FFT visualization
 - [ ] Transcription via edge function
 - [ ] AI title generation
-- [ ] Note detail view with editing
-- [ ] Category management
-- [ ] AI rewrite with tone selection
+- [x] Note detail view with editing
+- [x] Category management (CRUD + color picker)
+- [x] AI rewrite with 17 tones + custom instructions
 - [ ] Translation
-- [ ] Audio playback
-- [ ] Share / copy / download audio
+- [x] Audio playback with seek
+- [x] Share text
+- [ ] Download audio
 - [ ] Append recording
-- [ ] Settings (language, account, legal)
+- [x] Settings (language, theme, categories, legal links)
+- [x] Audio file import
 - [ ] RevenueCat subscription integration
 - [ ] Account deletion flow
 
 ## Changelog
+
+### 2026-02-24 (Session 3)
+- Inline category creation: + button after category pills on home and in category picker sheet
+- Audio file import via file importer on upload button
+- Category picker polish: translucent material background, larger tap targets (44pt), + button for inline create
+- Category chip vertical padding increased for better tappability
+- Rewrite sheet: full 3-state UI (selection → loading → preview) with 17 tones in 3 groups + custom instructions
+- AIService.rewrite() implemented calling Supabase edge function (Gemini Flash)
+- Original content preservation on rewrite for restore capability
+- Save button separated as independent toolbar item from ellipsis menu
+- CategoryFormSheet made internal for cross-view reuse
+
+### 2026-02-24 (Session 2)
+- Settings view: custom card layout, language/theme pickers, Safari legal links
+- Categories view: CRUD with 12-color picker, delete confirmation with note count
+- Home greeting redesign: "Say it messy. Read it clean." with decorative underlines
+- Recording screen with real-time FFT frequency visualization
+- NoteDetailView with editing, audio player, category picker, share
+- SearchView integrated into HomeView
+- Bulk selection with delete and category assignment
+- Dark mode support with warm color palette
 
 ### 2026-02-24
 - Initial project setup (SwiftUI, iOS 26, xcodegen)

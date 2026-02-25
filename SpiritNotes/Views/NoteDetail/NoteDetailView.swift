@@ -642,10 +642,6 @@ private struct RewriteSheet: View {
         return .selection
     }
 
-    private var canRewrite: Bool {
-        selectedToneId != nil || !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
     var body: some View {
         NavigationStack {
             Group {
@@ -718,25 +714,26 @@ private struct RewriteSheet: View {
                         .padding(.horizontal, 20)
                 }
 
-                // Rewrite button
-                Button {
-                    performRewrite()
-                } label: {
-                    Text("Rewrite")
-                        .font(.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(
-                            Capsule().fill(Color.brand)
-                        )
+                // Rewrite button — only for custom instructions
+                if !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button {
+                        selectedToneId = nil
+                        performRewrite()
+                    } label: {
+                        Text("Rewrite")
+                            .font(.body)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(
+                                Capsule().fill(Color.brand)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canRewrite)
-                .opacity(canRewrite ? 1 : 0.4)
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
             }
             .padding(.top, 8)
             .padding(.bottom, 40)
@@ -748,8 +745,10 @@ private struct RewriteSheet: View {
         let isSelected = selectedToneId == tone.id
         return Button {
             withAnimation(.snappy(duration: 0.2)) {
-                selectedToneId = selectedToneId == tone.id ? nil : tone.id
+                selectedToneId = tone.id
             }
+            customInstructions = ""
+            performRewrite()
         } label: {
             HStack(spacing: 6) {
                 Text(tone.emoji)
