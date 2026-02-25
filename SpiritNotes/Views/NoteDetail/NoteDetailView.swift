@@ -13,7 +13,8 @@ struct NoteDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
-    @State private var pendingRewriteResult: String?
+    @State private var pendingRewrite: (tone: String?, instructions: String?)?
+    @State private var isRewriting = false
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
     @State private var typewriterTask: Task<Void, Never>?
@@ -31,7 +32,9 @@ struct NoteDetailView: View {
     }
 
     private var hasChanges: Bool {
-        editedTitle != (note.title ?? "") || editedContent != note.content
+        typewriterTask == nil
+            && !isRewriting
+            && (editedTitle != (note.title ?? "") || editedContent != note.content)
     }
 
     private var category: Category? {
@@ -66,6 +69,19 @@ struct NoteDetailView: View {
                     titleField
                         .padding(.top, 20)
                         .padding(.horizontal, 24)
+
+                    // Rewriting indicator
+                    if isRewriting {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .tint(Color.brand)
+                            Text("Rewriting…")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 20)
+                        .transition(.opacity)
+                    }
 
                     if isTranscribing {
                         transcribingIndicator
@@ -126,6 +142,25 @@ struct NoteDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if note.originalContent != nil {
+                ToolbarItem(placement: .principal) {
+                    Button {
+                        restoreOriginal()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.caption2)
+                            Text("Restore Original")
+                                .font(.caption)
+                        }
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
+                }
+            }
+
             if hasChanges {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -148,16 +183,6 @@ struct NoteDetailView: View {
                             Label("Download Audio", systemImage: "arrow.down.circle")
                         }
                     }
-
-                    if note.originalContent != nil {
-                        Button {
-                            restoreOriginal()
-                        } label: {
-                            Label("Restore Original", systemImage: "arrow.uturn.backward")
-                        }
-                    }
-
-                    Divider()
 
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -192,20 +217,12 @@ struct NoteDetailView: View {
             .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showRewriteSheet, onDismiss: {
-            guard let rewrittenText = pendingRewriteResult else { return }
-            pendingRewriteResult = nil
-            var updated = note
-            if updated.originalContent == nil {
-                updated.originalContent = editedContent
-            }
-            updated.content = rewrittenText
-            updated.title = editedTitle.isEmpty ? nil : editedTitle
-            updated.updatedAt = Date()
-            editedContent = rewrittenText
-            noteStore.updateNote(updated)
+            guard let rewrite = pendingRewrite else { return }
+            pendingRewrite = nil
+            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions)
         }) {
-            RewriteSheet(content: editedContent, language: note.language) { rewrittenText in
-                pendingRewriteResult = rewrittenText
+            RewriteSheet { tone, instructions in
+                pendingRewrite = (tone, instructions)
             }
             .presentationDetents([.large])
             .presentationBackground(.ultraThinMaterial)
@@ -456,18 +473,14 @@ struct NoteDetailView: View {
         editedContent = ""
 
         typewriterTask = Task {
-            var revealed = ""
-            var wordBuffer = ""
-
-            for char in text {
-                wordBuffer.append(char)
-                if char == " " || char == "\n" {
-                    revealed += wordBuffer
-                    wordBuffer = ""
-                    editedContent = revealed
-                    try? await Task.sleep(for: .milliseconds(30))
-                    if Task.isCancelled { return }
-                }
+            var charIndex = 0
+            let total = text.count
+            while charIndex < total {
+                charIndex = min(charIndex + 3, total)
+                let index = text.index(text.startIndex, offsetBy: charIndex)
+                editedContent = String(text[..<index])
+                try? await Task.sleep(for: .milliseconds(2))
+                if Task.isCancelled { return }
             }
 
             if !Task.isCancelled {
@@ -478,6 +491,32 @@ struct NoteDetailView: View {
     }
 
     // MARK: - Helpers
+
+    private func performRewrite(tone: String?, instructions: String?) {
+        isRewriting = true
+        Task {
+            do {
+                let result = try await AIService.rewrite(
+                    content: editedContent,
+                    tone: tone,
+                    customInstructions: instructions,
+                    language: note.language
+                )
+                var updated = note
+                if updated.originalContent == nil {
+                    updated.originalContent = editedContent
+                }
+                updated.content = result
+                updated.title = editedTitle.isEmpty ? nil : editedTitle
+                updated.updatedAt = Date()
+                noteStore.updateNote(updated)
+                revealContent(result)
+            } catch {
+                // Rewrite failed — content stays unchanged
+            }
+            isRewriting = false
+        }
+    }
 
     private func saveChanges() {
         var updated = note
@@ -628,7 +667,12 @@ private struct CategoryPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .fontWeight(.semibold)
+                    }
                 }
             }
             .sensoryFeedback(.selection, trigger: selectedCategoryId)
@@ -689,55 +733,50 @@ private let toneGroups: [ToneGroup] = [
 ]
 
 private struct RewriteSheet: View {
-    let content: String
-    let language: String?
-    let onAccept: (String) -> Void
+    let onSelect: (String?, String?) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var selectedToneId: String?
+    @State private var selectedTab = 0
     @State private var customInstructions = ""
-    @State private var rewrittenText = ""
-    @State private var isLoading = false
-    @State private var errorMessage: String?
     @FocusState private var customFocused: Bool
-
-    private enum SheetState {
-        case selection, loading, preview
-    }
-
-    private var state: SheetState {
-        if isLoading { return .loading }
-        if !rewrittenText.isEmpty { return .preview }
-        return .selection
-    }
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch state {
-                case .selection:
-                    selectionView
-                case .loading:
-                    loadingView
-                case .preview:
-                    previewView
+            VStack(spacing: 0) {
+                Picker("", selection: $selectedTab) {
+                    Text("Presets").tag(0)
+                    Text("Custom").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+
+                if selectedTab == 0 {
+                    presetsView
+                } else {
+                    customView
                 }
             }
-            .navigationTitle(state == .preview ? "Preview" : "Rewrite")
+            .navigationTitle("Rewrite")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .fontWeight(.semibold)
+                    }
                 }
             }
         }
     }
 
-    // MARK: - Selection
+    // MARK: - Presets
 
-    private var selectionView: some View {
+    private var presetsView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 ForEach(toneGroups) { group in
@@ -756,70 +795,16 @@ private struct RewriteSheet: View {
                         .padding(.horizontal, 20)
                     }
                 }
-
-                // Custom instructions
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("CUSTOM INSTRUCTIONS")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 20)
-
-                    TextField("e.g. Keep my Dominican slang", text: $customInstructions, axis: .vertical)
-                        .font(.body)
-                        .lineLimit(1...4)
-                        .focused($customFocused)
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                        )
-                        .padding(.horizontal, 20)
-                }
-
-                // Error
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 20)
-                }
-
-                // Rewrite button — only for custom instructions
-                if !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Button {
-                        selectedToneId = nil
-                        performRewrite()
-                    } label: {
-                        Text("Rewrite")
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(
-                                Capsule().fill(Color.brand)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 4)
-                }
             }
-            .padding(.top, 8)
+            .padding(.top, 20)
             .padding(.bottom, 40)
         }
-        .scrollDismissesKeyboard(.interactively)
     }
 
     private func tonePill(_ tone: RewriteTone) -> some View {
-        let isSelected = selectedToneId == tone.id
-        return Button {
-            withAnimation(.snappy(duration: 0.2)) {
-                selectedToneId = tone.id
-            }
-            customInstructions = ""
-            performRewrite()
+        Button {
+            onSelect(tone.id, nil)
+            dismiss()
         } label: {
             HStack(spacing: 6) {
                 Text(tone.emoji)
@@ -828,100 +813,52 @@ private struct RewriteSheet: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
             }
-            .foregroundStyle(isSelected ? Color.brand : .primary)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
                 Capsule()
                     .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
             )
-            .overlay(
-                Capsule()
-                    .strokeBorder(isSelected ? Color.brand : .clear, lineWidth: 2)
-            )
         }
         .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: isSelected)
     }
 
-    // MARK: - Loading
+    // MARK: - Custom
 
-    private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .tint(Color.brand)
-                .scaleEffect(1.5)
-            Text("Rewriting...")
+    private var customView: some View {
+        VStack(spacing: 20) {
+            TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
                 .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Preview
-
-    private var previewView: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                Text(rewrittenText)
-                    .font(.body)
-                    .lineSpacing(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-            }
-
-            VStack(spacing: 12) {
-                Button {
-                    onAccept(rewrittenText)
-                    dismiss()
-                } label: {
-                    Text("Accept")
-                        .font(.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(
-                            Capsule().fill(Color.brand)
-                        )
-                }
-                .buttonStyle(.plain)
-                .sensoryFeedback(.success, trigger: rewrittenText)
-
-                Button {
-                    rewrittenText = ""
-                } label: {
-                    Text("Try another")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 40)
-        }
-    }
-
-    // MARK: - API
-
-    private func performRewrite() {
-        customFocused = false
-        errorMessage = nil
-        isLoading = true
-
-        Task {
-            do {
-                let result = try await AIService.rewrite(
-                    content: content,
-                    tone: selectedToneId,
-                    customInstructions: customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? nil : customInstructions,
-                    language: language
+                .lineLimit(3...8)
+                .focused($customFocused)
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                 )
-                rewrittenText = result
-            } catch {
-                errorMessage = error.localizedDescription
+                .padding(.horizontal, 20)
+
+            Button {
+                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces))
+                dismiss()
+            } label: {
+                Text("Rewrite")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Capsule().fill(Color.brand))
             }
-            isLoading = false
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .disabled(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty)
+            .opacity(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+
+            Spacer()
         }
+        .padding(.top, 20)
+        .onAppear { customFocused = true }
     }
 }
