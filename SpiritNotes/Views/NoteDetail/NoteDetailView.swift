@@ -13,13 +13,11 @@ struct NoteDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
-    @State private var pendingRewrite: (tone: String?, instructions: String?)?
-    @State private var isRewriting = false
+    @State private var pendingRewriteResult: String?
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
-    @State private var keyboardHeight: CGFloat = 0
     @State private var typewriterTask: Task<Void, Never>?
-    @FocusState private var contentFocused: Bool
+    @State private var contentFocused = false
 
     init(note: Note) {
         self.noteId = note.id
@@ -33,9 +31,7 @@ struct NoteDetailView: View {
     }
 
     private var hasChanges: Bool {
-        typewriterTask == nil
-            && !isRewriting
-            && (editedTitle != (note.title ?? "") || editedContent != note.content)
+        editedTitle != (note.title ?? "") || editedContent != note.content
     }
 
     private var category: Category? {
@@ -47,56 +43,46 @@ struct NoteDetailView: View {
         return URL(string: urlString)
     }
 
+    private var isTranscribing: Bool {
+        editedContent == "Transcribing…"
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Background
             (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
-            // Scrollable content
             ScrollView {
                 VStack(spacing: 0) {
-                    // Audio pill + date
                     metadataRow
                         .padding(.top, 12)
 
-                    // Audio player (expandable)
                     if audioExpanded, audioURL != nil {
                         audioPlayerView
                             .padding(.top, 12)
                             .padding(.horizontal, 24)
                     }
 
-                    // Title
                     titleField
                         .padding(.top, 20)
                         .padding(.horizontal, 24)
 
-                    // Rewriting indicator
-                    if isRewriting {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(Color.brand)
-                            Text("Rewriting…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 20)
-                        .transition(.opacity)
+                    if isTranscribing {
+                        transcribingIndicator
+                            .padding(.top, 40)
+                    } else {
+                        contentField
+                            .padding(.top, 28)
+                            .padding(.horizontal, 24)
+
+                        // Tap zone below content to focus editor
+                        Color.clear
+                            .frame(minHeight: 500)
+                            .contentShape(Rectangle())
+                            .onTapGesture { contentFocused = true }
                     }
-
-                    // Content
-                    contentField
-                        .padding(.top, 28)
-                        .padding(.horizontal, 24)
-
-                    // Tap zone below content to focus editor
-                    Color.clear
-                        .frame(minHeight: 500)
-                        .contentShape(Rectangle())
-                        .onTapGesture { contentFocused = true }
                 }
-                .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 60 : 120)
+                .padding(.bottom, 120)
             }
             .scrollDismissesKeyboard(.interactively)
 
@@ -106,7 +92,7 @@ struct NoteDetailView: View {
                 LinearGradient(
                     colors: [
                         .clear,
-                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground),
+                        colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -116,39 +102,30 @@ struct NoteDetailView: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
 
-            // Bottom bar: action buttons or keyboard toolbar
-            if keyboardHeight > 0 {
-                keyboardBar
-                    .padding(.bottom, keyboardHeight - bottomSafeArea + 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Bottom bar
+            if keyboardVisible {
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 40)
+
+                    bottomBar
+                        .padding(.vertical, 4)
+                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.95))
+                }
             } else {
                 bottomBar
                     .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .ignoresSafeArea(.keyboard)
         .toolbar {
-            if note.originalContent != nil {
-                ToolbarItem(placement: .principal) {
-                    Button {
-                        restoreOriginal()
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.caption2)
-                            Text("Restore Original")
-                                .font(.caption)
-                        }
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
-                }
-            }
-
             if hasChanges {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -171,6 +148,16 @@ struct NoteDetailView: View {
                             Label("Download Audio", systemImage: "arrow.down.circle")
                         }
                     }
+
+                    if note.originalContent != nil {
+                        Button {
+                            restoreOriginal()
+                        } label: {
+                            Label("Restore Original", systemImage: "arrow.uturn.backward")
+                        }
+                    }
+
+                    Divider()
 
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -205,12 +192,20 @@ struct NoteDetailView: View {
             .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showRewriteSheet, onDismiss: {
-            guard let rewrite = pendingRewrite else { return }
-            pendingRewrite = nil
-            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions)
+            guard let rewrittenText = pendingRewriteResult else { return }
+            pendingRewriteResult = nil
+            var updated = note
+            if updated.originalContent == nil {
+                updated.originalContent = editedContent
+            }
+            updated.content = rewrittenText
+            updated.title = editedTitle.isEmpty ? nil : editedTitle
+            updated.updatedAt = Date()
+            editedContent = rewrittenText
+            noteStore.updateNote(updated)
         }) {
-            RewriteSheet { tone, instructions in
-                pendingRewrite = (tone, instructions)
+            RewriteSheet(content: editedContent, language: note.language) { rewrittenText in
+                pendingRewriteResult = rewrittenText
             }
             .presentationDetents([.large])
             .presentationBackground(.ultraThinMaterial)
@@ -219,14 +214,6 @@ struct NoteDetailView: View {
             player.stop()
         }
         .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                keyboardHeight = frame.height
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            keyboardHeight = 0
-        }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
                 if oldValue == "Transcribing…" {
@@ -364,123 +351,101 @@ struct NoteDetailView: View {
             .contentTransition(.opacity)
     }
 
+    // MARK: - Transcribing Indicator
+
+    private var transcribingIndicator: some View {
+        Text("Transcribing…")
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .phaseAnimator([false, true]) { content, pulse in
+                content.opacity(pulse ? 0.3 : 1.0)
+            } animation: { _ in
+                .easeInOut(duration: 1.2)
+            }
+    }
+
     // MARK: - Content
 
     private var contentField: some View {
-        TextField("Start typing...", text: $editedContent, axis: .vertical)
-            .font(.body)
-            .lineSpacing(6)
-            .focused($contentFocused)
-            .contentTransition(.opacity)
+        ExpandingTextView(
+            text: $editedContent,
+            isFocused: $contentFocused,
+            font: .preferredFont(forTextStyle: .body),
+            lineSpacing: 6,
+            placeholder: "Start typing..."
+        )
     }
 
-    // MARK: - Keyboard Bar
-
-    private var keyboardBar: some View {
-        HStack(spacing: 12) {
-            Button {
-                showCategoryPicker = true
-            } label: {
-                Image(systemName: "tag")
-                    .font(.callout)
-                    .foregroundStyle(
-                        category != nil ? Color(hex: category!.color) : .secondary
-                    )
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                showRewriteSheet = true
-            } label: {
-                Image(systemName: "wand.and.stars")
-                    .font(.callout)
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                shareText()
-            } label: {
-                Image(systemName: "arrowshape.turn.up.right")
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Button {
-                contentFocused = false
-            } label: {
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 40, height: 40)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-    }
-
-    private var bottomSafeArea: CGFloat {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.keyWindow else { return 0 }
-        return window.safeAreaInsets.bottom
-    }
+    private var keyboardVisible: Bool { contentFocused }
 
     // MARK: - Bottom Bar
 
     private var bottomBar: some View {
-        HStack(spacing: 40) {
-            // Tag (left — same position as Upload on home)
+        HStack(spacing: keyboardVisible ? 12 : 40) {
+            // Tag
             Button {
                 showCategoryPicker = true
             } label: {
                 Image(systemName: "tag")
-                    .font(.title3)
+                    .font(keyboardVisible ? .callout : .title3)
                     .foregroundStyle(
                         category != nil ? Color(hex: category!.color) : .secondary
                     )
-                    .frame(width: 56, height: 56)
+                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
             .sensoryFeedback(.selection, trigger: showCategoryPicker)
 
-            // Rewrite (center — same position as Record on home)
+            // Rewrite
             Button {
                 showRewriteSheet = true
             } label: {
-                Image(systemName: "wand.and.stars")
-                    .font(.title)
-                    .foregroundStyle(.white)
-                    .frame(width: 72, height: 72)
-                    .background(Circle().fill(Color.brand))
-                    .glassEffect(.regular.interactive(), in: .circle)
+                if keyboardVisible {
+                    Image(systemName: "wand.and.stars")
+                        .font(.callout)
+                        .foregroundStyle(Color.brand)
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.title)
+                        .foregroundStyle(.white)
+                        .frame(width: 72, height: 72)
+                        .background(Circle().fill(Color.brand))
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
             }
             .buttonStyle(.plain)
 
-            // Share (right — same position as Search on home)
+            // Share
             Button {
                 shareText()
             } label: {
                 Image(systemName: "arrowshape.turn.up.right")
-                    .font(.title3)
+                    .font(keyboardVisible ? .callout : .title3)
                     .foregroundStyle(.primary)
-                    .frame(width: 56, height: 56)
+                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+
+            if keyboardVisible {
+                Spacer()
+
+                Button {
+                    contentFocused = false
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.bottom, 0)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, keyboardVisible ? 16 : 20)
         .contentShape(Rectangle())
     }
 
@@ -491,14 +456,18 @@ struct NoteDetailView: View {
         editedContent = ""
 
         typewriterTask = Task {
-            var charIndex = 0
-            let total = text.count
-            while charIndex < total {
-                charIndex = min(charIndex + 3, total)
-                let index = text.index(text.startIndex, offsetBy: charIndex)
-                editedContent = String(text[..<index])
-                try? await Task.sleep(for: .milliseconds(2))
-                if Task.isCancelled { return }
+            var revealed = ""
+            var wordBuffer = ""
+
+            for char in text {
+                wordBuffer.append(char)
+                if char == " " || char == "\n" {
+                    revealed += wordBuffer
+                    wordBuffer = ""
+                    editedContent = revealed
+                    try? await Task.sleep(for: .milliseconds(30))
+                    if Task.isCancelled { return }
+                }
             }
 
             if !Task.isCancelled {
@@ -509,32 +478,6 @@ struct NoteDetailView: View {
     }
 
     // MARK: - Helpers
-
-    private func performRewrite(tone: String?, instructions: String?) {
-        isRewriting = true
-        Task {
-            do {
-                let result = try await AIService.rewrite(
-                    content: editedContent,
-                    tone: tone,
-                    customInstructions: instructions,
-                    language: note.language
-                )
-                var updated = note
-                if updated.originalContent == nil {
-                    updated.originalContent = editedContent
-                }
-                updated.content = result
-                updated.title = editedTitle.isEmpty ? nil : editedTitle
-                updated.updatedAt = Date()
-                noteStore.updateNote(updated)
-                revealContent(result)
-            } catch {
-                // Rewrite failed — content stays unchanged
-            }
-            isRewriting = false
-        }
-    }
 
     private func saveChanges() {
         var updated = note
@@ -685,12 +628,7 @@ private struct CategoryPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .fontWeight(.semibold)
-                    }
+                    Button("Done") { dismiss() }
                 }
             }
             .sensoryFeedback(.selection, trigger: selectedCategoryId)
@@ -751,50 +689,55 @@ private let toneGroups: [ToneGroup] = [
 ]
 
 private struct RewriteSheet: View {
-    let onSelect: (String?, String?) -> Void
+    let content: String
+    let language: String?
+    let onAccept: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var selectedTab = 0
+    @State private var selectedToneId: String?
     @State private var customInstructions = ""
+    @State private var rewrittenText = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
     @FocusState private var customFocused: Bool
+
+    private enum SheetState {
+        case selection, loading, preview
+    }
+
+    private var state: SheetState {
+        if isLoading { return .loading }
+        if !rewrittenText.isEmpty { return .preview }
+        return .selection
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Picker("", selection: $selectedTab) {
-                    Text("Presets").tag(0)
-                    Text("Custom").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-
-                if selectedTab == 0 {
-                    presetsView
-                } else {
-                    customView
+            Group {
+                switch state {
+                case .selection:
+                    selectionView
+                case .loading:
+                    loadingView
+                case .preview:
+                    previewView
                 }
             }
-            .navigationTitle("Rewrite")
+            .navigationTitle(state == .preview ? "Preview" : "Rewrite")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .fontWeight(.semibold)
-                    }
+                    Button("Cancel") { dismiss() }
                 }
             }
         }
     }
 
-    // MARK: - Presets
+    // MARK: - Selection
 
-    private var presetsView: some View {
+    private var selectionView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 ForEach(toneGroups) { group in
@@ -813,16 +756,70 @@ private struct RewriteSheet: View {
                         .padding(.horizontal, 20)
                     }
                 }
+
+                // Custom instructions
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("CUSTOM INSTRUCTIONS")
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+
+                    TextField("e.g. Keep my Dominican slang", text: $customInstructions, axis: .vertical)
+                        .font(.body)
+                        .lineLimit(1...4)
+                        .focused($customFocused)
+                        .padding(14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                        )
+                        .padding(.horizontal, 20)
+                }
+
+                // Error
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 20)
+                }
+
+                // Rewrite button — only for custom instructions
+                if !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button {
+                        selectedToneId = nil
+                        performRewrite()
+                    } label: {
+                        Text("Rewrite")
+                            .font(.body)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(
+                                Capsule().fill(Color.brand)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                }
             }
-            .padding(.top, 20)
+            .padding(.top, 8)
             .padding(.bottom, 40)
         }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private func tonePill(_ tone: RewriteTone) -> some View {
-        Button {
-            onSelect(tone.id, nil)
-            dismiss()
+        let isSelected = selectedToneId == tone.id
+        return Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                selectedToneId = tone.id
+            }
+            customInstructions = ""
+            performRewrite()
         } label: {
             HStack(spacing: 6) {
                 Text(tone.emoji)
@@ -831,52 +828,100 @@ private struct RewriteSheet: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(isSelected ? Color.brand : .primary)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(
                 Capsule()
                     .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
             )
+            .overlay(
+                Capsule()
+                    .strokeBorder(isSelected ? Color.brand : .clear, lineWidth: 2)
+            )
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: isSelected)
     }
 
-    // MARK: - Custom
+    // MARK: - Loading
 
-    private var customView: some View {
-        VStack(spacing: 20) {
-            TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .tint(Color.brand)
+                .scaleEffect(1.5)
+            Text("Rewriting...")
                 .font(.body)
-                .lineLimit(3...8)
-                .focused($customFocused)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                )
-                .padding(.horizontal, 20)
-
-            Button {
-                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces))
-                dismiss()
-            } label: {
-                Text("Rewrite")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Capsule().fill(Color.brand))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .disabled(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
-
-            Spacer()
+                .foregroundStyle(.secondary)
         }
-        .padding(.top, 20)
-        .onAppear { customFocused = true }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Preview
+
+    private var previewView: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                Text(rewrittenText)
+                    .font(.body)
+                    .lineSpacing(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+            }
+
+            VStack(spacing: 12) {
+                Button {
+                    onAccept(rewrittenText)
+                    dismiss()
+                } label: {
+                    Text("Accept")
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            Capsule().fill(Color.brand)
+                        )
+                }
+                .buttonStyle(.plain)
+                .sensoryFeedback(.success, trigger: rewrittenText)
+
+                Button {
+                    rewrittenText = ""
+                } label: {
+                    Text("Try another")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+    }
+
+    // MARK: - API
+
+    private func performRewrite() {
+        customFocused = false
+        errorMessage = nil
+        isLoading = true
+
+        Task {
+            do {
+                let result = try await AIService.rewrite(
+                    content: content,
+                    tone: selectedToneId,
+                    customInstructions: customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? nil : customInstructions,
+                    language: language
+                )
+                rewrittenText = result
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
     }
 }

@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "Transcription")
 
 struct TranscriptionResult: Sendable {
     let text: String
@@ -30,13 +33,18 @@ final class TranscriptionService: Sendable {
 
     func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?) async throws -> TranscriptionResult {
         let boundary = UUID().uuidString
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        let mimeType = Self.mimeType(for: ext)
+        let sizeMB = String(format: "%.1f", Double(audioData.count) / 1_048_576.0)
+
+        logger.info("Transcribing \(fileName) (\(sizeMB)MB) via multipart upload")
 
         var body = Data()
 
         // File part
         body.appendMultipart("--\(boundary)\r\n")
         body.appendMultipart("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
-        body.appendMultipart("Content-Type: audio/m4a\r\n\r\n")
+        body.appendMultipart("Content-Type: \(mimeType)\r\n\r\n")
         body.append(audioData)
         body.appendMultipart("\r\n")
 
@@ -55,7 +63,7 @@ final class TranscriptionService: Sendable {
             body.appendMultipart("\(prompt)\r\n")
         }
 
-        // User ID part (for storage upload)
+        // User ID part (for storage upload on the server side)
         if let userId {
             body.appendMultipart("--\(boundary)\r\n")
             body.appendMultipart("Content-Disposition: form-data; name=\"user_id\"\r\n\r\n")
@@ -64,11 +72,14 @@ final class TranscriptionService: Sendable {
 
         body.appendMultipart("--\(boundary)--\r\n")
 
+        logger.info("Request body size: \(String(format: "%.1f", Double(body.count) / 1_048_576.0))MB")
+
         var request = URLRequest(url: edgeFunctionURL)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = body
+        request.timeoutInterval = 300 // 5 minutes — large files on slow connections
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -78,8 +89,11 @@ final class TranscriptionService: Sendable {
 
         guard httpResponse.statusCode == 200 else {
             let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            logger.error("Transcription failed: HTTP \(httpResponse.statusCode) — \(message)")
             throw TranscriptionError.serverError(statusCode: httpResponse.statusCode, message: message)
         }
+
+        logger.info("Transcription succeeded")
 
         let result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
         return TranscriptionResult(
@@ -88,6 +102,22 @@ final class TranscriptionService: Sendable {
             audioUrl: result.audioUrl,
             durationSeconds: result.durationSeconds
         )
+    }
+
+    // MARK: - Helpers
+
+    private static func mimeType(for ext: String) -> String {
+        switch ext {
+        case "mp3": "audio/mpeg"
+        case "wav": "audio/wav"
+        case "m4a", "aac": "audio/m4a"
+        case "ogg", "oga": "audio/ogg"
+        case "flac": "audio/flac"
+        case "webm": "audio/webm"
+        case "mp4": "audio/mp4"
+        case "caf": "audio/x-caf"
+        default: "audio/\(ext)"
+        }
     }
 }
 

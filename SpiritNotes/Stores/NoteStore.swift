@@ -96,8 +96,6 @@ final class NoteStore {
                     .execute()
             } catch {
                 logger.error("addNote failed: \(error)")
-                // Rollback on failure
-                notes.removeAll { $0.id == note.id }
             }
         }
     }
@@ -192,9 +190,23 @@ final class NoteStore {
 
     func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?) {
         Task {
+            var compressedURL: URL?
+            defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
+
             do {
-                let audioData = try Data(contentsOf: audioFileURL)
-                let fileName = audioFileURL.lastPathComponent
+                // Compress audio to 16kHz mono AAC (what Whisper uses internally)
+                let uploadURL: URL
+                do {
+                    let compressed = try await AudioCompressor.compress(sourceURL: audioFileURL)
+                    compressedURL = compressed
+                    uploadURL = compressed
+                } catch {
+                    logger.warning("Compression failed, using original: \(error)")
+                    uploadURL = audioFileURL
+                }
+
+                let audioData = try Data(contentsOf: uploadURL)
+                let fileName = uploadURL.lastPathComponent
 
                 let service = TranscriptionService()
                 let result = try await service.transcribe(
@@ -205,7 +217,10 @@ final class NoteStore {
                 )
 
                 // Update note with transcription
-                guard var note = notes.first(where: { $0.id == id }) else { return }
+                guard var note = notes.first(where: { $0.id == id }) else {
+                    logger.error("transcribeNote: note \(id) not found in local store after transcription")
+                    return
+                }
                 note.content = result.text
                 note.language = result.language
                 if let audioUrl = result.audioUrl {
@@ -220,8 +235,11 @@ final class NoteStore {
                 // Generate AI title in background
                 generateTitle(for: id, content: result.text, language: result.language)
             } catch {
-                // Update note to show transcription failed
-                guard var note = notes.first(where: { $0.id == id }) else { return }
+                logger.error("transcribeNote failed for \(id): \(error)")
+                guard var note = notes.first(where: { $0.id == id }) else {
+                    logger.error("transcribeNote: note \(id) not found in local store after failure")
+                    return
+                }
                 note.content = "Transcription failed — tap to edit"
                 note.updatedAt = Date()
                 updateNote(note)

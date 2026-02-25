@@ -169,6 +169,7 @@ struct HomeView: View {
             RecordView(categoryId: selectedCategory) { savedNote in
                 pendingNote = savedNote
             }
+            .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
         .fileImporter(
             isPresented: $showAudioImporter,
@@ -608,7 +609,7 @@ struct HomeView: View {
                 userId: authStore.user?.id,
                 categoryId: selectedCategory,
                 title: sourceURL.deletingPathExtension().lastPathComponent,
-                content: "Imported audio — pending transcription.",
+                content: "Transcribing…",
                 source: .voice,
                 audioUrl: destinationURL.path,
                 durationSeconds: duration.isFinite ? Int(duration) : nil,
@@ -619,6 +620,8 @@ struct HomeView: View {
             withAnimation(.snappy) {
                 noteStore.addNote(note)
             }
+
+            selectedNote = note
 
             // Transcribe in background
             let language = settingsStore.language == "auto" ? nil : settingsStore.language
