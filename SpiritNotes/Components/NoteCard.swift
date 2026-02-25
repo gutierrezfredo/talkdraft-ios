@@ -3,6 +3,8 @@ import SwiftUI
 struct NoteCard: View {
     let note: Note
     let category: Category?
+    var selectionMode: Bool = false
+    var isSelected: Bool = false
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -60,6 +62,34 @@ struct NoteCard: View {
                 .fill(cardBackground)
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
+        .overlay(alignment: .topTrailing) {
+            if selectionMode {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? Color.brand : Color.clear)
+                        .frame(width: 24, height: 24)
 
+                    Circle()
+                        .strokeBorder(
+                            isSelected ? Color.brand : (isDark ? Color(hex: "#525252") : Color(hex: "#d4d4d4")),
+                            lineWidth: 2
+                        )
+                        .frame(width: 24, height: 24)
+
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(12)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(isSelected ? Color.brand : .clear, lineWidth: 2)
+        )
+    }
 }

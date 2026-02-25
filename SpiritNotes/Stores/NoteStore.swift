@@ -44,6 +44,19 @@ final class NoteStore {
         notes.removeAll { $0.id == id }
     }
 
+    func removeNotes(ids: Set<UUID>) {
+        notes.removeAll { ids.contains($0.id) }
+        // TODO: Batch delete from Supabase
+    }
+
+    func moveNotes(ids: Set<UUID>, toCategoryId categoryId: UUID?) {
+        for i in notes.indices where ids.contains(notes[i].id) {
+            notes[i].categoryId = categoryId
+            notes[i].updatedAt = Date()
+        }
+        // TODO: Batch update in Supabase
+    }
+
     // MARK: - Category CRUD
 
     func addCategory(_ category: Category) {

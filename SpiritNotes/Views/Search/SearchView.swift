@@ -8,6 +8,7 @@ struct SearchView: View {
     @State private var selectedCategory: UUID?
     @State private var keyboardHeight: CGFloat = 0
     @State private var selectedNote: Note?
+    @State private var isSwiping = false
     @FocusState private var searchFocused: Bool
 
     private let columns = [
@@ -65,6 +66,29 @@ struct SearchView: View {
                     .scrollDismissesKeyboard(.immediately)
                 }
             }
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 30)
+                    .onChanged { _ in
+                        isSwiping = true
+                    }
+                    .onEnded { value in
+                        let horizontal = value.predictedEndTranslation.width
+                        let vertical = abs(value.predictedEndTranslation.height)
+
+                        if abs(horizontal) > vertical * 1.5 {
+                            if horizontal < 0 {
+                                cycleCategory(forward: true)
+                            } else {
+                                cycleCategory(forward: false)
+                            }
+                        }
+
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            isSwiping = false
+                        }
+                    }
+            )
 
             // Bottom fade
             VStack {
@@ -92,7 +116,7 @@ struct SearchView: View {
                 .ignoresSafeArea()
         )
         .ignoresSafeArea(.keyboard)
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(item: $selectedNote) { note in
             NoteDetailView(note: note)
         }
@@ -152,6 +176,7 @@ struct SearchView: View {
             ForEach(notes) { note in
                 let category = noteStore.categories.first { $0.id == note.categoryId }
                 Button {
+                    guard !isSwiping else { return }
                     selectedNote = note
                 } label: {
                     NoteCard(note: note, category: category)
@@ -205,5 +230,23 @@ struct SearchView: View {
         }
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Helpers
+
+    private func cycleCategory(forward: Bool) {
+        let categoryIds: [UUID?] = [nil] + noteStore.categories.map(\.id)
+        guard let currentIndex = categoryIds.firstIndex(of: selectedCategory) else { return }
+
+        let nextIndex: Int
+        if forward {
+            nextIndex = currentIndex + 1 < categoryIds.count ? currentIndex + 1 : 0
+        } else {
+            nextIndex = currentIndex - 1 >= 0 ? currentIndex - 1 : categoryIds.count - 1
+        }
+
+        withAnimation(.snappy) {
+            selectedCategory = categoryIds[nextIndex]
+        }
     }
 }
