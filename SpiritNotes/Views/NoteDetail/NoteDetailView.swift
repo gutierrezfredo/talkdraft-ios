@@ -13,6 +13,7 @@ struct NoteDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
+    @State private var pendingRewriteResult: String?
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
     @State private var keyboardHeight: CGFloat = 0
@@ -177,16 +178,21 @@ struct NoteDetailView: View {
             .presentationDetents([.medium, .large])
             .presentationBackground(.ultraThinMaterial)
         }
-        .sheet(isPresented: $showRewriteSheet) {
+        .sheet(isPresented: $showRewriteSheet, onDismiss: {
+            guard let rewrittenText = pendingRewriteResult else { return }
+            pendingRewriteResult = nil
+            var updated = note
+            if updated.originalContent == nil {
+                updated.originalContent = editedContent
+            }
+            updated.content = rewrittenText
+            updated.title = editedTitle.isEmpty ? nil : editedTitle
+            updated.updatedAt = Date()
+            editedContent = rewrittenText
+            noteStore.updateNote(updated)
+        }) {
             RewriteSheet(content: editedContent, language: note.language) { rewrittenText in
-                // Save original before overwriting
-                if note.originalContent == nil {
-                    var updated = note
-                    updated.originalContent = editedContent
-                    noteStore.updateNote(updated)
-                }
-                editedContent = rewrittenText
-                saveChanges()
+                pendingRewriteResult = rewrittenText
             }
             .presentationDetents([.large])
             .presentationBackground(.ultraThinMaterial)
@@ -260,7 +266,7 @@ struct NoteDetailView: View {
             // Play button
             Button {
                 guard let url = audioURL else { return }
-                try? player.togglePlayback(url: url)
+                player.togglePlayback(url: url)
             } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.body)
@@ -451,9 +457,13 @@ struct NoteDetailView: View {
     }
 
     private func restoreOriginal() {
-        if let original = note.originalContent {
-            editedContent = original
-        }
+        guard let original = note.originalContent else { return }
+        editedContent = original
+        var updated = note
+        updated.content = original
+        updated.originalContent = nil
+        updated.updatedAt = Date()
+        noteStore.updateNote(updated)
     }
 
     private func buildShareText() -> String {

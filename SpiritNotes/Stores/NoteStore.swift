@@ -5,6 +5,40 @@ import Supabase
 
 private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "NoteStore")
 
+private struct NoteUpdate: Encodable {
+    var categoryId: UUID?
+    var title: String?
+    var content: String
+    var originalContent: String?
+    var source: Note.NoteSource
+    var language: String?
+    var audioUrl: String?
+    var durationSeconds: Int?
+    var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case categoryId = "category_id"
+        case title, content
+        case originalContent = "original_content"
+        case source, language
+        case audioUrl = "audio_url"
+        case durationSeconds = "duration_seconds"
+        case updatedAt = "updated_at"
+    }
+
+    init(from note: Note) {
+        self.categoryId = note.categoryId
+        self.title = note.title
+        self.content = note.content
+        self.originalContent = note.originalContent
+        self.source = note.source
+        self.language = note.language
+        self.audioUrl = note.audioUrl
+        self.durationSeconds = note.durationSeconds
+        self.updatedAt = note.updatedAt
+    }
+}
+
 @MainActor
 @Observable
 final class NoteStore {
@@ -77,10 +111,11 @@ final class NoteStore {
             do {
                 try await supabase
                     .from("notes")
-                    .update(note)
+                    .update(NoteUpdate(from: note))
                     .eq("id", value: note.id)
                     .execute()
             } catch {
+                logger.error("updateNote failed: \(error)")
                 // Rollback on failure
                 if let i = notes.firstIndex(where: { $0.id == note.id }) {
                     notes[i] = previous
