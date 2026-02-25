@@ -142,7 +142,7 @@ struct CategoriesView: View {
 
 // MARK: - Category Form Sheet
 
-private struct CategoryFormSheet: View {
+struct CategoryFormSheet: View {
     enum Mode: Identifiable {
         case add
         case edit(Category)

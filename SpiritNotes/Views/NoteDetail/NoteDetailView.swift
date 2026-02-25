@@ -164,6 +164,7 @@ struct NoteDetailView: View {
                 categories: noteStore.categories
             )
             .presentationDetents([.medium])
+            .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showRewriteSheet) {
             RewriteSheet()
@@ -404,14 +405,18 @@ private struct CategoryPickerSheet: View {
     let note: Note
     let categories: [Category]
 
+    @State private var selectedCategoryId: UUID?
+    @State private var showAddCategory = false
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
                 // Category grid
                 FlowLayout(spacing: 8) {
                     ForEach(categories) { cat in
-                        let isSelected = note.categoryId == cat.id
+                        let isSelected = selectedCategoryId == cat.id
                         Button {
+                            selectedCategoryId = cat.id
                             var updated = note
                             updated.categoryId = cat.id
                             updated.updatedAt = Date()
@@ -423,10 +428,10 @@ private struct CategoryPickerSheet: View {
                                 .fontWeight(.medium)
                                 .foregroundStyle(Color(hex: cat.color))
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
+                                .padding(.vertical, 14)
                                 .background(
                                     Capsule()
-                                        .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white)
+                                        .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
                                 )
                                 .overlay(
                                     Capsule()
@@ -437,14 +442,30 @@ private struct CategoryPickerSheet: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .sensoryFeedback(.selection, trigger: isSelected)
                     }
+
+                    // Add category button
+                    Button {
+                        showAddCategory = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white.opacity(0.7))
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
 
                 // Remove category
-                if note.categoryId != nil {
+                if selectedCategoryId != nil {
                     Button {
+                        selectedCategoryId = nil
                         var updated = note
                         updated.categoryId = nil
                         updated.updatedAt = Date()
@@ -468,6 +489,13 @@ private struct CategoryPickerSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sensoryFeedback(.selection, trigger: selectedCategoryId)
+        }
+        .sheet(isPresented: $showAddCategory) {
+            CategoryFormSheet(mode: .add)
+        }
+        .onAppear {
+            selectedCategoryId = note.categoryId
         }
     }
 }

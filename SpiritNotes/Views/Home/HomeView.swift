@@ -1,4 +1,6 @@
+import AVFoundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum NoteSortOrder: String, CaseIterable {
     case updatedAt = "Last Updated"
@@ -12,6 +14,8 @@ struct HomeView: View {
     @State private var showRecordView = false
     @State private var sortOrder: NoteSortOrder = .updatedAt
     @State private var showSearch = false
+    @State private var showAudioImporter = false
+    @State private var showAddCategory = false
     @Namespace private var namespace
 
     private let columns = [
@@ -108,6 +112,13 @@ struct HomeView: View {
             RecordView(categoryId: selectedCategory)
                 .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
+        .fileImporter(
+            isPresented: $showAudioImporter,
+            allowedContentTypes: [.audio],
+            allowsMultipleSelection: false
+        ) { result in
+            handleAudioImport(result)
+        }
     }
 
     // MARK: - Greeting
@@ -124,7 +135,8 @@ struct HomeView: View {
                         .frame(height: 8)
                         .offset(y: 4)
                 }
-            Text(". ")
+            Text(".  ")
+                .foregroundStyle(.secondary)
             Text("Read it ")
             Text("clean")
                 .foregroundStyle(Color.brand)
@@ -169,9 +181,27 @@ struct HomeView: View {
                         }
                     }
                 }
+
+                Button {
+                    showAddCategory = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white)
+                        )
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
+        }
+        .sheet(isPresented: $showAddCategory) {
+            CategoryFormSheet(mode: .add)
         }
     }
 
@@ -203,7 +233,7 @@ struct HomeView: View {
         HStack(spacing: 40) {
             // Upload audio button (left)
             Button {
-                // TODO: Import audio file
+                showAudioImporter = true
             } label: {
                 Image(systemName: "icloud.and.arrow.up")
                     .fontWeight(.medium)
@@ -243,6 +273,45 @@ struct HomeView: View {
     }
 
     // MARK: - Helpers
+
+    private func handleAudioImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let sourceURL = urls.first else { return }
+        guard sourceURL.startAccessingSecurityScopedResource() else { return }
+        defer { sourceURL.stopAccessingSecurityScopedResource() }
+
+        let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Recordings", isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+
+            let fileName = "\(UUID().uuidString).\(sourceURL.pathExtension)"
+            let destinationURL = recordingsDir.appendingPathComponent(fileName)
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+
+            // Get audio duration
+            let asset = AVURLAsset(url: destinationURL)
+            let duration = CMTimeGetSeconds(asset.duration)
+
+            let note = Note(
+                id: UUID(),
+                categoryId: selectedCategory,
+                title: sourceURL.deletingPathExtension().lastPathComponent,
+                content: "Imported audio — pending transcription.",
+                source: .voice,
+                audioUrl: destinationURL.path,
+                durationSeconds: duration.isFinite ? duration : nil,
+                createdAt: .now,
+                updatedAt: .now
+            )
+
+            withAnimation(.snappy) {
+                noteStore.addNote(note)
+            }
+        } catch {
+            // TODO: Surface error to user
+        }
+    }
 
     private var filteredNotes: [Note] {
         let notes = selectedCategory == nil

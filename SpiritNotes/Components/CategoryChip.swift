@@ -15,7 +15,7 @@ struct CategoryChip: View {
                 .fontWeight(.medium)
                 .foregroundStyle(color)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.vertical, 10)
                 .background(
                     Capsule()
                         .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white)
