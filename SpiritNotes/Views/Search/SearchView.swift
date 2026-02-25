@@ -96,7 +96,7 @@ struct SearchView: View {
                 LinearGradient(
                     colors: [
                         .clear,
-                        (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground),
+                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -112,7 +112,7 @@ struct SearchView: View {
                 .ignoresSafeArea(.container, edges: .bottom)
         }
         .background(
-            (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground)
+            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
         )
         .ignoresSafeArea(.keyboard)

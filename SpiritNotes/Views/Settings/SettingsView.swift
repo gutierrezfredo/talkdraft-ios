@@ -9,11 +9,11 @@ struct SettingsView: View {
     @State private var showSignOutConfirmation = false
 
     private var backgroundColor: Color {
-        colorScheme == .dark ? .warmBackgroundDark : .warmBackground
+        colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
     private var cardColor: Color {
-        colorScheme == .dark ? .cardSurfaceDark : .white
+        colorScheme == .dark ? .darkSurface : .white
     }
 
     var body: some View {
@@ -229,7 +229,7 @@ private struct SettingsSection<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(colorScheme == .dark ? Color.cardSurfaceDark : .white)
+            .background(colorScheme == .dark ? Color.darkSurface : .white)
             .clipShape(RoundedRectangle(cornerRadius: 24))
         }
     }
@@ -343,13 +343,13 @@ private struct LanguagePickerView: View {
                     }
                 }
             }
-            .background(colorScheme == .dark ? Color.cardSurfaceDark : .white)
+            .background(colorScheme == .dark ? Color.darkSurface : .white)
             .clipShape(RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal, 20)
             .padding(.top, 8)
         }
         .background(
-            (colorScheme == .dark ? Color.warmBackgroundDark : .warmBackground)
+            (colorScheme == .dark ? Color.darkBackground : .warmBackground)
                 .ignoresSafeArea()
         )
         .navigationTitle("Recording Language")
@@ -400,13 +400,13 @@ private struct ThemePickerView: View {
                     }
                 }
             }
-            .background(colorScheme == .dark ? Color.cardSurfaceDark : .white)
+            .background(colorScheme == .dark ? Color.darkSurface : .white)
             .clipShape(RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal, 20)
             .padding(.top, 8)
         }
         .background(
-            (colorScheme == .dark ? Color.warmBackgroundDark : .warmBackground)
+            (colorScheme == .dark ? Color.darkBackground : .warmBackground)
                 .ignoresSafeArea()
         )
         .navigationTitle("Appearance")

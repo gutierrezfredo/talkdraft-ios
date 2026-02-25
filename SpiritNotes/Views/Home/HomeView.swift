@@ -36,7 +36,7 @@ struct HomeView: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 // Background
-                (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground)
+                (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                     .ignoresSafeArea()
 
                 // Main content
@@ -121,7 +121,7 @@ struct HomeView: View {
                     LinearGradient(
                         colors: [
                             .clear,
-                            (colorScheme == .dark ? Color(.systemBackground) : Color.warmBackground),
+                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -242,9 +242,8 @@ struct HomeView: View {
                         .frame(height: 5)
                         .offset(y: 2)
                 }
-            Text(".")
         }
-        .font(.title3)
+        .font(.system(.title3, design: .serif))
         .fontWeight(.semibold)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -255,45 +254,55 @@ struct HomeView: View {
     // MARK: - Category Chips
 
     private var categoryChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                CategoryChip(
-                    name: "All",
-                    color: .brand,
-                    isSelected: selectedCategory == nil
-                ) {
-                    withAnimation(.snappy) { selectedCategory = nil }
-                }
-
-                ForEach(noteStore.categories) { category in
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
                     CategoryChip(
-                        name: category.name,
-                        color: Color(hex: category.color),
-                        isSelected: selectedCategory == category.id
+                        name: "All",
+                        color: .brand,
+                        isSelected: selectedCategory == nil
                     ) {
-                        withAnimation(.snappy) {
-                            selectedCategory = selectedCategory == category.id ? nil : category.id
-                        }
+                        withAnimation(.snappy) { selectedCategory = nil }
                     }
-                }
+                    .id("all")
 
-                Button {
-                    showAddCategory = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle()
-                                .fill(colorScheme == .dark ? Color(hex: "#1f1f1f") : .white)
-                        )
+                    ForEach(noteStore.categories) { category in
+                        CategoryChip(
+                            name: category.name,
+                            color: Color(hex: category.color),
+                            isSelected: selectedCategory == category.id
+                        ) {
+                            withAnimation(.snappy) {
+                                selectedCategory = selectedCategory == category.id ? nil : category.id
+                            }
+                        }
+                        .id(category.id.uuidString)
+                    }
+
+                    Button {
+                        showAddCategory = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle()
+                                    .fill(colorScheme == .dark ? Color.darkSurface : .white)
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
+            .onChange(of: selectedCategory) {
+                withAnimation(.snappy) {
+                    let targetId = selectedCategory?.uuidString ?? "all"
+                    proxy.scrollTo(targetId, anchor: .center)
+                }
+            }
         }
         .sheet(isPresented: $showAddCategory) {
             CategoryFormSheet(mode: .add)
@@ -301,6 +310,11 @@ struct HomeView: View {
     }
 
     // MARK: - Empty State
+
+    private var selectedCategoryModel: Category? {
+        guard let id = selectedCategory else { return nil }
+        return noteStore.categories.first { $0.id == id }
+    }
 
     private var emptyState: some View {
         ContentUnavailableView {
@@ -310,21 +324,25 @@ struct HomeView: View {
                 Label(
                     selectedCategory == nil
                         ? "Capture your thoughts"
-                        : "No notes in this category",
+                        : "No notes yet",
                     systemImage: selectedCategory == nil
                         ? "waveform"
                         : "tray"
                 )
             }
         } description: {
-            if isSearching && !query.isEmpty {
+            if isSearching && !query.isEmpty, let cat = selectedCategoryModel {
+                Text("No notes matching \"\(query)\" in ")
+                    + Text(cat.name).foregroundColor(Color(hex: cat.color))
+                    + Text(".")
+            } else if isSearching && !query.isEmpty {
                 Text("No notes matching \"\(query)\".")
+            } else if let cat = selectedCategoryModel {
+                Text("No notes in ")
+                    + Text(cat.name).foregroundColor(Color(hex: cat.color))
+                    + Text(".")
             } else {
-                Text(
-                    selectedCategory == nil
-                        ? "Tap the mic to record your first thought."
-                        : "Notes you add to this category will appear here."
-                )
+                Text("Tap the mic to record your first thought.")
             }
         }
         .frame(maxWidth: .infinity, minHeight: 300)
@@ -483,40 +501,51 @@ struct HomeView: View {
 
     private var bulkCategoryPicker: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 20) {
+                FlowLayout(spacing: 8) {
+                    ForEach(noteStore.categories) { cat in
+                        Button {
+                            noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            exitSelection()
+                            showCategoryPicker = false
+                        } label: {
+                            Text(cat.name)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(Color(hex: cat.color))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .background(
+                                    Capsule()
+                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+
                 Button {
                     noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     exitSelection()
                     showCategoryPicker = false
                 } label: {
-                    Label("Uncategorized", systemImage: "tray")
+                    Text("Remove category")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
 
-                ForEach(noteStore.categories) { category in
-                    Button {
-                        noteStore.moveNotes(ids: selectedIds, toCategoryId: category.id)
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        exitSelection()
-                        showCategoryPicker = false
-                    } label: {
-                        Label {
-                            Text(category.name)
-                        } icon: {
-                            Circle()
-                                .fill(Color(hex: category.color))
-                                .frame(width: 12, height: 12)
-                        }
-                    }
-                    .tint(.primary)
-                }
+                Spacer()
             }
+            .padding(.top, 20)
             .navigationTitle("Move to Category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Done") {
                         showCategoryPicker = false
                     }
                 }

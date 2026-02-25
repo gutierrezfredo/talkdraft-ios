@@ -1,18 +1,21 @@
 import SwiftUI
 
 extension Color {
-    /// Brand violet used for accents and primary actions.
-    static let brand = Color(hex: "#7C3AED")
+    /// Brand violet — adaptive: darker in light mode, lighter in dark mode.
+    static let brand = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0x8B/255, green: 0x5C/255, blue: 0xF6/255, alpha: 1) // #8B5CF6
+            : UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1) // #7C3AED
+    })
 
     /// Warm light-mode background matching Expo design.
     static let warmBackground = Color(hex: "#F8F2F0")
 
-    /// Dark-mode equivalent warm background.
-    static let warmBackgroundDark = Color(hex: "#1A1A1A")
+    /// Dark-mode background — deep navy (Twitter dark).
+    static let darkBackground = Color(hex: "#0F1419")
 
-    /// Card surface colors.
-    static let cardSurface = Color(.systemBackground)
-    static let cardSurfaceDark = Color(hex: "#2A2A2A")
+    /// Elevated surface for chips, pills, and cards in dark mode.
+    static let darkSurface = Color(hex: "#1C2630")
 
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
@@ -30,7 +33,7 @@ extension Color {
     /// Blend this color with the appropriate background at a given opacity.
     /// Used for category-tinted card backgrounds.
     func blended(opacity: Double, isDark: Bool) -> Color {
-        let bg: (Double, Double, Double) = isDark ? (10/255, 10/255, 10/255) : (1, 1, 1)
+        let bg: (Double, Double, Double) = isDark ? (15/255, 20/255, 25/255) : (1, 1, 1)
         // Resolve hex-based RGB from the color's components
         let resolved = UIColor(self)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
