@@ -266,11 +266,13 @@ private final class FFTProcessor: @unchecked Sendable {
         var ranges = [(start: Int, end: Int)]()
         var tilts = [Float]()
         let half = fftSize / 2
+        // Cap at ~40% of Nyquist (~8-10kHz) — voice has no content above that
+        let maxBin = half * 2 / 5
         for band in 0..<bandCount {
             let startRatio = pow(Float(band) / Float(bandCount), 2.0)
             let nextRatio = pow(Float(band + 1) / Float(bandCount), 2.0)
-            let startBin = max(1, Int(startRatio * Float(half)))
-            let endBin = max(startBin, min(half - 1, Int(nextRatio * Float(half))))
+            let startBin = max(1, Int(startRatio * Float(maxBin)))
+            let endBin = max(startBin, min(maxBin - 1, Int(nextRatio * Float(maxBin))))
             ranges.append((startBin, endBin))
 
             // Frequency tilt: attenuate low bands, boost high bands
