@@ -325,7 +325,9 @@ struct HomeView: View {
             }
         }
         .sheet(isPresented: $showAddCategory) {
-            CategoryFormSheet(mode: .add)
+            CategoryFormSheet(mode: .add) { category in
+                selectedCategory = category.id
+            }
         }
         .sheet(item: $editingCategory) { category in
             CategoryFormSheet(mode: .edit(category))
