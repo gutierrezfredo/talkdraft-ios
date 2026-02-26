@@ -31,7 +31,6 @@ struct ContentView: View {
         }
         .preferredColorScheme(colorScheme)
         .task {
-            noteStore.startNetworkMonitor()
             await authStore.initialize()
         }
         .onChange(of: authStore.isAuthenticated) { _, authenticated in
