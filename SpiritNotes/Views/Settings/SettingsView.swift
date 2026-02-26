@@ -3,12 +3,14 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var showSignOutConfirmation = false
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
+    @State private var showPaywall = false
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -102,12 +104,18 @@ struct SettingsView: View {
 
                 SettingsSection("Account") {
                     Button {
-                        // TODO: Open RevenueCat paywall
+                        if subscriptionStore.isPro {
+                            if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                                UIApplication.shared.open(url)
+                            }
+                        } else {
+                            showPaywall = true
+                        }
                     } label: {
                         SettingsRow(
                             icon: "creditcard",
                             title: "Manage Subscription",
-                            value: authStore.user?.plan == .pro ? "Pro" : "Free"
+                            value: subscriptionStore.isPro ? "Pro" : "Free"
                         )
                     }
                     .buttonStyle(.plain)
@@ -195,6 +203,9 @@ struct SettingsView: View {
         .background(backgroundColor.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
         .confirmationDialog(
             "Sign Out",
             isPresented: $showSignOutConfirmation,

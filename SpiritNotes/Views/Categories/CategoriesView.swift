@@ -5,9 +5,11 @@ private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "Cat
 
 struct CategoriesView: View {
     @Environment(NoteStore.self) private var noteStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var editingCategory: Category?
     @State private var showAddSheet = false
+    @State private var showPaywall = false
     @State private var categoryToDelete: Category?
     @State private var editMode: EditMode = .inactive
 
@@ -76,11 +78,18 @@ struct CategoriesView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    showAddSheet = true
+                    if let limit = subscriptionStore.categoriesLimit, noteStore.categories.count >= limit {
+                        showPaywall = true
+                    } else {
+                        showAddSheet = true
+                    }
                 } label: {
                     Image(systemName: "plus")
                 }
             }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
         }
         .sheet(isPresented: $showAddSheet) {
             CategoryFormSheet(mode: .add)

@@ -11,6 +11,7 @@ struct HomeView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedCategory: UUID?
     @State private var showRecordView = false
@@ -29,6 +30,7 @@ struct HomeView: View {
     @State private var categoryToDelete: Category?
     @State private var pendingNote: Note?
     @State private var keyboardHeight: CGFloat = 0
+    @State private var showPaywall = false
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
 
@@ -214,6 +216,9 @@ struct HomeView: View {
                 keyboardHeight = 0
             }
         }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
         .alert("Error", isPresented: .init(
             get: { noteStore.lastError != nil },
             set: { if !$0 { noteStore.lastError = nil } }
@@ -300,7 +305,11 @@ struct HomeView: View {
                     }
 
                     Button {
-                        showAddCategory = true
+                        if let limit = subscriptionStore.categoriesLimit, noteStore.categories.count >= limit {
+                            showPaywall = true
+                        } else {
+                            showAddCategory = true
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.subheadline)
@@ -403,7 +412,11 @@ struct HomeView: View {
         HStack(spacing: 40) {
             // Upload audio button (left)
             Button {
-                showAudioImporter = true
+                if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                    showPaywall = true
+                } else {
+                    showAudioImporter = true
+                }
             } label: {
                 Image(systemName: "icloud.and.arrow.up")
                     .fontWeight(.medium)
@@ -414,7 +427,11 @@ struct HomeView: View {
 
             // Record button (center)
             Button {
-                showRecordView = true
+                if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                    showPaywall = true
+                } else {
+                    showRecordView = true
+                }
             } label: {
                 Image(systemName: "mic.fill")
                     .font(.title)

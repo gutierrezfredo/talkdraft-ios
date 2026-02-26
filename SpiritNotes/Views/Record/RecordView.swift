@@ -4,16 +4,18 @@ struct RecordView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var recorder = AudioRecorder()
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showPaywall = false
 
     let categoryId: UUID?
     var onNoteSaved: ((Note) -> Void)?
 
-    private let maxDurationSeconds = 3600 // 1 hour
+    private var maxDurationSeconds: Int { subscriptionStore.recordingLimitSeconds }
 
     var body: some View {
         ZStack {
@@ -64,6 +66,14 @@ struct RecordView: View {
         }
         .onAppear {
             startRecording()
+        }
+        .onChange(of: recorder.elapsedSeconds) { _, elapsed in
+            if Int(elapsed) >= maxDurationSeconds && recorder.isRecording {
+                stopAndSave()
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: recorder.isRecording)
         .sensoryFeedback(.selection, trigger: recorder.isPaused)

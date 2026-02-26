@@ -7,7 +7,8 @@
 | View | Location | Status |
 |------|----------|--------|
 | HomeView | `Views/Home/HomeView.swift` | Built — greeting, category chips, notes grid, search, bulk select, audio import |
-| LoginView | `Views/Auth/LoginView.swift` | Placeholder |
+| LoginView | `Views/Auth/LoginView.swift` | Built — Apple, Google, Email/Password, Anonymous sign-in |
+| PaywallView | `Views/Paywall/PaywallView.swift` | Built — plan comparison, monthly/yearly selection, purchase, restore |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links |
@@ -21,7 +22,7 @@
 | CategoryChip | `Components/CategoryChip.swift` | Capsule pill with color, selection border |
 | CategoryFormSheet | `Views/Categories/CategoriesView.swift` | Add/edit category with name field and 12-color grid picker |
 | FlowLayout | `Components/FlowLayout.swift` | Custom Layout for wrapping pill grids |
-| ExpandingTextView | `Components/ExpandingTextView.swift` | UIViewRepresentable wrapping UITextView for cursor tracking |
+| ExpandingTextView | `Components/ExpandingTextView.swift` | UIViewRepresentable wrapping UITextView for cursor tracking, placeholder pulse, highlight flash |
 
 ### Models
 
@@ -35,9 +36,10 @@
 
 | Store | Location | Description |
 |-------|----------|-------------|
-| AuthStore | `Stores/AuthStore.swift` | Supabase Auth — session management, sign in/up/out |
+| AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple/Google/Email/Anonymous sign-in, account deletion |
 | NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen |
 | SettingsStore | `Stores/SettingsStore.swift` | Language + theme preferences |
+| SubscriptionStore | `Stores/SubscriptionStore.swift` | RevenueCat — entitlement checking, purchase, restore, feature limits |
 
 ### Services
 
@@ -52,25 +54,35 @@
 
 ## Planned Features
 
-- [ ] Supabase auth (sign in / sign up / sign out)
+- [x] Supabase auth (Apple, Google, Email/Password, Anonymous sign-in)
 - [x] Fetch notes and categories from Supabase
 - [x] Voice recording with AVFoundation + FFT visualization
 - [x] Transcription via edge function (with on-device compression)
 - [x] AI title generation
 - [x] Note detail view with editing
-- [x] Category management (CRUD + color picker)
+- [x] Category management (CRUD + color picker + reorder)
 - [x] AI rewrite with 17 tones + custom instructions
 - [ ] Translation
 - [x] Audio playback with seek
 - [x] Share text
 - [ ] Download audio
-- [ ] Append recording
+- [x] Append recording (inline placeholders with pulse animation, highlight flash)
 - [x] Settings (language, theme, categories, legal links)
 - [x] Audio file import
-- [ ] RevenueCat subscription integration
-- [ ] Account deletion flow
+- [x] RevenueCat subscription integration (SubscriptionStore, PaywallView, feature gating)
+- [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
+- [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-02-26 (Session 7)
+- Auth: Apple, Google, Email/Password, Anonymous sign-in with redesigned LoginView
+- Append recording: inline "Recording…"/"Transcribing…" placeholders at cursor with brand violet italic styling, pulse animation (CADisplayLink), highlight flash (UIView overlays)
+- Skip redundant audio compression for append recordings
+- Account deletion: 30-day grace period via Supabase edge functions, red warning banner in Settings
+- Category reorder support (drag to reorder)
+- RevenueCat subscription integration: SubscriptionStore, custom PaywallView, feature gating (3min/50 notes/4 categories free, 15min/unlimited pro)
+- Committed all changes and pushed to main
 
 ### 2026-02-25 (Session 5)
 - On-device audio compression (16kHz mono AAC, ~10x size reduction)

@@ -4,6 +4,7 @@ struct ContentView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
 
     private var colorScheme: ColorScheme? {
         switch settingsStore.theme {
@@ -36,6 +37,11 @@ struct ContentView: View {
         .onChange(of: authStore.isAuthenticated) { _, authenticated in
             if authenticated {
                 Task { await noteStore.refresh() }
+                if let userId = authStore.userId {
+                    Task { await subscriptionStore.login(userId: userId) }
+                }
+            } else {
+                Task { await subscriptionStore.logout() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in

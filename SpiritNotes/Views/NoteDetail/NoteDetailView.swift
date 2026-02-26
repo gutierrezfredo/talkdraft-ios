@@ -4,6 +4,7 @@ struct NoteDetailView: View {
     @Environment(NoteStore.self) private var noteStore
     @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
@@ -331,6 +332,11 @@ struct NoteDetailView: View {
         }
         .onDisappear {
             typewriterTask?.cancel()
+        }
+        .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
+            if Int(elapsed) >= subscriptionStore.recordingLimitSeconds && appendRecorder.isRecording {
+                stopAppendRecording()
+            }
         }
     }
 
