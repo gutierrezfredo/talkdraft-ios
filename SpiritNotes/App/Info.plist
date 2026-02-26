@@ -26,5 +26,14 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.57065416742-u6rhipilni04e0df29lcbmpdsck1rpt7</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

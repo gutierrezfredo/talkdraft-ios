@@ -12,6 +12,7 @@
 		17E040AD14496C21A9124F36 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 6C64C36244B9569D33C87877 /* Supabase */; };
 		19ACD835B926A40DD0432351 /* ExpandingTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB25FF26E483777B8E09B60 /* ExpandingTextView.swift */; };
 		1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 361A242AA196C15612B45852 /* RevenueCat */; };
+		20D8F42C682C9F609C39D003 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = F6EB152146602E44C031936B /* GoogleSignIn */; };
 		33272DDE44AB6EA78B1AD07B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6566E361F9CF057F3CFF00 /* SettingsView.swift */; };
 		34234B19B65275543186A076 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587B53DD2B6AC5F837C853ED /* HomeView.swift */; };
 		40198F407A3B060BFC5B4BE9 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D4496713A151D2BBC73CD9 /* ShareSheet.swift */; };
@@ -75,6 +76,7 @@
 		9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		9C1BDE9DB17E504C19C6A600 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A490AB207CCF96EC1CD546FF /* SpiritNotesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpiritNotesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A5D74CD8123655D60C541852 /* SpiritNotes.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpiritNotes.entitlements; sourceTree = "<group>"; };
 		A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		AEDC2CE5AACA579DFB110D46 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		B115C154E076E0198379AE68 /* CategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoriesView.swift; sourceTree = "<group>"; };
@@ -92,6 +94,7 @@
 			files = (
 				17E040AD14496C21A9124F36 /* Supabase in Frameworks */,
 				1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */,
+				20D8F42C682C9F609C39D003 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -259,6 +262,7 @@
 				915FE9525353BEA289D8AA98 /* Assets.xcassets */,
 				9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */,
 				9C1BDE9DB17E504C19C6A600 /* Info.plist */,
+				A5D74CD8123655D60C541852 /* SpiritNotes.entitlements */,
 				D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */,
 			);
 			path = App;
@@ -283,6 +287,7 @@
 			packageProductDependencies = (
 				6C64C36244B9569D33C87877 /* Supabase */,
 				361A242AA196C15612B45852 /* RevenueCat */,
+				F6EB152146602E44C031936B /* GoogleSignIn */,
 			);
 			productName = SpiritNotes;
 			productReference = 42BD501ADB4E20564B0011C8 /* SpiritNotes.app */;
@@ -332,6 +337,7 @@
 			mainGroup = 0ADD564B7B1350528F7C4377;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				5698ACB1B94A20C2D4AE9570 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				2A19AD9C63F9FD2316CEA00E /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
 				5CA8A1C3F73C89A0D4357749 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
@@ -470,6 +476,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SpiritNotes/App/SpiritNotes.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -491,6 +498,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SpiritNotes/App/SpiritNotes.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -644,6 +652,14 @@
 				minimumVersion = 5.0.0;
 			};
 		};
+		5698ACB1B94A20C2D4AE9570 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 		5CA8A1C3F73C89A0D4357749 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift";
@@ -664,6 +680,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5CA8A1C3F73C89A0D4357749 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		F6EB152146602E44C031936B /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5698ACB1B94A20C2D4AE9570 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,3 +1,4 @@
+import GoogleSignIn
 import SwiftUI
 
 @main
@@ -12,6 +13,9 @@ struct SpiritNotesApp: App {
                 .environment(authStore)
                 .environment(noteStore)
                 .environment(settingsStore)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }

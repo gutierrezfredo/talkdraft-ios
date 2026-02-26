@@ -9,6 +9,7 @@ struct CategoriesView: View {
     @State private var editingCategory: Category?
     @State private var showAddSheet = false
     @State private var categoryToDelete: Category?
+    @State private var editMode: EditMode = .inactive
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -61,6 +62,9 @@ struct CategoriesView: View {
                     }
                     .listRowBackground(colorScheme == .dark ? Color.darkSurface : Color.white)
                 }
+                .onMove { source, destination in
+                    noteStore.moveCategory(from: source, to: destination)
+                }
             }
         }
         .contentMargins(.top, 12)
@@ -68,6 +72,7 @@ struct CategoriesView: View {
         .background(backgroundColor.ignoresSafeArea())
         .navigationTitle("Categories")
         .navigationBarTitleDisplayMode(.inline)
+        .environment(\.editMode, $editMode)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

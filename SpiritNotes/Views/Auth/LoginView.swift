@@ -1,13 +1,135 @@
+import AuthenticationServices
 import SwiftUI
 
 struct LoginView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(\.colorScheme) private var colorScheme
 
+    @State private var showEmailForm = false
+
+    var body: some View {
+        ZStack {
+            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
+                .ignoresSafeArea()
+
+            VStack(spacing: 32) {
+                Spacer()
+
+                // Logo / Title
+                VStack(spacing: 12) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 48))
+                        .foregroundStyle(Color.brand)
+
+                    Text("Create account.\nOr log in if you have one")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+
+                    Text("Save all your notes securely and access\nthem from any device.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                // Error
+                if let error = authStore.error {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+
+                // Sign-in buttons
+                VStack(spacing: 12) {
+                    // Google — primary
+                    Button {
+                        Task { await authStore.signInWithGoogle() }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image("google-logo")
+                                .resizable()
+                                .frame(width: 20, height: 20)
+                            Text("Continue with Google")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(Capsule().fill(Color.brand))
+                    }
+                    .buttonStyle(.plain)
+
+                    // Email
+                    Button {
+                        showEmailForm = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "envelope.fill")
+                                .font(.body)
+                            Text("Continue with Email")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(
+                            Capsule()
+                                .fill(colorScheme == .dark ? Color.darkSurface : .white)
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    // Apple
+                    SignInWithAppleButton(.continue) { request in
+                        authStore.appleSignInRequest(request)
+                    } onCompletion: { result in
+                        Task { await authStore.handleAppleSignIn(result) }
+                    }
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .frame(height: 56)
+                    .clipShape(Capsule())
+                }
+                .padding(.horizontal, 24)
+
+                // Continue without login
+                Button {
+                    Task { await authStore.signInAnonymously() }
+                } label: {
+                    Text("Continue without login")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                // Terms
+                Text("By signing in, you agree to our [Terms of Use](https://spiritnotes.app/terms) and [Privacy Policy](https://spiritnotes.app/privacy).")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 16)
+            }
+        }
+        .sheet(isPresented: $showEmailForm) {
+            EmailSignInSheet()
+        }
+    }
+}
+
+// MARK: - Email Sign-In Sheet
+
+private struct EmailSignInSheet: View {
+    @Environment(AuthStore.self) private var authStore
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+
     @State private var email = ""
     @State private var password = ""
     @State private var isSignUp = false
-    @State private var showError = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -20,31 +142,9 @@ struct LoginView: View {
     }
 
     var body: some View {
-        ZStack {
-            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
-                .ignoresSafeArea()
-
+        NavigationStack {
             ScrollView {
-                VStack(spacing: 32) {
-                    Spacer(minLength: 60)
-
-                    // Logo / Title
-                    VStack(spacing: 8) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 48))
-                            .foregroundStyle(Color.brand)
-
-                        Text("SpiritNotes")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-
-                        Text("Say it messy. Read it clean")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.bottom, 16)
-
-                    // Fields
+                VStack(spacing: 24) {
                     VStack(spacing: 16) {
                         TextField("Email", text: $email)
                             .textContentType(.emailAddress)
@@ -74,18 +174,14 @@ struct LoginView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .padding(.horizontal, 24)
 
-                    // Error
                     if let error = authStore.error {
                         Text(error)
                             .font(.footnote)
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
                     }
 
-                    // Submit button
                     Button {
                         submit()
                     } label: {
@@ -101,16 +197,12 @@ struct LoginView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background(
-                            Capsule().fill(Color.brand)
-                        )
+                        .background(Capsule().fill(Color.brand))
                     }
                     .buttonStyle(.plain)
                     .disabled(!isValid || authStore.isLoading)
                     .opacity(isValid ? 1 : 0.4)
-                    .padding(.horizontal, 24)
 
-                    // Toggle sign in / sign up
                     Button {
                         withAnimation(.snappy) {
                             isSignUp.toggle()
@@ -122,20 +214,39 @@ struct LoginView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-
-                    Spacer(minLength: 40)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+            }
+            .background(
+                (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
+                    .ignoresSafeArea()
+            )
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("Email")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .fontWeight(.semibold)
+                    }
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
-        }
-        .onSubmit {
-            switch focusedField {
-            case .email:
-                focusedField = .password
-            case .password:
-                if isValid { submit() }
-            case nil:
-                break
+            .onAppear {
+                focusedField = .email
+            }
+            .onSubmit {
+                switch focusedField {
+                case .email:
+                    focusedField = .password
+                case .password:
+                    if isValid { submit() }
+                case nil:
+                    break
+                }
             }
         }
     }
@@ -149,6 +260,7 @@ struct LoginView: View {
                 } else {
                     try await authStore.signIn(email: email, password: password)
                 }
+                dismiss()
             } catch {
                 // Error is already set on authStore
             }

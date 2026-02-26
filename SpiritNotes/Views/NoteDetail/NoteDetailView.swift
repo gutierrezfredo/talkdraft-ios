@@ -24,6 +24,15 @@ struct NoteDetailView: View {
     @State private var errorMessage: String?
     @State private var isDownloadingAudio = false
     @State private var audioShareItem: URL?
+    @State private var appendRecorder = AudioRecorder()
+    @State private var isAppendRecording = false
+    @State private var isAppendTranscribing = false
+    @State private var cursorPosition: Int = 0
+    @State private var appendInsertPosition: Int = 0
+    @State private var highlightRange: NSRange?
+
+    private static let recordingPlaceholder = "Recording…"
+    private static let transcribingPlaceholder = "Transcribing…"
 
     init(note: Note) {
         self.noteId = note.id
@@ -267,6 +276,12 @@ struct NoteDetailView: View {
         }
         .onDisappear {
             player.stop()
+            if isAppendRecording || isAppendTranscribing {
+                appendRecorder.cancelRecording()
+                removePlaceholder()
+                isAppendRecording = false
+                isAppendTranscribing = false
+            }
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -523,6 +538,8 @@ struct NoteDetailView: View {
         ExpandingTextView(
             text: $editedContent,
             isFocused: $contentFocused,
+            cursorPosition: $cursorPosition,
+            highlightRange: $highlightRange,
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
             placeholder: "Start typing..."
@@ -534,6 +551,16 @@ struct NoteDetailView: View {
     // MARK: - Bottom Bar
 
     private var bottomBar: some View {
+        Group {
+            if isAppendRecording {
+                appendRecordingControls
+            } else {
+                normalBottomBar
+            }
+        }
+    }
+
+    private var normalBottomBar: some View {
         HStack(spacing: keyboardVisible ? 12 : 40) {
             // Tag
             Button {
@@ -586,6 +613,26 @@ struct NoteDetailView: View {
             if keyboardVisible {
                 Spacer()
 
+                // Append recording
+                Button {
+                    startAppendRecording()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic")
+                            .font(.callout)
+                        Text("Append")
+                            .font(.callout)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(Color.brand)
+                    .padding(.horizontal, 14)
+                    .frame(height: 40)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .disabled(isAppendTranscribing)
+                .opacity(isAppendTranscribing ? 0.5 : 1)
+
                 Button {
                     contentFocused = false
                 } label: {
@@ -600,6 +647,93 @@ struct NoteDetailView: View {
         }
         .padding(.horizontal, keyboardVisible ? 16 : 20)
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Append Recording Controls
+
+    private var appendRecordingControls: some View {
+        HStack(spacing: 20) {
+            // Cancel
+            Button {
+                cancelAppendRecording()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+
+            // Restart
+            Button {
+                restartAppendRecording()
+            } label: {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+
+            // Stop (red square)
+            Button {
+                stopAppendRecording()
+            } label: {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(.red)
+                    .frame(width: 22, height: 22)
+                    .frame(width: 56, height: 56)
+                    .background(Circle().fill(colorScheme == .dark ? Color.darkSurface : .white))
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+
+            // Pause / Resume
+            Button {
+                toggleAppendPause()
+            } label: {
+                Image(systemName: appendRecorder.isPaused ? "play.fill" : "pause.fill")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Append Recording Pill
+
+    private var appendRecordingPill: some View {
+        HStack(spacing: 8) {
+            if isAppendTranscribing {
+                ProgressView()
+                    .tint(.white)
+                    .controlSize(.small)
+                Text("Transcribing…")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.white)
+            } else {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+                Text(formattedDuration(Int(appendRecorder.elapsedSeconds)))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 36)
+        .background(Capsule().fill(Color(white: 0.1)))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Typewriter
@@ -713,6 +847,148 @@ struct NoteDetailView: View {
             height: 0
         )
         presenter.present(activityVC, animated: true)
+    }
+
+    // MARK: - Append Recording Actions
+
+    private func startAppendRecording() {
+        // Capture cursor position and insert placeholder
+        appendInsertPosition = min(cursorPosition, editedContent.count)
+        contentFocused = false
+        insertPlaceholder(Self.recordingPlaceholder)
+        do {
+            try appendRecorder.startRecording()
+            isAppendRecording = true
+        } catch {
+            removePlaceholder()
+            errorMessage = "Failed to start recording: \(error.localizedDescription)"
+        }
+    }
+
+    private func insertPlaceholder(_ placeholder: String) {
+        let pos = min(appendInsertPosition, editedContent.count)
+        let index = editedContent.index(editedContent.startIndex, offsetBy: pos)
+        let before = editedContent[..<index]
+        let after = editedContent[index...]
+
+        // Insert inline — add a space only if adjacent to non-whitespace
+        let leading = !before.isEmpty && !before.last!.isWhitespace ? " " : ""
+        let trailing = !after.isEmpty && !after.first!.isWhitespace ? " " : ""
+
+        editedContent = before + leading + placeholder + trailing + after
+    }
+
+    private func removePlaceholder() {
+        // Remove placeholder and collapse any double spaces left behind
+        for placeholder in [Self.recordingPlaceholder, Self.transcribingPlaceholder] {
+            editedContent = editedContent
+                .replacingOccurrences(of: " " + placeholder + " ", with: " ")
+                .replacingOccurrences(of: placeholder + " ", with: "")
+                .replacingOccurrences(of: " " + placeholder, with: "")
+                .replacingOccurrences(of: placeholder, with: "")
+        }
+    }
+
+    private func replacePlaceholder(with text: String) {
+        // Replace whichever placeholder is present
+        for placeholder in [Self.transcribingPlaceholder, Self.recordingPlaceholder] {
+            let nsContent = editedContent as NSString
+            let placeholderRange = nsContent.range(of: placeholder)
+            guard placeholderRange.location != NSNotFound else { continue }
+
+            editedContent = editedContent.replacingOccurrences(of: placeholder, with: text)
+            highlightRange = NSRange(location: placeholderRange.location, length: (text as NSString).length)
+            return
+        }
+        // Fallback: append at end
+        let insertLocation = (editedContent as NSString).length
+        let separator = editedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : "\n\n"
+        editedContent = editedContent + separator + text
+        highlightRange = NSRange(location: insertLocation + (separator as NSString).length, length: (text as NSString).length)
+    }
+
+    private func stopAppendRecording() {
+        guard let audioFileURL = appendRecorder.stopRecording() else {
+            isAppendRecording = false
+            removePlaceholder()
+            return
+        }
+
+        isAppendRecording = false
+        isAppendTranscribing = true
+
+        // Swap recording placeholder → transcribing placeholder
+        if editedContent.contains(Self.recordingPlaceholder) {
+            editedContent = editedContent.replacingOccurrences(
+                of: Self.recordingPlaceholder,
+                with: Self.transcribingPlaceholder
+            )
+        }
+
+        Task {
+            do {
+                // Skip compression — AudioRecorder already outputs 16kHz mono AAC
+                let audioData = try Data(contentsOf: audioFileURL)
+                let fileName = audioFileURL.lastPathComponent
+
+                let language = settingsStore.language == "auto" ? nil : settingsStore.language
+                let service = TranscriptionService()
+                let result = try await service.transcribe(
+                    audioData: audioData,
+                    fileName: fileName,
+                    language: language,
+                    userId: authStore.userId
+                )
+
+                let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !transcribedText.isEmpty else {
+                    removePlaceholder()
+                    errorMessage = "Could not transcribe the recording."
+                    isAppendTranscribing = false
+                    return
+                }
+
+                // Replace placeholder with transcribed text
+                replacePlaceholder(with: transcribedText)
+
+                // Save to store + server
+                var updated = note
+                updated.content = editedContent
+                updated.title = editedTitle.isEmpty ? nil : editedTitle
+                updated.updatedAt = Date()
+                noteStore.updateNote(updated)
+            } catch {
+                removePlaceholder()
+                errorMessage = "Transcription failed: \(error.localizedDescription)"
+            }
+            // Clean up local audio — append recordings don't need to be kept
+            try? FileManager.default.removeItem(at: audioFileURL)
+            isAppendTranscribing = false
+        }
+    }
+
+    private func cancelAppendRecording() {
+        appendRecorder.cancelRecording()
+        removePlaceholder()
+        isAppendRecording = false
+    }
+
+    private func restartAppendRecording() {
+        appendRecorder.cancelRecording()
+        do {
+            try appendRecorder.startRecording()
+        } catch {
+            isAppendRecording = false
+            errorMessage = "Failed to restart recording: \(error.localizedDescription)"
+        }
+    }
+
+    private func toggleAppendPause() {
+        if appendRecorder.isPaused {
+            appendRecorder.resumeRecording()
+        } else {
+            appendRecorder.pauseRecording()
+        }
     }
 
     private func formattedDuration(_ totalSeconds: Int) -> String {

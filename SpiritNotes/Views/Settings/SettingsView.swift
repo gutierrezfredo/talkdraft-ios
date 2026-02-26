@@ -7,6 +7,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showDeleteConfirmation = false
     @State private var showSignOutConfirmation = false
+    @State private var showCancelDeletion = false
+    @State private var isDeletionLoading = false
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -19,6 +21,43 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
+                // MARK: - Deletion Warning Banner
+
+                if let deletionDate = authStore.user?.deletionScheduledAt {
+                    Button {
+                        showCancelDeletion = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.red)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Account Deletion Scheduled")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.red)
+
+                                Text("Permanently deleted on \(deletionDate.formatted(date: .abbreviated, time: .omitted)). Tap to cancel.")
+                                    .font(.caption)
+                                    .foregroundStyle(.red.opacity(0.8))
+                            }
+
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(.red.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(.red.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // MARK: - General
 
                 SettingsSection("General") {
@@ -123,26 +162,28 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    SettingsDivider()
+                    if authStore.user?.deletionScheduledAt == nil {
+                        SettingsDivider()
 
-                    Button {
-                        showDeleteConfirmation = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "trash")
-                                .font(.body)
-                                .foregroundStyle(.red)
-                                .frame(width: 24)
-                            Text("Delete Account")
-                                .font(.body)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.red)
-                            Spacer()
+                        Button {
+                            showDeleteConfirmation = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "trash")
+                                    .font(.body)
+                                    .foregroundStyle(.red)
+                                    .frame(width: 24)
+                                Text("Delete Account")
+                                    .font(.body)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.red)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 56)
                         }
-                        .padding(.horizontal, 16)
-                        .frame(height: 56)
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .background(cardColor)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
@@ -172,11 +213,39 @@ struct SettingsView: View {
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Delete Account", role: .destructive) {
-                // TODO: Schedule account deletion via edge function
+            Button("Schedule Deletion", role: .destructive) {
+                Task {
+                    isDeletionLoading = true
+                    defer { isDeletionLoading = false }
+                    do {
+                        try await authStore.scheduleDeleteAccount()
+                    } catch {
+                        authStore.error = "Could not schedule deletion."
+                    }
+                }
             }
         } message: {
-            Text("Your account will be scheduled for deletion. You have 30 days to cancel before all data is permanently removed.")
+            Text("Your account will be scheduled for deletion in 30 days. During this period you can sign back in and cancel. After 30 days, all your data will be permanently deleted.")
+        }
+        .confirmationDialog(
+            "Cancel Deletion",
+            isPresented: $showCancelDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Cancel Deletion") {
+                Task {
+                    isDeletionLoading = true
+                    defer { isDeletionLoading = false }
+                    do {
+                        try await authStore.cancelDeleteAccount()
+                    } catch {
+                        authStore.error = "Could not cancel deletion."
+                    }
+                }
+            }
+            Button("Keep Deletion", role: .cancel) {}
+        } message: {
+            Text("Your account is scheduled for deletion. Would you like to cancel?")
         }
     }
 
