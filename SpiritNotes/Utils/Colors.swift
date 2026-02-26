@@ -8,14 +8,21 @@ extension Color {
             : UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1) // #7C3AED
     })
 
+    /// Brighter brand violet for text/chips in dark mode — pops more than .brand on dark backgrounds.
+    static let brandText = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0xA7/255, green: 0x8B/255, blue: 0xFA/255, alpha: 1) // #A78BFA
+            : UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1) // #7C3AED
+    })
+
     /// Warm light-mode background matching Expo design.
     static let warmBackground = Color(hex: "#F8F2F0")
 
-    /// Dark-mode background — deep navy (Twitter dark).
-    static let darkBackground = Color(hex: "#0F1419")
+    /// Dark-mode background — deep navy with blue-violet undertone.
+    static let darkBackground = Color(hex: "#0F1018")
 
     /// Elevated surface for chips, pills, and cards in dark mode.
-    static let darkSurface = Color(hex: "#1C2630")
+    static let darkSurface = Color(hex: "#232538")
 
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: .init(charactersIn: "#"))
@@ -30,10 +37,22 @@ extension Color {
         self.init(red: r, green: g, blue: b)
     }
 
+    /// Adaptive category color — brightens in dark mode so colors pop on dark backgrounds.
+    static func categoryColor(hex: String) -> Color {
+        Color(UIColor { traits in
+            let base = UIColor(Color(hex: hex))
+            guard traits.userInterfaceStyle == .dark else { return base }
+
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            base.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            return UIColor(hue: h, saturation: s * 0.85, brightness: min(b * 1.25, 1.0), alpha: a)
+        })
+    }
+
     /// Blend this color with the appropriate background at a given opacity.
     /// Used for category-tinted card backgrounds.
     func blended(opacity: Double, isDark: Bool) -> Color {
-        let bg: (Double, Double, Double) = isDark ? (15/255, 20/255, 25/255) : (1, 1, 1)
+        let bg: (Double, Double, Double) = isDark ? (15/255, 16/255, 24/255) : (1, 1, 1)
         // Resolve hex-based RGB from the color's components
         let resolved = UIColor(self)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0

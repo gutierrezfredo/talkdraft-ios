@@ -54,7 +54,11 @@ struct RecordView: View {
             }
         }
         .alert("Recording Error", isPresented: $showError) {
-            Button("OK") { dismiss() }
+            Button("OK") {
+                if !recorder.isRecording {
+                    startRecording()
+                }
+            }
         } message: {
             Text(errorMessage)
         }
@@ -117,7 +121,8 @@ struct RecordView: View {
             } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.title3)
-                    .foregroundStyle(.white)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(colorScheme == .dark ? .white : Color.brand)
                     .frame(width: 56, height: 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
@@ -146,7 +151,8 @@ struct RecordView: View {
             } label: {
                 Image(systemName: recorder.isPaused ? "play.fill" : "pause.fill")
                     .font(.title3)
-                    .foregroundStyle(.white)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(colorScheme == .dark ? .white : Color.brand)
                     .frame(width: 56, height: 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
@@ -176,9 +182,17 @@ struct RecordView: View {
     }
 
     private func stopAndSave() {
-        guard let audioURL = recorder.stopRecording() else { return }
         let duration = recorder.elapsedSeconds
-        let userId = authStore.user?.id
+
+        guard duration >= 1 else {
+            recorder.cancelRecording()
+            errorMessage = "Recording too short"
+            showError = true
+            return
+        }
+
+        guard let audioURL = recorder.stopRecording() else { return }
+        let userId = authStore.userId
         let language = settingsStore.language == "auto" ? nil : settingsStore.language
 
         let noteId = UUID()
@@ -197,8 +211,8 @@ struct RecordView: View {
         noteStore.addNote(note)
 
         // Transcribe in background
-        Task.detached {
-            await MainActor.run { noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId) }
+        Task { @MainActor in
+            noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId)
         }
 
         onNoteSaved?(note)

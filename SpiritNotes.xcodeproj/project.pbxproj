@@ -14,6 +14,7 @@
 		1A50169FCF45A67621FD172E /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 361A242AA196C15612B45852 /* RevenueCat */; };
 		33272DDE44AB6EA78B1AD07B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6566E361F9CF057F3CFF00 /* SettingsView.swift */; };
 		34234B19B65275543186A076 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 587B53DD2B6AC5F837C853ED /* HomeView.swift */; };
+		40198F407A3B060BFC5B4BE9 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D4496713A151D2BBC73CD9 /* ShareSheet.swift */; };
 		40B8686B1811030BF46C3230 /* CategoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B115C154E076E0198379AE68 /* CategoriesView.swift */; };
 		446AB121E476C08E385DC4F2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A9FE6EB5911E89A9DBD9029 /* ContentView.swift */; };
 		5F857DFC90F1493E71C5AFB4 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEDC2CE5AACA579DFB110D46 /* LoginView.swift */; };
@@ -27,7 +28,6 @@
 		94BF895084A93F3659803982 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6607ECB82C7182E9CC5FD75 /* SettingsStore.swift */; };
 		94D5AE5B2F73D450A4FB56D2 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BBB0647806A651166D8EF95 /* AuthStore.swift */; };
 		A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8049F37077144512EDEEBA4D /* TranscriptionService.swift */; };
-		B302C023C7B5EFCE4D689583 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71E8BF17D2FE54D8E88E51BC /* SearchView.swift */; };
 		B39FD7B49B4154D1DBA5A02A /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41925CEEAC033F67F18E9F4A /* Colors.swift */; };
 		B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68133FC4C6E34CF64D6AABEE /* NoteStore.swift */; };
 		BBC77B6F32C169F1CFBEDFD6 /* CategoryChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16ACBED0F40888753BD49C63 /* CategoryChip.swift */; };
@@ -66,7 +66,6 @@
 		587B53DD2B6AC5F837C853ED /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		68133FC4C6E34CF64D6AABEE /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
 		6BBB0647806A651166D8EF95 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
-		71E8BF17D2FE54D8E88E51BC /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		7858F881DAAF27F4B2FF7735 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
 		8049F37077144512EDEEBA4D /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		8A8330635DA94F3104140DBE /* NoteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailView.swift; sourceTree = "<group>"; };
@@ -83,6 +82,7 @@
 		D78E90FCFAEA3509988FA2E9 /* SpiritNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpiritNotesApp.swift; sourceTree = "<group>"; };
 		DC0A7247534F73FD8E01BA74 /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCompressor.swift; sourceTree = "<group>"; };
 		E6FB29A614C2AEB676FFF744 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
+		F8D4496713A151D2BBC73CD9 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +114,7 @@
 				3BB25FF26E483777B8E09B60 /* ExpandingTextView.swift */,
 				1176157ED9AD7F84C9AD17A5 /* FlowLayout.swift */,
 				3F8B4E0EAD0C30B71A5E6F03 /* NoteCard.swift */,
+				F8D4496713A151D2BBC73CD9 /* ShareSheet.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -190,14 +191,6 @@
 			path = Categories;
 			sourceTree = "<group>";
 		};
-		893DD7162E970156AE4278D9 /* Search */ = {
-			isa = PBXGroup;
-			children = (
-				71E8BF17D2FE54D8E88E51BC /* SearchView.swift */,
-			);
-			path = Search;
-			sourceTree = "<group>";
-		};
 		961566AB8EF56F193389E4FD /* SpiritNotes */ = {
 			isa = PBXGroup;
 			children = (
@@ -255,7 +248,6 @@
 				5AA4C9EAEAF42C73CEDD095E /* Home */,
 				D4DF2C3189BDB6534B39B583 /* NoteDetail */,
 				32312D2A7F36219AEB6E5581 /* Record */,
-				893DD7162E970156AE4278D9 /* Search */,
 				D5CB52DF8DE6C0924DDA6E1F /* Settings */,
 			);
 			path = Views;
@@ -398,9 +390,9 @@
 				B570601B29DF9B0719112A5D /* NoteStore.swift in Sources */,
 				12318CEC5F720647FCF1CFD3 /* Profile.swift in Sources */,
 				F6FF22C1E20EBE9F1935BD0E /* RecordView.swift in Sources */,
-				B302C023C7B5EFCE4D689583 /* SearchView.swift in Sources */,
 				94BF895084A93F3659803982 /* SettingsStore.swift in Sources */,
 				33272DDE44AB6EA78B1AD07B /* SettingsView.swift in Sources */,
+				40198F407A3B060BFC5B4BE9 /* ShareSheet.swift in Sources */,
 				E1AE239B10652E8D6B5062B1 /* SpiritNotesApp.swift in Sources */,
 				7DEE31A6000C973851ED649F /* SupabaseClient.swift in Sources */,
 				A6A527029E0158E920B42235 /* TranscriptionService.swift in Sources */,

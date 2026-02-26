@@ -6,6 +6,7 @@ import Supabase
 final class AuthStore {
     var isAuthenticated = false
     var isLoading = false
+    var userId: UUID?
     var user: Profile?
     var error: String?
 
@@ -66,12 +67,14 @@ final class AuthStore {
     func signOut() async throws {
         try await supabase.auth.signOut()
         isAuthenticated = false
+        userId = nil
         user = nil
     }
 
     // MARK: - Private
 
     private func handleSession(_ session: Session) async {
+        userId = session.user.id
         isAuthenticated = true
         await fetchProfile(userId: session.user.id)
     }
@@ -113,15 +116,16 @@ final class AuthStore {
         authListener?.cancel()
         authListener = Task { [weak self] in
             for await (event, session) in supabase.auth.authStateChanges {
-                guard let self, !Task.isCancelled else { return }
+                guard !Task.isCancelled else { return }
                 switch event {
                 case .signedIn:
                     if let session {
-                        await self.handleSession(session)
+                        await self?.handleSession(session)
                     }
                 case .signedOut:
-                    self.isAuthenticated = false
-                    self.user = nil
+                    self?.isAuthenticated = false
+                    self?.userId = nil
+                    self?.user = nil
                 default:
                     break
                 }

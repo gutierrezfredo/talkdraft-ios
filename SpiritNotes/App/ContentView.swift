@@ -31,11 +31,20 @@ struct ContentView: View {
         }
         .preferredColorScheme(colorScheme)
         .task {
+            noteStore.startNetworkMonitor()
             await authStore.initialize()
         }
         .onChange(of: authStore.isAuthenticated) { _, authenticated in
             if authenticated {
                 Task { await noteStore.refresh() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task {
+                // Wait for connectivity to stabilize after coming from airplane mode
+                try? await Task.sleep(for: .seconds(3))
+                let language = settingsStore.language == "auto" ? nil : settingsStore.language
+                noteStore.retryWaitingNotes(language: language, userId: authStore.userId)
             }
         }
     }

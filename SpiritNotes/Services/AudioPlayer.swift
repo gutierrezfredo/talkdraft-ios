@@ -1,5 +1,8 @@
 import AVFoundation
 import Observation
+import os
+
+private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "AudioPlayer")
 
 @Observable
 final class AudioPlayer {
@@ -9,6 +12,7 @@ final class AudioPlayer {
 
     private var player: AVPlayer?
     private var currentURL: URL?
+    private var currentItem: AVPlayerItem?
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
@@ -23,6 +27,16 @@ final class AudioPlayer {
 
         // New file
         stop()
+
+        // Route audio to speaker (not earpiece)
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+        } catch {
+            logger.error("Failed to configure audio session: \(error)")
+        }
+
         let item = AVPlayerItem(url: url)
         let newPlayer = AVPlayer(playerItem: item)
 
@@ -61,6 +75,7 @@ final class AudioPlayer {
 
         newPlayer.play()
         self.player = newPlayer
+        self.currentItem = item
         self.currentURL = url
         self.currentTime = 0
         self.isPlaying = true
@@ -96,9 +111,10 @@ final class AudioPlayer {
         statusObservation = nil
         rateObservation?.invalidate()
         rateObservation = nil
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: player?.currentItem)
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: currentItem)
         player?.pause()
         player = nil
+        currentItem = nil
         currentURL = nil
         isPlaying = false
         currentTime = 0

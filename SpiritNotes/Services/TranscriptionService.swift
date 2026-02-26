@@ -81,7 +81,12 @@ final class TranscriptionService: Sendable {
         request.httpBody = body
         request.timeoutInterval = 300 // 5 minutes — large files on slow connections
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Use a session that fails fast when no connection exists (10s connection timeout)
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForResource = 300
+        config.waitsForConnectivity = false
+        let session = URLSession(configuration: config)
+        let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranscriptionError.invalidResponse

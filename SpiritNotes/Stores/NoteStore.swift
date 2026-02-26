@@ -1,9 +1,30 @@
 import Foundation
+import Network
 import Observation
 import os
 import Supabase
+import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "NoteStore")
+
+/// Thread-safe network connectivity monitor.
+/// Updates synchronously from NWPathMonitor callback — no async dispatch, no race conditions.
+private final class NetworkMonitor: @unchecked Sendable {
+    private let monitor = NWPathMonitor()
+    private let state = OSAllocatedUnfairLock(initialState: true)
+
+    var isConnected: Bool {
+        state.withLock { $0 }
+    }
+
+    func start() {
+        let state = self.state
+        monitor.pathUpdateHandler = { path in
+            state.withLock { $0 = path.status == .satisfied }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.pleymob.spiritnotes.network"))
+    }
+}
 
 private struct NoteUpdate: Encodable {
     var categoryId: UUID?
@@ -46,6 +67,35 @@ final class NoteStore {
     var categories: [Category] = []
     var selectedCategoryId: UUID?
     var isLoading = false
+    var lastError: String?
+
+    private let network = NetworkMonitor()
+
+    private var isConnected: Bool { network.isConnected }
+
+    func startNetworkMonitor() {
+        network.start()
+    }
+
+    /// Retry any notes stuck in "Waiting for connection…".
+    /// Scans the notes array directly — works even after app restart.
+    func retryWaitingNotes(language: String?, userId: UUID?) {
+        let waiting = notes.filter {
+            $0.content == "Waiting for connection…" || $0.content == "Transcription failed — tap to edit"
+        }
+        guard !waiting.isEmpty, isConnected else { return }
+
+        for note in waiting {
+            guard let urlString = note.audioUrl,
+                  let url = URL(string: urlString),
+                  url.isFileURL,
+                  FileManager.default.fileExists(atPath: url.path)
+            else { continue }
+
+            setNoteContent(id: note.id, content: "Transcribing…")
+            transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId)
+        }
+    }
 
     var filteredNotes: [Note] {
         guard let categoryId = selectedCategoryId else { return notes }
@@ -83,6 +133,13 @@ final class NoteStore {
         categories = fetched
     }
 
+    /// Update note content locally without syncing to server.
+    func setNoteContent(id: UUID, content: String) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].content = content
+        notes[index].updatedAt = Date()
+    }
+
     // MARK: - Note CRUD
 
     func addNote(_ note: Note) {
@@ -95,7 +152,7 @@ final class NoteStore {
                     .insert(note)
                     .execute()
             } catch {
-                logger.error("addNote failed: \(error)")
+                logger.error("addNote sync failed (note saved locally): \(error)")
             }
         }
     }
@@ -194,6 +251,28 @@ final class NoteStore {
             defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
 
             do {
+                // Validate audio file before processing
+                guard FileManager.default.fileExists(atPath: audioFileURL.path),
+                      let attrs = try? FileManager.default.attributesOfItem(atPath: audioFileURL.path),
+                      let fileSize = attrs[.size] as? Int, fileSize > 0
+                else {
+                    logger.error("transcribeNote: audio file missing or empty at \(audioFileURL.path)")
+                    setNoteContent(id: id, content: "Transcription failed — tap to edit")
+                    return
+                }
+
+                // Connectivity probe — fast HEAD request to detect offline before heavy upload
+                do {
+                    var probe = URLRequest(url: AppConfig.supabaseUrl)
+                    probe.httpMethod = "HEAD"
+                    probe.timeoutInterval = 5
+                    _ = try await URLSession.shared.data(for: probe)
+                } catch {
+                    logger.info("Connectivity probe failed — device appears offline: \(error)")
+                    setNoteContent(id: id, content: "Waiting for connection…")
+                    return
+                }
+
                 // Compress audio to 16kHz mono AAC (what Whisper uses internally)
                 let uploadURL: URL
                 do {
@@ -209,19 +288,44 @@ final class NoteStore {
                 let fileName = uploadURL.lastPathComponent
 
                 let service = TranscriptionService()
-                let result = try await service.transcribe(
-                    audioData: audioData,
-                    fileName: fileName,
-                    language: language,
-                    userId: userId
-                )
+                let result: TranscriptionResult
+                do {
+                    result = try await service.transcribe(
+                        audioData: audioData,
+                        fileName: fileName,
+                        language: language,
+                        userId: userId
+                    )
+                } catch {
+                    // Retry once on transient network errors (e.g. audio session interference)
+                    if (error as? URLError)?.code == .networkConnectionLost {
+                        logger.info("Network connection lost during transcription, retrying after 2s…")
+                        try? await Task.sleep(for: .seconds(2))
+                        result = try await service.transcribe(
+                            audioData: audioData,
+                            fileName: fileName,
+                            language: language,
+                            userId: userId
+                        )
+                    } else {
+                        throw error
+                    }
+                }
+
+                // Guard against empty transcription
+                let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !transcribedText.isEmpty else {
+                    logger.warning("transcribeNote: received empty transcription for \(id)")
+                    setNoteContent(id: id, content: "Transcription failed — tap to edit")
+                    return
+                }
 
                 // Update note with transcription
                 guard var note = notes.first(where: { $0.id == id }) else {
                     logger.error("transcribeNote: note \(id) not found in local store after transcription")
                     return
                 }
-                note.content = result.text
+                note.content = transcribedText
                 note.language = result.language
                 if let audioUrl = result.audioUrl {
                     note.audioUrl = audioUrl
@@ -232,17 +336,27 @@ final class NoteStore {
                 note.updatedAt = Date()
                 updateNote(note)
 
+                // Clean up local audio file after remote URL confirmed
+                if result.audioUrl != nil {
+                    try? FileManager.default.removeItem(at: audioFileURL)
+                }
+
                 // Generate AI title in background
-                generateTitle(for: id, content: result.text, language: result.language)
+                generateTitle(for: id, content: transcribedText, language: result.language)
             } catch {
                 logger.error("transcribeNote failed for \(id): \(error)")
-                guard var note = notes.first(where: { $0.id == id }) else {
+                guard let noteIndex = notes.firstIndex(where: { $0.id == id }) else {
                     logger.error("transcribeNote: note \(id) not found in local store after failure")
                     return
                 }
-                note.content = "Transcription failed — tap to edit"
-                note.updatedAt = Date()
-                updateNote(note)
+
+                if error is URLError {
+                    notes[noteIndex].content = "Waiting for connection…"
+                    notes[noteIndex].updatedAt = Date()
+                } else {
+                    notes[noteIndex].content = "Transcription failed — tap to edit"
+                    notes[noteIndex].updatedAt = Date()
+                }
             }
         }
     }
@@ -265,18 +379,17 @@ final class NoteStore {
 
     // MARK: - Category CRUD
 
-    func addCategory(_ category: Category) {
+    func addCategory(_ category: Category) async throws {
         categories.append(category)
 
-        Task {
-            do {
-                try await supabase
-                    .from("categories")
-                    .insert(category)
-                    .execute()
-            } catch {
-                categories.removeAll { $0.id == category.id }
-            }
+        do {
+            try await supabase
+                .from("categories")
+                .insert(category)
+                .execute()
+        } catch {
+            categories.removeAll { $0.id == category.id }
+            throw error
         }
     }
 

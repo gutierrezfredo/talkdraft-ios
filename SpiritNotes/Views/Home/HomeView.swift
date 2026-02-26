@@ -25,6 +25,8 @@ struct HomeView: View {
     @State private var showCategoryPicker = false
     @State private var showAudioImporter = false
     @State private var showAddCategory = false
+    @State private var editingCategory: Category?
+    @State private var categoryToDelete: Category?
     @State private var pendingNote: Note?
     @State private var keyboardHeight: CGFloat = 0
     @Namespace private var namespace
@@ -194,6 +196,9 @@ struct HomeView: View {
         .sheet(isPresented: $showCategoryPicker) {
             bulkCategoryPicker
                 .presentationDetents([.medium, .large])
+                .presentationBackground {
+                    SheetBackground()
+                }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
@@ -208,6 +213,14 @@ struct HomeView: View {
             withAnimation(.interpolatingSpring(duration: duration, bounce: 0)) {
                 keyboardHeight = 0
             }
+        }
+        .alert("Error", isPresented: .init(
+            get: { noteStore.lastError != nil },
+            set: { if !$0 { noteStore.lastError = nil } }
+        )) {
+            Button("OK") { noteStore.lastError = nil }
+        } message: {
+            Text(noteStore.lastError ?? "")
         }
     }
 
@@ -264,11 +277,23 @@ struct HomeView: View {
                     ForEach(noteStore.categories) { category in
                         CategoryChip(
                             name: category.name,
-                            color: Color(hex: category.color),
+                            color: Color.categoryColor(hex: category.color),
                             isSelected: selectedCategory == category.id
                         ) {
                             withAnimation(.snappy) {
                                 selectedCategory = selectedCategory == category.id ? nil : category.id
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                editingCategory = category
+                            } label: {
+                                Label("Edit Category", systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                categoryToDelete = category
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
                         }
                         .id(category.id.uuidString)
@@ -302,6 +327,32 @@ struct HomeView: View {
         .sheet(isPresented: $showAddCategory) {
             CategoryFormSheet(mode: .add)
         }
+        .sheet(item: $editingCategory) { category in
+            CategoryFormSheet(mode: .edit(category))
+        }
+        .confirmationDialog(
+            "Delete Category",
+            isPresented: .init(
+                get: { categoryToDelete != nil },
+                set: { if !$0 { categoryToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let category = categoryToDelete {
+                Button("Delete", role: .destructive) {
+                    if selectedCategory == category.id {
+                        withAnimation(.snappy) { selectedCategory = nil }
+                    }
+                    withAnimation(.snappy) {
+                        noteStore.removeCategory(id: category.id)
+                    }
+                    categoryToDelete = nil
+                }
+            }
+        } message: {
+            let count = noteStore.notes.filter { $0.categoryId == categoryToDelete?.id }.count
+            Text("This will unassign \(count) note\(count == 1 ? "" : "s") from this category. Notes won't be deleted.")
+        }
     }
 
     // MARK: - Empty State
@@ -328,13 +379,13 @@ struct HomeView: View {
         } description: {
             if isSearching && !query.isEmpty, let cat = selectedCategoryModel {
                 Text("No notes matching \"\(query)\" in ")
-                    + Text(cat.name).foregroundColor(Color(hex: cat.color))
+                    + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
                     + Text(".")
             } else if isSearching && !query.isEmpty {
                 Text("No notes matching \"\(query)\".")
             } else if let cat = selectedCategoryModel {
                 Text("No notes in ")
-                    + Text(cat.name).foregroundColor(Color(hex: cat.color))
+                    + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
                     + Text(".")
             } else {
                 Text("Tap the mic to record your first thought.")
@@ -509,7 +560,7 @@ struct HomeView: View {
                                 Text(cat.name)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundStyle(Color(hex: cat.color))
+                                    .foregroundStyle(Color.categoryColor(hex: cat.color))
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                     .frame(maxWidth: 200)
@@ -606,7 +657,7 @@ struct HomeView: View {
             let noteId = UUID()
             let note = Note(
                 id: noteId,
-                userId: authStore.user?.id,
+                userId: authStore.userId,
                 categoryId: selectedCategory,
                 title: sourceURL.deletingPathExtension().lastPathComponent,
                 content: "Transcribing…",
@@ -625,10 +676,10 @@ struct HomeView: View {
 
             // Transcribe in background
             let language = settingsStore.language == "auto" ? nil : settingsStore.language
-            let userId = authStore.user?.id
+            let userId = authStore.userId
             noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
         } catch {
-            // TODO: Surface error to user
+            noteStore.lastError = "Failed to import audio file"
         }
     }
 
@@ -655,7 +706,8 @@ struct HomeView: View {
                     }
                 }
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(150))
                     isSwiping = false
                 }
             }

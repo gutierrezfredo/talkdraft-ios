@@ -2,6 +2,8 @@ import SwiftUI
 
 struct NoteDetailView: View {
     @Environment(NoteStore.self) private var noteStore
+    @Environment(AuthStore.self) private var authStore
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
@@ -19,6 +21,9 @@ struct NoteDetailView: View {
     @State private var player = AudioPlayer()
     @State private var typewriterTask: Task<Void, Never>?
     @State private var contentFocused = false
+    @State private var errorMessage: String?
+    @State private var isDownloadingAudio = false
+    @State private var audioShareItem: URL?
 
     init(note: Note) {
         self.noteId = note.id
@@ -48,6 +53,24 @@ struct NoteDetailView: View {
 
     private var isTranscribing: Bool {
         editedContent == "Transcribing…"
+    }
+
+    private var isTranscriptionFailed: Bool {
+        editedContent == "Transcription failed — tap to edit"
+    }
+
+    private var isWaitingForConnection: Bool {
+        editedContent == "Waiting for connection…"
+    }
+
+    /// Returns the local audio file URL if it still exists on disk.
+    private var localAudioFileURL: URL? {
+        guard let urlString = note.audioUrl,
+              let url = URL(string: urlString),
+              url.isFileURL,
+              FileManager.default.fileExists(atPath: url.path)
+        else { return nil }
+        return url
     }
 
     var body: some View {
@@ -85,6 +108,12 @@ struct NoteDetailView: View {
 
                     if isTranscribing {
                         transcribingIndicator
+                            .padding(.top, 40)
+                    } else if isWaitingForConnection {
+                        waitingForConnectionView
+                            .padding(.top, 40)
+                    } else if isTranscriptionFailed {
+                        transcriptionFailedView
                             .padding(.top, 40)
                     } else {
                         contentField
@@ -178,10 +207,15 @@ struct NoteDetailView: View {
                 Menu {
                     if note.audioUrl != nil {
                         Button {
-                            // TODO: Download audio
+                            downloadAudio()
                         } label: {
-                            Label("Download Audio", systemImage: "arrow.down.circle")
+                            if isDownloadingAudio {
+                                Label { Text("Downloading…") } icon: { ProgressView() }
+                            } else {
+                                Label("Download Audio", systemImage: "arrow.down.circle")
+                            }
                         }
+                        .disabled(isDownloadingAudio)
                     }
 
                     Button(role: .destructive) {
@@ -214,7 +248,9 @@ struct NoteDetailView: View {
                 categories: noteStore.categories
             )
             .presentationDetents([.medium, .large])
-            .presentationBackground(.ultraThinMaterial)
+            .presentationBackground {
+                SheetBackground()
+            }
         }
         .sheet(isPresented: $showRewriteSheet, onDismiss: {
             guard let rewrite = pendingRewrite else { return }
@@ -225,15 +261,37 @@ struct NoteDetailView: View {
                 pendingRewrite = (tone, instructions)
             }
             .presentationDetents([.large])
-            .presentationBackground(.ultraThinMaterial)
+            .presentationBackground {
+                SheetBackground()
+            }
         }
         .onDisappear {
             player.stop()
         }
+        .alert("Error", isPresented: .init(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .sheet(isPresented: .init(
+            get: { audioShareItem != nil },
+            set: { if !$0 { audioShareItem = nil } }
+        )) {
+            if let audioShareItem {
+                ShareSheet(items: [audioShareItem])
+                    .presentationDetents([.medium])
+            }
+        }
         .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
-                if oldValue == "Transcribing…" {
+                let isPlaceholder = oldValue == "Transcribing…"
+                    || oldValue == "Waiting for connection…"
+                    || oldValue == "Transcription failed — tap to edit"
+                if isPlaceholder && newValue != oldValue {
                     revealContent(newValue)
                 } else {
                     withAnimation(.easeOut(duration: 0.4)) {
@@ -374,11 +432,89 @@ struct NoteDetailView: View {
         Text("Transcribing…")
             .font(.body)
             .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
             .phaseAnimator([false, true]) { content, pulse in
                 content.opacity(pulse ? 0.3 : 1.0)
             } animation: { _ in
                 .easeInOut(duration: 1.2)
             }
+    }
+
+    // MARK: - Waiting for Connection
+
+    private var waitingForConnectionView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "wifi.slash")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                Text("Waiting for connection…")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .phaseAnimator([false, true]) { content, pulse in
+                content.opacity(pulse ? 0.4 : 1.0)
+            } animation: { _ in
+                .easeInOut(duration: 1.5)
+            }
+
+            Text("Will transcribe automatically when online.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: - Transcription Failed
+
+    private var transcriptionFailedView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Transcription failed")
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            if localAudioFileURL != nil {
+                Button {
+                    retryTranscription()
+                } label: {
+                    Label("Retry Transcription", systemImage: "arrow.clockwise")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Capsule().fill(Color.brand))
+                }
+
+                Text("Your audio recording is still saved on this device.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("Audio file is no longer available on this device.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+    }
+
+    private func retryTranscription() {
+        guard let audioFileURL = localAudioFileURL else { return }
+
+        // Update local UI only — transcribeNote handles server sync on success
+        editedContent = "Transcribing…"
+        noteStore.setNoteContent(id: noteId, content: "Transcribing…")
+
+        let language = settingsStore.language == "auto" ? nil : settingsStore.language
+        noteStore.transcribeNote(
+            id: noteId,
+            audioFileURL: audioFileURL,
+            language: language,
+            userId: authStore.userId
+        )
     }
 
     // MARK: - Content
@@ -406,7 +542,7 @@ struct NoteDetailView: View {
                 Image(systemName: "tag")
                     .font(keyboardVisible ? .callout : .title3)
                     .foregroundStyle(
-                        category != nil ? Color(hex: category!.color) : .secondary
+                        category.map { Color.categoryColor(hex: $0.color) } ?? .secondary
                     )
                     .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
                     .glassEffect(.regular.interactive(), in: .circle)
@@ -473,12 +609,12 @@ struct NoteDetailView: View {
         editedContent = ""
 
         typewriterTask = Task {
+            let characters = Array(text)
+            let total = characters.count
             var charIndex = 0
-            let total = text.count
             while charIndex < total {
                 charIndex = min(charIndex + 3, total)
-                let index = text.index(text.startIndex, offsetBy: charIndex)
-                editedContent = String(text[..<index])
+                editedContent = String(characters[..<charIndex])
                 try? await Task.sleep(for: .milliseconds(2))
                 if Task.isCancelled { return }
             }
@@ -491,6 +627,25 @@ struct NoteDetailView: View {
     }
 
     // MARK: - Helpers
+
+    private func downloadAudio() {
+        guard let urlString = note.audioUrl, let url = URL(string: urlString) else { return }
+
+        isDownloadingAudio = true
+        Task {
+            do {
+                let (tempURL, _) = try await URLSession.shared.download(from: url)
+                let fileName = note.title.map { $0.prefix(50) + ".m4a" } ?? "audio.m4a"
+                let destURL = FileManager.default.temporaryDirectory.appendingPathComponent(String(fileName))
+                try? FileManager.default.removeItem(at: destURL)
+                try FileManager.default.moveItem(at: tempURL, to: destURL)
+                audioShareItem = destURL
+            } catch {
+                errorMessage = "Failed to download audio"
+            }
+            isDownloadingAudio = false
+        }
+    }
 
     private func performRewrite(tone: String?, instructions: String?) {
         isRewriting = true
@@ -512,7 +667,7 @@ struct NoteDetailView: View {
                 noteStore.updateNote(updated)
                 revealContent(result)
             } catch {
-                // Rewrite failed — content stays unchanged
+                errorMessage = "Rewrite failed: \(error.localizedDescription)"
             }
             isRewriting = false
         }
@@ -599,7 +754,7 @@ private struct CategoryPickerSheet: View {
                                 Text(cat.name)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundStyle(Color(hex: cat.color))
+                                    .foregroundStyle(Color.categoryColor(hex: cat.color))
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                     .frame(maxWidth: 200)
@@ -612,7 +767,7 @@ private struct CategoryPickerSheet: View {
                                     .overlay(
                                         Capsule()
                                             .strokeBorder(
-                                                isSelected ? Color(hex: cat.color) : .clear,
+                                                isSelected ? Color.categoryColor(hex: cat.color) : .clear,
                                                 lineWidth: 2
                                             )
                                     )
@@ -860,5 +1015,20 @@ private struct RewriteSheet: View {
         }
         .padding(.top, 20)
         .onAppear { customFocused = true }
+    }
+}
+
+// MARK: - Sheet Background
+
+struct SheetBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
+                .opacity(colorScheme == .dark ? 0.85 : 0.55)
+        }
+        .ignoresSafeArea()
     }
 }

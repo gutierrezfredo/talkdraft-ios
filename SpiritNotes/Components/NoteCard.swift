@@ -12,10 +12,10 @@ struct NoteCard: View {
 
     private var cardBackground: Color {
         guard let category else {
-            return isDark ? Color(hex: "#111111") : .white
+            return isDark ? .darkBackground : .white
         }
         return Color(hex: category.color)
-            .blended(opacity: isDark ? 0.10 : 0.14, isDark: isDark)
+            .blended(opacity: 0.14, isDark: isDark)
     }
 
     var body: some View {
@@ -46,7 +46,7 @@ struct NoteCard: View {
                 Text(category.name)
                     .font(.caption2)
                     .fontWeight(.semibold)
-                    .foregroundStyle(Color(hex: category.color))
+                    .foregroundStyle(Color.categoryColor(hex: category.color))
                     .lineLimit(1)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -90,7 +90,11 @@ struct NoteCard: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(isSelected ? Color.brand : .clear, lineWidth: 2)
+                .strokeBorder(
+                    isSelected ? Color.brand
+                        : (category == nil && isDark ? Color.white.opacity(0.08) : .clear),
+                    lineWidth: isSelected ? 2 : 0.5
+                )
         )
     }
 }

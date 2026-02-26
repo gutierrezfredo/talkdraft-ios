@@ -3,6 +3,8 @@ import AVFoundation
 import Observation
 import os
 
+private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "AudioRecorder")
+
 enum RecordingError: LocalizedError {
     case formatUnavailable
 
@@ -25,8 +27,17 @@ final class AudioRecorder {
     private var timer: Timer?
     private var startTime: Date?
     private var pausedElapsed: TimeInterval = 0
+    private var interruptionObserver: Any?
 
     private let bandCount = 20
+
+    deinit {
+        timer?.invalidate()
+        pipeline?.stop()
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+        }
+    }
 
     private var recordingDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -54,6 +65,7 @@ final class AudioRecorder {
         elapsedSeconds = 0
         frequencyBands = Array(repeating: 0, count: bandCount)
 
+        observeInterruptions()
         startTimer()
     }
 
@@ -67,6 +79,16 @@ final class AudioRecorder {
     }
 
     func resumeRecording() {
+        // Restart engine if it was stopped by an interruption
+        if let pipeline, !pipeline.isRunning {
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+                try pipeline.restart()
+            } catch {
+                logger.error("Failed to restart audio engine: \(error)")
+                return
+            }
+        }
         pipeline?.resume()
         isPaused = false
         startTime = Date()
@@ -74,12 +96,21 @@ final class AudioRecorder {
     }
 
     func stopRecording() -> URL? {
+        removeInterruptionObserver()
         timer?.invalidate()
         timer = nil
 
         let url = pipeline?.fileURL
+        let writeErrors = pipeline?.getWriteErrorCount() ?? 0
         pipeline?.stop()
         pipeline = nil
+
+        // Deactivate audio session so it doesn't interfere with network requests
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        if writeErrors > 0 {
+            logger.warning("Recording completed with \(writeErrors) audio write error(s) — audio may be incomplete")
+        }
 
         isRecording = false
         isPaused = false
@@ -90,6 +121,7 @@ final class AudioRecorder {
     }
 
     func cancelRecording() {
+        removeInterruptionObserver()
         timer?.invalidate()
         timer = nil
 
@@ -110,11 +142,64 @@ final class AudioRecorder {
         frequencyBands = Array(repeating: 0, count: bandCount)
     }
 
+    // MARK: - Audio Interruption
+
+    private func observeInterruptions() {
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let info = notification.userInfo,
+                  let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeValue)
+            else { return }
+
+            switch type {
+            case .began:
+                if self.isRecording, !self.isPaused {
+                    self.pauseRecording()
+                    logger.info("Recording paused due to audio interruption")
+                }
+            case .ended:
+                let options = (info[AVAudioSessionInterruptionOptionKey] as? UInt)
+                    .map { AVAudioSession.InterruptionOptions(rawValue: $0) } ?? []
+                if options.contains(.shouldResume), self.isRecording, self.isPaused {
+                    do {
+                        try AVAudioSession.sharedInstance().setActive(true)
+                        try self.pipeline?.restart()
+                        self.resumeRecording()
+                        logger.info("Recording resumed after interruption")
+                    } catch {
+                        logger.error("Failed to resume after interruption: \(error)")
+                    }
+                }
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func removeInterruptionObserver() {
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+            self.interruptionObserver = nil
+        }
+    }
+
     // MARK: - Timer
 
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self else { return }
+
+            // Detect engine stopped unexpectedly (e.g. phone call with compact UI)
+            if let pipeline = self.pipeline, !pipeline.isRunning, !self.isPaused {
+                self.pauseRecording()
+                logger.info("Recording paused — audio engine stopped unexpectedly")
+                return
+            }
 
             if let start = self.startTime {
                 self.elapsedSeconds = self.pausedElapsed + Date().timeIntervalSince(start)
@@ -140,11 +225,12 @@ final class AudioRecorder {
 private final class AudioPipeline: @unchecked Sendable {
     let fileURL: URL
 
+    private let engineLock = NSLock()
     private var engine: AVAudioEngine?
-    private var audioFile: AVAudioFile?
     private let processor: FFTProcessor
     private let bridge: BandBridge
     private let paused = OSAllocatedUnfairLock(initialState: false)
+    private let writeErrorCount = OSAllocatedUnfairLock(initialState: 0)
 
     init(outputURL: URL, bandCount: Int) {
         self.fileURL = outputURL
@@ -160,16 +246,20 @@ private final class AudioPipeline: @unchecked Sendable {
         // On simulator (no mic), channelCount is 0 — start engine without tap
         guard tapFormat.channelCount > 0 else {
             try engine.start()
+            engineLock.lock()
             self.engine = engine
+            engineLock.unlock()
             return
-        }
+}
 
         // Target format: mono 16kHz — optimal for Whisper
         guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1) else {
             throw RecordingError.formatUnavailable
         }
 
-        let converter = AVAudioConverter(from: tapFormat, to: outputFormat)!
+        guard let converter = AVAudioConverter(from: tapFormat, to: outputFormat) else {
+            throw RecordingError.formatUnavailable
+        }
 
         // Create M4A file: mono 16kHz AAC
         let fileSettings: [String: Any] = [
@@ -184,12 +274,12 @@ private final class AudioPipeline: @unchecked Sendable {
             commonFormat: .pcmFormatFloat32,
             interleaved: false
         )
-        self.audioFile = file
 
         // Capture only Sendable references — no self in closure
         let processor = self.processor
         let bridge = self.bridge
         let paused = self.paused
+        let writeErrorCount = self.writeErrorCount
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
             let isPaused = paused.withLock { $0 }
@@ -206,7 +296,11 @@ private final class AudioPipeline: @unchecked Sendable {
                 return buffer
             }
             if error == nil {
-                try? file.write(from: convertedBuffer)
+                do {
+                    try file.write(from: convertedBuffer)
+                } catch {
+                    writeErrorCount.withLock { $0 += 1 }
+                }
             }
 
             // FFT uses original buffer for visualization
@@ -215,7 +309,9 @@ private final class AudioPipeline: @unchecked Sendable {
         }
 
         try engine.start()
+        engineLock.lock()
         self.engine = engine
+        engineLock.unlock()
     }
 
     func pause() {
@@ -227,14 +323,35 @@ private final class AudioPipeline: @unchecked Sendable {
     }
 
     func stop() {
-        engine?.inputNode.removeTap(onBus: 0)
-        engine?.stop()
+        engineLock.lock()
+        let eng = engine
         engine = nil
-        audioFile = nil
+        engineLock.unlock()
+        eng?.inputNode.removeTap(onBus: 0)
+        eng?.stop()
+    }
+
+    var isRunning: Bool {
+        engineLock.lock()
+        let running = engine?.isRunning ?? false
+        engineLock.unlock()
+        return running
+    }
+
+    func restart() throws {
+        engineLock.lock()
+        let eng = engine
+        engineLock.unlock()
+        guard let eng, !eng.isRunning else { return }
+        try eng.start()
     }
 
     func readBands() -> [Float] {
         bridge.read()
+    }
+
+    func getWriteErrorCount() -> Int {
+        writeErrorCount.withLock { $0 }
     }
 }
 

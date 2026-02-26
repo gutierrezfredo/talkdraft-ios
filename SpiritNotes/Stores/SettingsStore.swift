@@ -3,8 +3,13 @@ import Observation
 
 @Observable
 final class SettingsStore {
-    var language: String = "auto"
-    var theme: AppTheme = .system
+    var language: String = "auto" {
+        didSet { UserDefaults.standard.set(language, forKey: "settings.language") }
+    }
+
+    var theme: AppTheme = .system {
+        didSet { UserDefaults.standard.set(theme.rawValue, forKey: "settings.theme") }
+    }
 
     enum AppTheme: String, CaseIterable {
         case system
@@ -21,16 +26,12 @@ final class SettingsStore {
     }
 
     func loadSettings() {
-        // TODO: Load from UserDefaults / Supabase
-    }
-
-    func setLanguage(_ language: String) async throws {
-        self.language = language
-        // TODO: Persist to Supabase
-    }
-
-    func setTheme(_ theme: AppTheme) {
-        self.theme = theme
-        // TODO: Persist to UserDefaults
+        if let lang = UserDefaults.standard.string(forKey: "settings.language") {
+            language = lang
+        }
+        if let themeRaw = UserDefaults.standard.string(forKey: "settings.theme"),
+           let saved = AppTheme(rawValue: themeRaw) {
+            theme = saved
+        }
     }
 }

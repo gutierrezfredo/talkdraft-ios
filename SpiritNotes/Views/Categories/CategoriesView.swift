@@ -1,4 +1,7 @@
+import os
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "CategoriesView")
 
 struct CategoriesView: View {
     @Environment(NoteStore.self) private var noteStore
@@ -27,7 +30,7 @@ struct CategoriesView: View {
                     } label: {
                         HStack(spacing: 14) {
                             Circle()
-                                .fill(Color(hex: category.color))
+                                .fill(Color.categoryColor(hex: category.color))
                                 .frame(width: 14, height: 14)
 
                             Text(category.name)
@@ -56,10 +59,11 @@ struct CategoriesView: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
+                    .listRowBackground(colorScheme == .dark ? Color.darkSurface : Color.white)
                 }
             }
         }
-        .contentMargins(.top, 0)
+        .contentMargins(.top, 12)
         .scrollContentBackground(.hidden)
         .background(backgroundColor.ignoresSafeArea())
         .navigationTitle("Categories")
@@ -88,7 +92,7 @@ struct CategoriesView: View {
             titleVisibility: .visible
         ) {
             if let category = categoryToDelete {
-                Button("Delete \"\(category.name)\"", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     withAnimation(.snappy) {
                         noteStore.removeCategory(id: category.id)
                     }
@@ -143,7 +147,7 @@ struct CategoryFormSheet: View {
         ("#EF4444", "Red"),
         ("#10B981", "Green"),
         ("#F59E0B", "Amber"),
-        ("#7C3AED", "Violet"),
+        ("#F43F5E", "Rose"),
         ("#EC4899", "Pink"),
         ("#14B8A6", "Teal"),
         ("#F97316", "Orange"),
@@ -253,8 +257,10 @@ struct CategoryFormSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        save()
-                        dismiss()
+                        Task {
+                            await save()
+                            dismiss()
+                        }
                     } label: {
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
@@ -273,7 +279,7 @@ struct CategoryFormSheet: View {
         }
     }
 
-    private func save() {
+    private func save() async {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         guard !trimmedName.isEmpty else { return }
 
@@ -281,16 +287,19 @@ struct CategoryFormSheet: View {
         case .add:
             let category = Category(
                 id: UUID(),
-                userId: authStore.user?.id,
+                userId: authStore.userId,
                 name: trimmedName,
                 color: selectedColor,
                 sortOrder: noteStore.categories.count,
                 createdAt: .now
             )
-            withAnimation(.snappy) {
-                noteStore.addCategory(category)
+            do {
+                try await noteStore.addCategory(category)
+                onCreated?(category)
+            } catch {
+                logger.error("Failed to create category: \(error)")
+                noteStore.lastError = "Failed to create category"
             }
-            onCreated?(category)
         case .edit(var category):
             category.name = trimmedName
             category.color = selectedColor

@@ -54,8 +54,7 @@ enum AIService {
     }
 
     static func translate(content: String, targetLanguage: String) async throws -> String {
-        // TODO: Call Supabase edge function → Gemini Flash
-        fatalError("Not implemented")
+        throw AIError.notImplemented
     }
 }
 
@@ -74,11 +73,13 @@ private struct RewriteResponse: Decodable {
 enum AIError: LocalizedError {
     case serverError(String)
     case emptyResult
+    case notImplemented
 
     var errorDescription: String? {
         switch self {
         case .serverError(let message): "AI request failed: \(message)"
         case .emptyResult: "AI returned an empty result"
+        case .notImplemented: "This feature is not yet available"
         }
     }
 }
