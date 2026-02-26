@@ -101,16 +101,11 @@ final class AudioRecorder {
         timer = nil
 
         let url = pipeline?.fileURL
-        let writeErrors = pipeline?.getWriteErrorCount() ?? 0
         pipeline?.stop()
         pipeline = nil
 
         // Deactivate audio session so it doesn't interfere with network requests
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-
-        if writeErrors > 0 {
-            logger.warning("Recording completed with \(writeErrors) audio write error(s) — audio may be incomplete")
-        }
 
         isRecording = false
         isPaused = false
@@ -230,7 +225,6 @@ private final class AudioPipeline: @unchecked Sendable {
     private let processor: FFTProcessor
     private let bridge: BandBridge
     private let paused = OSAllocatedUnfairLock(initialState: false)
-    private let writeErrorCount = OSAllocatedUnfairLock(initialState: 0)
 
     init(outputURL: URL, bandCount: Int) {
         self.fileURL = outputURL
@@ -279,7 +273,6 @@ private final class AudioPipeline: @unchecked Sendable {
         let processor = self.processor
         let bridge = self.bridge
         let paused = self.paused
-        let writeErrorCount = self.writeErrorCount
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
             let isPaused = paused.withLock { $0 }
@@ -296,11 +289,7 @@ private final class AudioPipeline: @unchecked Sendable {
                 return buffer
             }
             if error == nil {
-                do {
-                    try file.write(from: convertedBuffer)
-                } catch {
-                    writeErrorCount.withLock { $0 += 1 }
-                }
+                try? file.write(from: convertedBuffer)
             }
 
             // FFT uses original buffer for visualization
@@ -348,10 +337,6 @@ private final class AudioPipeline: @unchecked Sendable {
 
     func readBands() -> [Float] {
         bridge.read()
-    }
-
-    func getWriteErrorCount() -> Int {
-        writeErrorCount.withLock { $0 }
     }
 }
 

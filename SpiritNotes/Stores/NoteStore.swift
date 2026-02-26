@@ -1,30 +1,10 @@
 import Foundation
-import Network
 import Observation
 import os
 import Supabase
 import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "NoteStore")
-
-/// Thread-safe network connectivity monitor.
-/// Updates synchronously from NWPathMonitor callback — no async dispatch, no race conditions.
-private final class NetworkMonitor: @unchecked Sendable {
-    private let monitor = NWPathMonitor()
-    private let state = OSAllocatedUnfairLock(initialState: true)
-
-    var isConnected: Bool {
-        state.withLock { $0 }
-    }
-
-    func start() {
-        let state = self.state
-        monitor.pathUpdateHandler = { path in
-            state.withLock { $0 = path.status == .satisfied }
-        }
-        monitor.start(queue: DispatchQueue(label: "com.pleymob.spiritnotes.network"))
-    }
-}
 
 private struct NoteUpdate: Encodable {
     var categoryId: UUID?
@@ -69,21 +49,14 @@ final class NoteStore {
     var isLoading = false
     var lastError: String?
 
-    private let network = NetworkMonitor()
-
-    private var isConnected: Bool { network.isConnected }
-
-    func startNetworkMonitor() {
-        network.start()
-    }
-
     /// Retry any notes stuck in "Waiting for connection…".
     /// Scans the notes array directly — works even after app restart.
+    /// Each note goes through transcribeNote which has its own connectivity probe.
     func retryWaitingNotes(language: String?, userId: UUID?) {
         let waiting = notes.filter {
             $0.content == "Waiting for connection…" || $0.content == "Transcription failed — tap to edit"
         }
-        guard !waiting.isEmpty, isConnected else { return }
+        guard !waiting.isEmpty else { return }
 
         for note in waiting {
             guard let urlString = note.audioUrl,
@@ -288,29 +261,12 @@ final class NoteStore {
                 let fileName = uploadURL.lastPathComponent
 
                 let service = TranscriptionService()
-                let result: TranscriptionResult
-                do {
-                    result = try await service.transcribe(
-                        audioData: audioData,
-                        fileName: fileName,
-                        language: language,
-                        userId: userId
-                    )
-                } catch {
-                    // Retry once on transient network errors (e.g. audio session interference)
-                    if (error as? URLError)?.code == .networkConnectionLost {
-                        logger.info("Network connection lost during transcription, retrying after 2s…")
-                        try? await Task.sleep(for: .seconds(2))
-                        result = try await service.transcribe(
-                            audioData: audioData,
-                            fileName: fileName,
-                            language: language,
-                            userId: userId
-                        )
-                    } else {
-                        throw error
-                    }
-                }
+                let result = try await service.transcribe(
+                    audioData: audioData,
+                    fileName: fileName,
+                    language: language,
+                    userId: userId
+                )
 
                 // Guard against empty transcription
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
