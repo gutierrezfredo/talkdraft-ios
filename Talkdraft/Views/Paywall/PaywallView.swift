@@ -1,4 +1,4 @@
-import RevenueCat
+import StoreKit
 import SwiftUI
 
 struct PaywallView: View {
@@ -20,19 +20,11 @@ struct PaywallView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Header
                     header
-
-                    // Feature comparison
                     featureComparison
-
-                    // Plan selection
                     planSelection
-
-                    // Subscribe button
                     subscribeButton
 
-                    // Restore
                     Button {
                         Task {
                             do {
@@ -43,7 +35,7 @@ struct PaywallView: View {
                                     errorMessage = "No active subscription found."
                                 }
                             } catch {
-                                errorMessage = "Restore failed. Please try again."
+                                errorMessage = "Restore failed: \(error.localizedDescription)"
                             }
                         }
                     } label: {
@@ -80,7 +72,7 @@ struct PaywallView: View {
             }
         }
         .task {
-            await subscriptionStore.fetchOffering()
+            await subscriptionStore.fetchProducts()
         }
     }
 
@@ -150,7 +142,7 @@ struct PaywallView: View {
             planCard(
                 option: .yearly,
                 title: "Yearly",
-                price: subscriptionStore.yearlyPackage?.localizedPriceString ?? "$59.99",
+                price: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99",
                 detail: "per year",
                 badge: "Save 17%"
             )
@@ -158,7 +150,7 @@ struct PaywallView: View {
             planCard(
                 option: .monthly,
                 title: "Monthly",
-                price: subscriptionStore.monthlyPackage?.localizedPriceString ?? "$5.99",
+                price: subscriptionStore.monthlyProduct?.displayPrice ?? "$5.99",
                 detail: "per month",
                 badge: nil
             )
@@ -170,7 +162,6 @@ struct PaywallView: View {
             withAnimation(.snappy) { selectedPlan = option }
         } label: {
             HStack(spacing: 14) {
-                // Radio indicator
                 Circle()
                     .strokeBorder(selectedPlan == option ? Color.brand : .secondary.opacity(0.3), lineWidth: 2)
                     .frame(width: 24, height: 24)
@@ -230,21 +221,21 @@ struct PaywallView: View {
     private var subscribeButton: some View {
         Button {
             Task {
-                let package: RevenueCat.Package? = switch selectedPlan {
-                case .monthly: subscriptionStore.monthlyPackage
-                case .yearly: subscriptionStore.yearlyPackage
+                let product: StoreKit.Product? = switch selectedPlan {
+                case .monthly: subscriptionStore.monthlyProduct
+                case .yearly: subscriptionStore.yearlyProduct
                 }
-                guard let package else {
+                guard let product else {
                     errorMessage = "Products not available. Please try again later."
                     return
                 }
                 do {
-                    try await subscriptionStore.purchase(package)
+                    try await subscriptionStore.purchase(product)
                     if subscriptionStore.isPro {
                         dismiss()
                     }
                 } catch {
-                    errorMessage = "Purchase failed. Please try again."
+                    errorMessage = "Purchase failed: \(error.localizedDescription)"
                 }
             }
         } label: {

@@ -1,12 +1,19 @@
 import Foundation
 import Observation
+import os
 import RevenueCat
+import StoreKit
+
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "SubscriptionStore")
 
 @MainActor @Observable
 final class SubscriptionStore {
     var isPro = false
-    var currentOffering: Offering?
     var isLoading = false
+
+    // StoreKit2 products fetched directly (RevenueCat offerings fallback)
+    var monthlyProduct: StoreKit.Product?
+    var yearlyProduct: StoreKit.Product?
 
     // MARK: - Limits
 
@@ -14,8 +21,7 @@ final class SubscriptionStore {
     var notesLimit: Int? { isPro ? nil : 50 }
     var categoriesLimit: Int? { isPro ? nil : 4 }
 
-    var monthlyPackage: Package? { currentOffering?.monthly }
-    var yearlyPackage: Package? { currentOffering?.annual }
+    var hasProducts: Bool { monthlyProduct != nil || yearlyProduct != nil }
 
     // MARK: - Configuration
 
@@ -58,26 +64,57 @@ final class SubscriptionStore {
         }
     }
 
-    // MARK: - Offerings
+    // MARK: - Products
 
-    func fetchOffering() async {
+    /// Fetch products directly from StoreKit2.
+    func fetchProducts() async {
         do {
-            let offerings = try await Purchases.shared.offerings()
-            currentOffering = offerings.current
+            let products = try await StoreKit.Product.products(
+                for: ["talkdraft_monthly", "talkdraft_yearly"]
+            )
+            for product in products {
+                switch product.id {
+                case "talkdraft_monthly": monthlyProduct = product
+                case "talkdraft_yearly": yearlyProduct = product
+                default: break
+                }
+            }
+            logger.info("Fetched \(products.count) products from StoreKit2")
         } catch {
-            // Paywall will show without packages if this fails
+            logger.error("StoreKit2 product fetch failed: \(error.localizedDescription)")
         }
     }
 
     // MARK: - Purchase
 
-    func purchase(_ package: Package) async throws {
+    /// Purchase a StoreKit2 product and sync with RevenueCat.
+    func purchase(_ product: StoreKit.Product) async throws {
         isLoading = true
         defer { isLoading = false }
 
-        let (_, customerInfo, userCancelled) = try await Purchases.shared.purchase(package: package)
-        if !userCancelled {
+        logger.info("Purchasing product: \(product.id)")
+        let result = try await product.purchase()
+        switch result {
+        case .success(let verification):
+            guard case .verified(let transaction) = verification else {
+                logger.error("Transaction verification failed")
+                throw PurchaseError.verificationFailed
+            }
+            await transaction.finish()
+            logger.info("Purchase succeeded, syncing with RevenueCat…")
+
+            // Sync with RevenueCat so entitlement is granted
+            let customerInfo = try await Purchases.shared.syncPurchases()
             updateEntitlement(from: customerInfo)
+
+        case .userCancelled:
+            logger.info("Purchase cancelled by user")
+
+        case .pending:
+            logger.info("Purchase pending approval")
+
+        @unknown default:
+            break
         }
     }
 
@@ -92,12 +129,22 @@ final class SubscriptionStore {
     // MARK: - Private
 
     private func updateEntitlement(from customerInfo: CustomerInfo) {
-        isPro = customerInfo.entitlements["spiritnotes Pro"]?.isActive == true
+        let active = customerInfo.entitlements["spiritnotes Pro"]?.isActive == true
+        logger.info("updateEntitlement — isPro: \(active)")
+        isPro = active
     }
 
-    // Bridge to PurchasesDelegate (NSObjectProtocol requirement)
-    // Cannot use lazy with @Observable, so we create it eagerly in configure()
     @ObservationIgnored private var delegateAdapter: DelegateAdapter?
+}
+
+enum PurchaseError: LocalizedError {
+    case verificationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .verificationFailed: "Transaction verification failed"
+        }
+    }
 }
 
 // MARK: - Delegate Adapter
