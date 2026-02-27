@@ -1,6 +1,6 @@
 # Terms of Service
 
-**SpiritNotes** — by Alfredo Gutierrez
+**Talkdraft** — by Alfredo Gutierrez
 **Effective Date:** February 22, 2026
 **Contact:** alfredo@alfredo.me
 
@@ -8,17 +8,17 @@
 
 ## 1. Acceptance
 
-By using SpiritNotes, you agree to these terms. If you do not agree, do not use the app.
+By using Talkdraft, you agree to these terms. If you do not agree, do not use the app.
 
 ## 2. Description of Service
 
-SpiritNotes is a voice-first notes app that records audio, transcribes it using AI, and organizes your notes into categories. The service requires an account and an internet connection.
+Talkdraft is a voice-first notes app that records audio, transcribes it using AI, and organizes your notes into categories. The service requires an account and an internet connection.
 
 ## 3. Your Account
 
 - You must provide a valid email address to create an account.
 - You are responsible for maintaining the security of your account credentials.
-- You must be at least 13 years old to use SpiritNotes.
+- You must be at least 13 years old to use Talkdraft.
 
 ## 4. Your Content
 
@@ -35,7 +35,7 @@ You agree not to:
 
 ## 6. Third-Party Services
 
-SpiritNotes uses third-party services (Groq for transcription, Google Gemini for title generation, Supabase for infrastructure). Your use of SpiritNotes is also subject to the terms of these providers as described in our Privacy Policy.
+Talkdraft uses third-party services (Groq for transcription, Google Gemini for title generation, Supabase for infrastructure). Your use of Talkdraft is also subject to the terms of these providers as described in our Privacy Policy.
 
 ## 7. Account Deletion
 
@@ -43,11 +43,11 @@ You can delete your account at any time from Settings. Deletion is scheduled wit
 
 ## 8. Service Availability
 
-We strive to keep SpiritNotes available but do not guarantee uninterrupted access. The service may be temporarily unavailable for maintenance or due to circumstances beyond our control.
+We strive to keep Talkdraft available but do not guarantee uninterrupted access. The service may be temporarily unavailable for maintenance or due to circumstances beyond our control.
 
 ## 9. Limitation of Liability
 
-SpiritNotes is provided "as is" without warranties of any kind. Alfredo Gutierrez is not liable for any indirect, incidental, or consequential damages arising from your use of the service. Our total liability shall not exceed the amount you paid for the service in the 12 months preceding the claim.
+Talkdraft is provided "as is" without warranties of any kind. Alfredo Gutierrez is not liable for any indirect, incidental, or consequential damages arising from your use of the service. Our total liability shall not exceed the amount you paid for the service in the 12 months preceding the claim.
 
 ## 10. Changes to Terms
 

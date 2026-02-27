@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "Transcription")
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Transcription")
 
 struct TranscriptionResult: Sendable {
     let text: String

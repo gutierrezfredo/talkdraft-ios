@@ -1,7 +1,7 @@
 import os
 import SwiftUI
 
-private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "CategoriesView")
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "CategoriesView")
 
 struct CategoriesView: View {
     @Environment(NoteStore.self) private var noteStore

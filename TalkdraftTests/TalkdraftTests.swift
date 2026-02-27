@@ -1,5 +1,5 @@
 import Testing
-@testable import SpiritNotes
+@testable import Talkdraft
 
 @Test func appLaunches() async throws {
     #expect(true)

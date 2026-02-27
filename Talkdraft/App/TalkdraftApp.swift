@@ -2,7 +2,7 @@ import GoogleSignIn
 import SwiftUI
 
 @main
-struct SpiritNotesApp: App {
+struct TalkdraftApp: App {
     @State private var authStore = AuthStore()
     @State private var noteStore = NoteStore()
     @State private var settingsStore = SettingsStore()

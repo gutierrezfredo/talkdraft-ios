@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**SpiritNotes** — by Alfredo Gutierrez
+**Talkdraft** — by Alfredo Gutierrez
 **Effective Date:** February 22, 2026
 **Contact:** alfredo@alfredo.me
 
@@ -47,7 +47,7 @@ All data is transmitted over HTTPS/TLS. Audio files and database records are iso
 
 ## Children's Privacy
 
-SpiritNotes is not intended for children under 13. We do not knowingly collect data from children.
+Talkdraft is not intended for children under 13. We do not knowingly collect data from children.
 
 ## Changes to This Policy
 

@@ -1,7 +1,7 @@
 import AVFoundation
 import os
 
-private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "AudioCompressor")
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "AudioCompressor")
 
 /// Compresses audio to 16kHz mono AAC — the format Whisper processes internally.
 /// Reduces upload size by 5-10x with zero transcription quality loss.
@@ -48,7 +48,7 @@ enum AudioCompressor {
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
 
-        let queue = DispatchQueue(label: "com.pleymob.spiritnotes.audiocompress")
+        let queue = DispatchQueue(label: "com.pleymob.talkdraft.audiocompress")
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             writerInput.requestMediaDataWhenReady(on: queue) {

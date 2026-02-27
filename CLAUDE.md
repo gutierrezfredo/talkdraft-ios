@@ -1,4 +1,4 @@
-# SpiritNotes iOS
+# Talkdraft iOS
 
 Voice + text capture app with AI-generated titles, transcription, translation, and manual categorization.
 
@@ -34,7 +34,7 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 ## Project Structure
 
 ```
-SpiritNotes/
+Talkdraft/
 ├── App/          — Entry point, ContentView, Assets, Info.plist
 ├── Views/        — SwiftUI screens (Home, Record, NoteDetail, Search, Settings, Auth, Categories)
 ├── Models/       — Data models (Note, Category, Profile)
@@ -51,17 +51,17 @@ SpiritNotes/
 xcodegen generate
 
 # Build for simulator
-xcodebuild -project SpiritNotes.xcodeproj -scheme SpiritNotes \
+xcodebuild -project Talkdraft.xcodeproj -scheme Talkdraft \
   -destination 'id=SIMULATOR_ID' build
 
 # Build for device
-xcodebuild -project SpiritNotes.xcodeproj -scheme SpiritNotes \
+xcodebuild -project Talkdraft.xcodeproj -scheme Talkdraft \
   -destination 'platform=iOS,id=DEVICE_ID' -allowProvisioningUpdates build
 ```
 
 ## Key Config
 
-- Bundle ID: `com.pleymob.spiritnotes`
+- Bundle ID: `com.pleymob.talkdraft`
 - Team ID: `H83F573KQB`
 - Deployment target: iOS 26.0
 - Swift version: 6.0

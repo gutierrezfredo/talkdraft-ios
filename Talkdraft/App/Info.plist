@@ -21,7 +21,7 @@
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SpiritNotes needs microphone access to record voice notes.</string>
+	<string>Talkdraft needs microphone access to record voice notes.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

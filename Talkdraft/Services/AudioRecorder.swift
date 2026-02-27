@@ -3,7 +3,7 @@ import AVFoundation
 import Observation
 import os
 
-private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "AudioRecorder")
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "AudioRecorder")
 
 enum RecordingError: LocalizedError {
     case formatUnavailable

@@ -4,7 +4,7 @@ import os
 import Supabase
 import UIKit
 
-private let logger = Logger(subsystem: "com.pleymob.spiritnotes", category: "NoteStore")
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 
 private struct NoteUpdate: Encodable {
     var categoryId: UUID?

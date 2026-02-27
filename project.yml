@@ -1,4 +1,4 @@
-name: SpiritNotes
+name: Talkdraft
 options:
   bundleIdPrefix: com.pleymob
   deploymentTarget:
@@ -18,15 +18,15 @@ packages:
     from: "8.0.0"
 
 targets:
-  SpiritNotes:
+  Talkdraft:
     type: application
     platform: iOS
     sources:
-      - path: SpiritNotes
+      - path: Talkdraft
     settings:
       base:
-        INFOPLIST_FILE: SpiritNotes/App/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.pleymob.spiritnotes
+        INFOPLIST_FILE: Talkdraft/App/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.pleymob.talkdraft
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
@@ -35,7 +35,7 @@ targets:
         DEVELOPMENT_TEAM: H83F573KQB
         CODE_SIGN_STYLE: Automatic
     entitlements:
-      path: SpiritNotes/App/SpiritNotes.entitlements
+      path: Talkdraft/App/Talkdraft.entitlements
       properties:
         com.apple.developer.applesignin:
           - Default
@@ -45,10 +45,10 @@ targets:
         product: RevenueCat
       - package: GoogleSignIn
 
-  SpiritNotesTests:
+  TalkdraftTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: SpiritNotesTests
+      - path: TalkdraftTests
     dependencies:
-      - target: SpiritNotes
+      - target: Talkdraft
