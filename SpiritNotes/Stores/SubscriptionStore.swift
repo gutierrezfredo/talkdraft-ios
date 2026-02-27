@@ -21,7 +21,7 @@ final class SubscriptionStore {
 
     /// Call once at app launch, before any purchases.
     func configure() {
-        Purchases.configure(withAPIKey: "test_YEeCDsYBasCAUveWcaPieBnCmiB")
+        Purchases.configure(withAPIKey: "appl_frykQRtNuFfPccuCcMLrDUvagyu")
         let adapter = DelegateAdapter(store: self)
         delegateAdapter = adapter
         Purchases.shared.delegate = adapter
@@ -92,7 +92,7 @@ final class SubscriptionStore {
     // MARK: - Private
 
     private func updateEntitlement(from customerInfo: CustomerInfo) {
-        isPro = customerInfo.entitlements["pro"]?.isActive == true
+        isPro = customerInfo.entitlements["spiritnotes Pro"]?.isActive == true
     }
 
     // Bridge to PurchasesDelegate (NSObjectProtocol requirement)
@@ -109,7 +109,7 @@ private final class DelegateAdapter: NSObject, PurchasesDelegate, Sendable {
     init(store: SubscriptionStore) {
         self.onUpdate = { [weak store] customerInfo in
             Task { @MainActor in
-                store?.isPro = customerInfo.entitlements["pro"]?.isActive == true
+                store?.isPro = customerInfo.entitlements["spiritnotes Pro"]?.isActive == true
             }
         }
     }

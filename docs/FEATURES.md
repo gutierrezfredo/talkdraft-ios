@@ -65,7 +65,7 @@
 - [ ] Translation
 - [x] Audio playback with seek
 - [x] Share text
-- [ ] Download audio
+- [x] Download audio
 - [x] Append recording (inline placeholders with pulse animation, highlight flash)
 - [x] Settings (language, theme, categories, legal links)
 - [x] Audio file import
