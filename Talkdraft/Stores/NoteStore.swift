@@ -335,17 +335,19 @@ final class NoteStore {
 
     // MARK: - Category CRUD
 
-    func addCategory(_ category: Category) async throws {
+    func addCategory(_ category: Category) {
         categories.append(category)
 
-        do {
-            try await supabase
-                .from("categories")
-                .insert(category)
-                .execute()
-        } catch {
-            categories.removeAll { $0.id == category.id }
-            throw error
+        Task {
+            do {
+                try await supabase
+                    .from("categories")
+                    .insert(category)
+                    .execute()
+            } catch {
+                categories.removeAll { $0.id == category.id }
+                lastError = "Failed to create category"
+            }
         }
     }
 

@@ -39,7 +39,7 @@
 | AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple/Google/Email/Anonymous sign-in, account deletion |
 | NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen |
 | SettingsStore | `Stores/SettingsStore.swift` | Language + theme preferences |
-| SubscriptionStore | `Stores/SubscriptionStore.swift` | RevenueCat — entitlement checking, purchase, restore, feature limits |
+| SubscriptionStore | `Stores/SubscriptionStore.swift` | StoreKit2 product fetch + purchase, RevenueCat entitlement management via syncPurchases() |
 
 ### Services
 
@@ -74,6 +74,12 @@
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-02-26 (Session 8)
+- Re-engineered subscription flow: StoreKit2 for product fetching and purchases, RevenueCat for entitlement management only
+- Sandbox purchases working end-to-end (Pro features unlock, paywall dismisses)
+- Cleaned up old RevenueCat test products from packages and entitlement
+- App renamed from SpiritNotes → Talkdraft
 
 ### 2026-02-26 (Session 7)
 - Auth: Apple, Google, Email/Password, Anonymous sign-in with redesigned LoginView

@@ -22,7 +22,6 @@ final class AudioRecorder {
     var isPaused = false
     var elapsedSeconds: TimeInterval = 0
     var frequencyBands: [Float] = Array(repeating: 0, count: 20)
-
     private var pipeline: AudioPipeline?
     private var timer: Timer?
     private var startTime: Date?
@@ -211,6 +210,7 @@ final class AudioRecorder {
                     self.frequencyBands[i] = current + (target - current) * 0.25
                 }
             }
+
         }
     }
 }

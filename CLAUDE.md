@@ -4,15 +4,15 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 
 ## Domain Context
 
-- Product spec: `docs/PRODUCT.md`
-- Feature list: `docs/FEATURES.md`
+- Product spec: `PRODUCT.md`
+- Feature list: `FEATURES.md`
 - Design rules: `DESIGN_RULES.md`
 
 ## Rules
 
 - Read `DESIGN_RULES.md` before any UI work
-- Read `docs/PRODUCT.md` before any product/feature work
-- Read `docs/FEATURES.md` before adding or modifying features
+- Read `PRODUCT.md` before any product/feature work
+- Read `FEATURES.md` before adding or modifying features
 - Build and test on physical device, not just simulator
 - **Code like a pro Apple engineer**: Write code the way Apple's own teams would. Prefer Apple's first-party frameworks and APIs over third-party or manual solutions. Use proper Swift concurrency (`Sendable`, actors, structured concurrency) — avoid `@unchecked Sendable` when real conformance is possible. No unnecessary `NSObject` inheritance, no force unwraps, no redundant pipelines. Favor single-responsibility classes, clean encapsulation, and pre-computed/pre-allocated data. Every architectural decision should reflect what a senior Apple engineer would ship.
 

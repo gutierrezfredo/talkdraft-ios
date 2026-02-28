@@ -154,6 +154,7 @@ struct CategoryFormSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""
     @State private var selectedColor: String = "#3B82F6"
+    @State private var isSaving = false
     @FocusState private var isNameFocused: Bool
 
     private let colorOptions: [(String, String)] = [
@@ -271,16 +272,16 @@ struct CategoryFormSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        Task {
-                            await save()
-                            dismiss()
-                        }
+                        guard !isSaving else { return }
+                        isSaving = true
+                        save()
+                        dismiss()
                     } label: {
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
                             .foregroundStyle(Color.brand)
                     }
-                    .disabled(!isValid)
+                    .disabled(!isValid || isSaving)
                 }
             }
         }
@@ -293,7 +294,7 @@ struct CategoryFormSheet: View {
         }
     }
 
-    private func save() async {
+    private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         guard !trimmedName.isEmpty else { return }
 
@@ -307,13 +308,8 @@ struct CategoryFormSheet: View {
                 sortOrder: noteStore.categories.count,
                 createdAt: .now
             )
-            do {
-                try await noteStore.addCategory(category)
-                onCreated?(category)
-            } catch {
-                logger.error("Failed to create category: \(error)")
-                noteStore.lastError = "Failed to create category"
-            }
+            noteStore.addCategory(category)
+            onCreated?(category)
         case .edit(var category):
             category.name = trimmedName
             category.color = selectedColor
