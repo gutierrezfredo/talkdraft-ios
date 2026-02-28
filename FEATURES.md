@@ -1,8 +1,18 @@
 # Features
 
-## Current State
+## Feature List
 
-### Views
+| Feature | Description | Design Reasoning |
+|---------|-------------|-----------------|
+| | | |
+
+## User Stories
+
+| As a... | I want to... | So that... |
+|---------|-------------|------------|
+| | | |
+
+## Views
 
 | View | Location | Status |
 |------|----------|--------|
