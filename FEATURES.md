@@ -16,29 +16,30 @@
 
 | View | Location | Status |
 |------|----------|--------|
-| HomeView | `Views/Home/HomeView.swift` | Built — greeting, category chips, notes grid, search, bulk select, audio import |
+| HomeView | `Views/Home/HomeView.swift` | Built — category chips, notes grid, search, bulk select, sort options |
 | LoginView | `Views/Auth/LoginView.swift` | Built — Apple, Google, Email/Password, Anonymous sign-in |
 | PaywallView | `Views/Paywall/PaywallView.swift` | Built — plan comparison, monthly/yearly selection, purchase, restore |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
-| SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links |
+| SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
+| RecentlyDeletedView | `Views/Settings/RecentlyDeletedView.swift` | Built — browse, restore, permanently delete soft-deleted notes |
 | CategoriesView | `Views/Categories/` | Built — CRUD with color picker, category form sheet |
 
 ### Components
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| NoteCard | `Components/NoteCard.swift` | Grid card: title, content preview, date, category, voice indicator |
+| NoteCard | `Components/NoteCard.swift` | Grid card: title, content preview, date, category, voice indicator, action item counts |
 | CategoryChip | `Components/CategoryChip.swift` | Capsule pill with color, selection border |
 | CategoryFormSheet | `Views/Categories/CategoriesView.swift` | Add/edit category with name field and 12-color grid picker |
 | FlowLayout | `Components/FlowLayout.swift` | Custom Layout for wrapping pill grids |
-| ExpandingTextView | `Components/ExpandingTextView.swift` | UIViewRepresentable wrapping UITextView for cursor tracking, placeholder pulse, highlight flash |
+| ExpandingTextView | `Components/ExpandingTextView.swift` | UIViewRepresentable wrapping UITextView for cursor tracking, placeholder pulse, highlight flash, checkbox support (☐/☑ SF Symbols), bullet continuation, scroll-to-cursor |
 
 ### Models
 
 | Model | Location | Description |
 |-------|----------|-------------|
-| Note | `Models/Note.swift` | id, categoryId, title, content, source, audioUrl, duration, timestamps |
+| Note | `Models/Note.swift` | id, categoryId, title, content, source, audioUrl, duration, timestamps, deletedAt |
 | Category | `Models/Category.swift` | id, name, color, icon, sortOrder |
 | Profile | `Models/Profile.swift` | userId, displayName, plan, language, deletionScheduledAt |
 
@@ -47,7 +48,7 @@
 | Store | Location | Description |
 |-------|----------|-------------|
 | AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple/Google/Email/Anonymous sign-in, account deletion |
-| NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen |
+| NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen, soft delete with 30-day auto-purge, restore |
 | SettingsStore | `Stores/SettingsStore.swift` | Language + theme preferences |
 | SubscriptionStore | `Stores/SubscriptionStore.swift` | StoreKit2 product fetch + purchase, RevenueCat entitlement management via syncPurchases() |
 
@@ -78,12 +79,31 @@
 - [x] Download audio
 - [x] Append recording (inline placeholders with pulse animation, highlight flash)
 - [x] Settings (language, theme, categories, legal links)
-- [x] Audio file import
+- [x] Audio file import (moved to Settings)
+- [x] Checkboxes (☐/☑ with SF Symbols, tap-to-toggle, strikethrough, auto-convert `[]`)
+- [x] Bullet lists (auto-continuation on return, `- ` converts to `• `)
+- [x] Soft delete with 30-day auto-purge + restore (Recently Deleted in Settings)
+- [x] Sort options (last updated, creation date, uncategorized first, action items first)
+- [x] Action item counts on note cards
+- [x] Delete category from edit sheet
+- [x] App icon with 3D variants (default, dark, tinted — Apple HIG compliant)
 - [x] RevenueCat subscription integration (SubscriptionStore, PaywallView, feature gating)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-03-01 (Session 10)
+- App icon: 3D default (#6D28D9), dark (#0F0D2E), tinted (black grayscale) with glossy highlights and drop shadows
+- Branding assets stored in `branding/` directory
+- ExpandingTextView: checkbox support (☐/☑ → SF Symbol attachments, tap-to-toggle, strikethrough checked lines), bullet continuation, `[]` auto-conversion to checkbox, scroll-to-cursor fix
+- NoteCard: action item counts (completed/total) badge
+- NoteStore: soft delete with `deletedAt` field, 30-day auto-purge, restore, permanent delete
+- RecentlyDeletedView: browse/restore/permanently delete soft-deleted notes
+- HomeView: sort by uncategorized first / action items first, removed greeting
+- CategoriesView: delete category from edit sheet with confirmation
+- CategoryChip: drag-friendly tap gesture with contentShape for drag preview
+- SettingsView: audio import moved from home, recently deleted section
 
 ### 2026-02-26 (Session 8)
 - Re-engineered subscription flow: StoreKit2 for product fetching and purchases, RevenueCat for entitlement management only

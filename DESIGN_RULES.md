@@ -207,6 +207,14 @@ Every view that fetches data must handle all three states:
 - Test with VoiceOver enabled
 - Use `.accessibilityLabel()` on custom controls
 
+
+---
+
+## Less Is More
+
+- Before adding any UI element, ask: "does this add information the user doesn't already have?" If not, don't add it.
+- Don't show state text (e.g., "Unassigned", "Empty", "No items") when a button or empty space already communicates it.
+- Fewer elements with clear purpose beats more elements that explain each other.
 ---
 
 ## Self-Check

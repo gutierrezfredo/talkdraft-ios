@@ -1,0 +1,61 @@
+---
+title: Talkdraft
+description: Voice + text capture app with AI-generated titles, transcription, and manual categorization.
+template: splash
+hero:
+  tagline: Say it messy. Read it clean.
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View Architecture
+      link: /architecture/overview/
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Talkdraft?
+
+Talkdraft is an iOS app for capturing thoughts on the go — by voice or text. Voice memos are transcribed by AI, rewritten in any tone, and organized into color-coded categories. It turns scattered brain dumps into clean, searchable notes.
+
+## Core Loop
+
+1. **Capture** — tap record (voice) or type (text)
+2. **Transcribe** — Groq Whisper converts voice to text automatically
+3. **Title** — Gemini Flash generates a short title in the background
+4. **Organize** — assign to color-coded categories, add checkboxes, bullet lists
+5. **Refine** — rewrite in 17+ tones, translate, edit freely
+
+## Key Capabilities
+
+<CardGrid stagger>
+  <Card title="Voice Capture" icon="microphone">
+    Record voice memos with real-time frequency visualization. Audio is compressed on-device and transcribed via Groq Whisper.
+  </Card>
+  <Card title="AI Rewrite" icon="pencil">
+    Rewrite any note in 17 tones (formal, flirty, poetic, sarcastic, and more) or provide custom instructions. Original content is always preserved.
+  </Card>
+  <Card title="Checkboxes & Lists" icon="list-format">
+    Type `[]` to create interactive checkboxes. Checked items get strikethrough styling. Bullet lists auto-continue on return.
+  </Card>
+  <Card title="Categories" icon="seti:folder">
+    Color-coded categories with drag-to-reorder. Filter notes by category from the home screen.
+  </Card>
+</CardGrid>
+
+## User Tiers
+
+| | Free | Pro |
+|---|---|---|
+| Recording length | 3 minutes | 15 minutes |
+| Notes | 50 | Unlimited |
+| Categories | 4 | Unlimited |
+| AI Rewrite | Included | Included |
+| Transcription | Included | Included |
+
+## Platform
+
+- **iOS 26+** with Liquid Glass design language
+- iPhone only (no iPad or Mac targets)
