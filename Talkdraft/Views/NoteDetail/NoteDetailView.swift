@@ -16,12 +16,15 @@ struct NoteDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
+    @State private var showRestoreConfirmation = false
     @State private var pendingRewrite: (tone: String?, instructions: String?)?
     @State private var isRewriting = false
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
     @State private var typewriterTask: Task<Void, Never>?
+    @State private var scrollProxy: ScrollViewProxy?
     @State private var contentFocused = false
+    @State private var contentOpacity: Double = 1
     @State private var errorMessage: String?
     @State private var isDownloadingAudio = false
     @State private var audioShareItem: URL?
@@ -31,6 +34,8 @@ struct NoteDetailView: View {
     @State private var cursorPosition: Int = 0
     @State private var appendInsertPosition: Int = 0
     @State private var highlightRange: NSRange?
+    @State private var preserveScroll = false
+    @State private var autosaveTask: Task<Void, Never>?
 
     private static let recordingPlaceholder = "Recording…"
     private static let transcribingPlaceholder = "Transcribing…"
@@ -44,6 +49,10 @@ struct NoteDetailView: View {
 
     private var note: Note {
         noteStore.notes.first { $0.id == noteId } ?? initialNote
+    }
+
+    private var isInStore: Bool {
+        noteStore.notes.contains { $0.id == noteId }
     }
 
     private var hasChanges: Bool {
@@ -88,8 +97,11 @@ struct NoteDetailView: View {
             (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
+                    Color.clear.frame(height: 0).id("scrollTop")
+
                     metadataRow
                         .padding(.top, 12)
 
@@ -140,6 +152,8 @@ struct NoteDetailView: View {
                 .padding(.bottom, 120)
             }
             .scrollDismissesKeyboard(.interactively)
+            .onAppear { scrollProxy = proxy }
+            } // ScrollViewReader
 
             // Bottom fade
             VStack {
@@ -184,7 +198,7 @@ struct NoteDetailView: View {
             if note.originalContent != nil {
                 ToolbarItem(placement: .principal) {
                     Button {
-                        restoreOriginal()
+                        showRestoreConfirmation = true
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.uturn.backward")
@@ -197,19 +211,6 @@ struct NoteDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
-                }
-            }
-
-            if hasChanges {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        saveChanges()
-                    } label: {
-                        Image(systemName: "checkmark")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Color.brand)
-                    }
-                    .sensoryFeedback(.success, trigger: hasChanges)
                 }
             }
 
@@ -283,6 +284,18 @@ struct NoteDetailView: View {
                 isAppendRecording = false
                 isAppendTranscribing = false
             }
+            autosaveTask?.cancel()
+            let hasContent = !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !editedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if hasContent && (hasChanges || !isInStore) {
+                saveChanges()
+            }
+        }
+        .alert("Restore Original?", isPresented: $showRestoreConfirmation) {
+            Button("Restore", role: .destructive) { restoreOriginal() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will discard all rewrites and restore the original content.")
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -332,6 +345,12 @@ struct NoteDetailView: View {
         }
         .onDisappear {
             typewriterTask?.cancel()
+        }
+        .onChange(of: editedTitle) {
+            scheduleAutosave()
+        }
+        .onChange(of: editedContent) {
+            scheduleAutosave()
         }
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
             if Int(elapsed) >= subscriptionStore.recordingLimitSeconds && appendRecorder.isRecording {
@@ -452,7 +471,7 @@ struct NoteDetailView: View {
     private var transcribingIndicator: some View {
         Text("Transcribing…")
             .font(.body)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.brand)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24)
             .phaseAnimator([false, true]) { content, pulse in
@@ -546,10 +565,12 @@ struct NoteDetailView: View {
             isFocused: $contentFocused,
             cursorPosition: $cursorPosition,
             highlightRange: $highlightRange,
+            preserveScroll: $preserveScroll,
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
             placeholder: "Start typing..."
         )
+        .opacity(contentOpacity)
     }
 
     private var keyboardVisible: Bool { contentFocused }
@@ -744,25 +765,22 @@ struct NoteDetailView: View {
 
     // MARK: - Typewriter
 
+    private func scrollToTop() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                scrollProxy?.scrollTo("scrollTop", anchor: .top)
+            }
+        }
+    }
+
     private func revealContent(_ text: String) {
         typewriterTask?.cancel()
-        editedContent = ""
-
-        typewriterTask = Task {
-            let characters = Array(text)
-            let total = characters.count
-            var charIndex = 0
-            while charIndex < total {
-                charIndex = min(charIndex + 3, total)
-                editedContent = String(characters[..<charIndex])
-                try? await Task.sleep(for: .milliseconds(2))
-                if Task.isCancelled { return }
-            }
-
-            if !Task.isCancelled {
-                editedContent = text
-                typewriterTask = nil
-            }
+        typewriterTask = nil
+        contentOpacity = 0
+        editedContent = text
+        scrollToTop()
+        withAnimation(.easeIn(duration: 0.5)) {
+            contentOpacity = 1
         }
     }
 
@@ -791,10 +809,21 @@ struct NoteDetailView: View {
         isRewriting = true
         Task {
             do {
+                // Map "action-items" tone to custom instructions
+                let rewriteTone: String?
+                let rewriteInstructions: String?
+                if tone == "action-items" {
+                    rewriteTone = nil
+                    rewriteInstructions = "Extract action items from this text. Start with the action items using checkboxes (☐ ) for each task, one per line. Then add two line breaks and include the original content below, cleaned up and organized using bullet points (• ) where appropriate. Do not use markdown formatting (no **, no ##, no backticks). Only use ☐ for action items and • for bullet points. Keep the same language as the original."
+                } else {
+                    rewriteTone = tone
+                    rewriteInstructions = instructions
+                }
+
                 let result = try await AIService.rewrite(
                     content: editedContent,
-                    tone: tone,
-                    customInstructions: instructions,
+                    tone: rewriteTone,
+                    customInstructions: rewriteInstructions,
                     language: note.language
                 )
                 var updated = note
@@ -813,22 +842,42 @@ struct NoteDetailView: View {
         }
     }
 
+    private func scheduleAutosave() {
+        autosaveTask?.cancel()
+        autosaveTask = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled, hasChanges else { return }
+            saveChanges()
+        }
+    }
+
     private func saveChanges() {
         var updated = note
         updated.title = editedTitle.isEmpty ? nil : editedTitle
         updated.content = editedContent
         updated.updatedAt = Date()
-        noteStore.updateNote(updated)
+        if isInStore {
+            noteStore.updateNote(updated)
+        } else {
+            withAnimation(.snappy) {
+                noteStore.addNote(updated)
+            }
+        }
     }
 
     private func restoreOriginal() {
         guard let original = note.originalContent else { return }
+        contentOpacity = 0
         editedContent = original
         var updated = note
         updated.content = original
         updated.originalContent = nil
         updated.updatedAt = Date()
         noteStore.updateNote(updated)
+        scrollToTop()
+        withAnimation(.easeIn(duration: 0.5)) {
+            contentOpacity = 1
+        }
     }
 
     private func buildShareText() -> String {
@@ -872,6 +921,7 @@ struct NoteDetailView: View {
     }
 
     private func insertPlaceholder(_ placeholder: String) {
+        preserveScroll = true
         let pos = min(appendInsertPosition, editedContent.count)
         let index = editedContent.index(editedContent.startIndex, offsetBy: pos)
         let before = editedContent[..<index]
@@ -896,6 +946,7 @@ struct NoteDetailView: View {
     }
 
     private func replacePlaceholder(with text: String) {
+        preserveScroll = true
         // Replace whichever placeholder is present
         for placeholder in [Self.transcribingPlaceholder, Self.recordingPlaceholder] {
             let nsContent = editedContent as NSString
@@ -924,6 +975,7 @@ struct NoteDetailView: View {
         isAppendTranscribing = true
 
         // Swap recording placeholder → transcribing placeholder
+        preserveScroll = true
         if editedContent.contains(Self.recordingPlaceholder) {
             editedContent = editedContent.replacingOccurrences(
                 of: Self.recordingPlaceholder,
@@ -1150,6 +1202,7 @@ private let toneGroups: [ToneGroup] = [
         RewriteTone(id: "sharpen", label: "Sharpen", emoji: "⚡"),
         RewriteTone(id: "structure", label: "Structure", emoji: "📋"),
         RewriteTone(id: "formalize", label: "Formalize", emoji: "👔"),
+        RewriteTone(id: "action-items", label: "Action Items", emoji: "☑️"),
     ]),
     ToneGroup(id: "playful", label: "Playful", tones: [
         RewriteTone(id: "flirty", label: "Flirty", emoji: "😘"),

@@ -44,6 +44,7 @@ private struct NoteUpdate: Encodable {
 @Observable
 final class NoteStore {
     var notes: [Note] = []
+    var deletedNotes: [Note] = []
     var categories: [Category] = []
     var selectedCategoryId: UUID?
     var isLoading = false
@@ -90,10 +91,23 @@ final class NoteStore {
         let fetched: [Note] = try await supabase
             .from("notes")
             .select()
+            .is("deleted_at", value: nil)
             .order("created_at", ascending: false)
             .execute()
             .value
         notes = fetched
+
+        let deleted: [Note] = try await supabase
+            .from("notes")
+            .select()
+            .not("deleted_at", operator: .is, value: Bool?.none)
+            .order("deleted_at", ascending: false)
+            .execute()
+            .value
+        deletedNotes = deleted
+
+        // Auto-purge notes deleted more than 30 days ago
+        await purgeExpiredNotes()
     }
 
     func fetchCategories() async throws {
@@ -154,7 +168,81 @@ final class NoteStore {
 
     func removeNote(id: UUID) {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
-        let removed = notes.remove(at: index)
+        var removed = notes.remove(at: index)
+        removed.deletedAt = Date()
+        deletedNotes.insert(removed, at: 0)
+
+        Task {
+            do {
+                let update = SoftDeleteUpdate(deletedAt: removed.deletedAt)
+                try await supabase
+                    .from("notes")
+                    .update(update)
+                    .eq("id", value: id)
+                    .execute()
+            } catch {
+                // Rollback on failure
+                removed.deletedAt = nil
+                deletedNotes.removeAll { $0.id == id }
+                notes.insert(removed, at: min(index, notes.count))
+            }
+        }
+    }
+
+    func removeNotes(ids: Set<UUID>) {
+        let now = Date()
+        var removed = notes.filter { ids.contains($0.id) }
+        notes.removeAll { ids.contains($0.id) }
+        for i in removed.indices { removed[i].deletedAt = now }
+        deletedNotes.insert(contentsOf: removed, at: 0)
+
+        Task {
+            do {
+                let update = SoftDeleteUpdate(deletedAt: now)
+                try await supabase
+                    .from("notes")
+                    .update(update)
+                    .in("id", values: Array(ids))
+                    .execute()
+            } catch {
+                // Rollback on failure
+                for i in removed.indices { removed[i].deletedAt = nil }
+                deletedNotes.removeAll { ids.contains($0.id) }
+                notes.append(contentsOf: removed)
+                notes.sort { $0.createdAt > $1.createdAt }
+            }
+        }
+    }
+
+    // MARK: - Restore & Purge
+
+    func restoreNote(id: UUID) {
+        guard let index = deletedNotes.firstIndex(where: { $0.id == id }) else { return }
+        var restored = deletedNotes.remove(at: index)
+        restored.deletedAt = nil
+        restored.updatedAt = Date()
+        notes.insert(restored, at: 0)
+        notes.sort { $0.createdAt > $1.createdAt }
+
+        Task {
+            do {
+                let update = SoftDeleteUpdate(deletedAt: nil)
+                try await supabase
+                    .from("notes")
+                    .update(update)
+                    .eq("id", value: id)
+                    .execute()
+            } catch {
+                // Rollback on failure
+                notes.removeAll { $0.id == id }
+                restored.deletedAt = Date()
+                deletedNotes.insert(restored, at: min(index, deletedNotes.count))
+            }
+        }
+    }
+
+    func permanentlyDeleteNote(id: UUID) {
+        deletedNotes.removeAll { $0.id == id }
 
         Task {
             do {
@@ -164,28 +252,30 @@ final class NoteStore {
                     .eq("id", value: id)
                     .execute()
             } catch {
-                // Rollback on failure
-                notes.insert(removed, at: min(index, notes.count))
+                logger.error("permanentlyDeleteNote failed: \(error)")
             }
         }
     }
 
-    func removeNotes(ids: Set<UUID>) {
-        let removed = notes.filter { ids.contains($0.id) }
-        notes.removeAll { ids.contains($0.id) }
+    private func purgeExpiredNotes() async {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        let expired = deletedNotes.filter { note in
+            guard let deletedAt = note.deletedAt else { return false }
+            return deletedAt < cutoff
+        }
+        guard !expired.isEmpty else { return }
 
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .delete()
-                    .in("id", values: Array(ids))
-                    .execute()
-            } catch {
-                // Rollback on failure
-                notes.append(contentsOf: removed)
-                notes.sort { $0.createdAt > $1.createdAt }
-            }
+        let expiredIds = expired.map(\.id)
+        deletedNotes.removeAll { expiredIds.contains($0.id) }
+
+        do {
+            try await supabase
+                .from("notes")
+                .delete()
+                .in("id", values: expiredIds)
+                .execute()
+        } catch {
+            logger.error("purgeExpiredNotes failed: \(error)")
         }
     }
 
@@ -423,6 +513,14 @@ private struct NoteCategoryUpdate: Encodable {
     enum CodingKeys: String, CodingKey {
         case categoryId = "category_id"
         case updatedAt = "updated_at"
+    }
+}
+
+private struct SoftDeleteUpdate: Encodable {
+    let deletedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case deletedAt = "deleted_at"
     }
 }
 

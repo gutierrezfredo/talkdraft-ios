@@ -14,6 +14,7 @@ struct Note: Identifiable, Codable, Hashable, Sendable {
     var durationSeconds: Int?
     let createdAt: Date
     var updatedAt: Date
+    var deletedAt: Date?
 
     enum NoteSource: String, Codable, Sendable {
         case voice
@@ -34,5 +35,6 @@ struct Note: Identifiable, Codable, Hashable, Sendable {
         case durationSeconds = "duration_seconds"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
     }
 }

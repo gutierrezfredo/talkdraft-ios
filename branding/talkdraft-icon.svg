@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+  <defs>
+    <linearGradient id="capsuleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(255,255,255,1)"/>
+      <stop offset="60%" style="stop-color:rgba(255,255,255,0.92)"/>
+      <stop offset="100%" style="stop-color:rgba(220,210,245,0.85)"/>
+    </linearGradient>
+    <linearGradient id="stemGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(255,255,255,0.95)"/>
+      <stop offset="100%" style="stop-color:rgba(210,200,240,0.85)"/>
+    </linearGradient>
+    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(255,255,255,0.95)"/>
+      <stop offset="100%" style="stop-color:rgba(220,210,245,0.8)"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-10%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="rgba(30,20,80,0.35)"/>
+    </filter>
+    <clipPath id="capsuleClip">
+      <rect x="30" y="2" width="40" height="50" rx="20"/>
+    </clipPath>
+  </defs>
+  <!-- Default: Solid dark purple -->
+  <rect width="100" height="100" fill="#6D28D9"/>
+  <g transform="translate(50, 46) scale(0.62) translate(-50, -50)" filter="url(#shadow)">
+    <rect x="30" y="2" width="40" height="50" rx="20" fill="url(#capsuleGrad)"/>
+    <g clip-path="url(#capsuleClip)">
+      <ellipse cx="50" cy="5" rx="22" ry="16" fill="rgba(255,255,255,0.45)"/>
+    </g>
+    <line x1="39" y1="15" x2="61" y2="15" stroke="#6D28D9" stroke-width="2.5" opacity=".2" stroke-linecap="round"/>
+    <line x1="39" y1="23" x2="61" y2="23" stroke="#6D28D9" stroke-width="2.5" opacity=".3" stroke-linecap="round"/>
+    <line x1="39" y1="31" x2="61" y2="31" stroke="#6D28D9" stroke-width="2.5" opacity=".2" stroke-linecap="round"/>
+    <path d="M26 40 Q26 62, 50 62 Q74 62, 74 40" fill="none" stroke="url(#arcGrad)" stroke-width="5.5" stroke-linecap="round"/>
+    <rect x="46" y="62" width="8" height="28" rx="2" fill="url(#stemGrad)"/>
+    <polygon points="44,90 56,90 50,112" fill="url(#stemGrad)"/>
+    <line x1="50" y1="94" x2="50" y2="108" stroke="#6D28D9" stroke-width="1.4" opacity=".25"/>
+    <path d="M20 16 Q14 26, 20 36" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M80 16 Q86 26, 80 36" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M12 10 Q3 26, 12 42" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" stroke-linecap="round"/>
+    <path d="M88 10 Q97 26, 88 42" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

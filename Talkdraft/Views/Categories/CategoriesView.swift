@@ -155,6 +155,7 @@ struct CategoryFormSheet: View {
     @State private var name: String = ""
     @State private var selectedColor: String = "#3B82F6"
     @State private var isSaving = false
+    @State private var showDeleteConfirmation = false
     @FocusState private var isNameFocused: Bool
 
     private let colorOptions: [(String, String)] = [
@@ -251,6 +252,36 @@ struct CategoryFormSheet: View {
                         .clipShape(RoundedRectangle(cornerRadius: 24))
                     }
 
+                    // MARK: - Delete
+
+                    if case .edit(let category) = mode {
+                        Button {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Text("Delete Category")
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .confirmationDialog(
+                            "Delete Category",
+                            isPresented: $showDeleteConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete", role: .destructive) {
+                                withAnimation(.snappy) {
+                                    noteStore.removeCategory(id: category.id)
+                                }
+                                dismiss()
+                            }
+                        } message: {
+                            let count = noteStore.notes.filter { $0.categoryId == category.id }.count
+                            Text("This will unassign \(count) note\(count == 1 ? "" : "s") from this category. Notes won't be deleted.")
+                        }
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)

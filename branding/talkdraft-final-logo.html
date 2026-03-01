@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Talkdraft — Final Logo</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: #F5F3FF;
+    min-height: 100vh;
+    padding: 48px 24px;
+  }
+
+  .showcase { max-width: 960px; margin: 0 auto; }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #7C3AED;
+    margin-bottom: 16px;
+    padding-left: 4px;
+  }
+
+  .section-desc {
+    font-size: 14px;
+    color: #9CA3AF;
+    margin-bottom: 20px;
+    padding-left: 4px;
+    line-height: 1.5;
+  }
+
+  .section { margin-bottom: 52px; }
+
+  .card-row { display: flex; gap: 20px; flex-wrap: wrap; }
+
+  .card {
+    border-radius: 24px;
+    padding: 56px 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-width: 280px;
+  }
+
+  .card.light { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.03), 0 8px 32px rgba(79,70,229,0.06); }
+  .card.dark { background: #0F0D2E; }
+  .card.gradient { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #A855F7 100%); }
+
+  .logo { display: flex; align-items: center; gap: 20px; }
+  .logo.stacked { flex-direction: column; gap: 12px; text-align: center; }
+
+  .logo-text { display: flex; flex-direction: column; gap: 2px; }
+  .logo.stacked .logo-text { align-items: center; }
+
+  .logo-wordmark {
+    font-size: 42px;
+    line-height: 1;
+    letter-spacing: -1.5px;
+    white-space: nowrap;
+  }
+  .logo-wordmark .talk { font-weight: 700; }
+  .logo-wordmark .draft { font-weight: 300; }
+
+  .logo-tagline {
+    font-size: 9.5px;
+    letter-spacing: 3px;
+    font-weight: 400;
+    margin-top: 4px;
+  }
+
+  .theme-light .talk { color: #1E1B4B; }
+  .theme-light .draft { color: #6D28D9; }
+  .theme-light .logo-tagline { color: #B0B8C4; }
+
+  .theme-dark .talk { color: #FFFFFF; }
+  .theme-dark .draft { color: #A78BFA; }
+  .theme-dark .logo-tagline { color: #555B6E; }
+
+  .theme-white .talk { color: #FFFFFF; }
+  .theme-white .draft { color: rgba(255,255,255,0.75); }
+  .theme-white .logo-tagline { color: rgba(255,255,255,0.5); }
+
+  /* App icons row */
+  .icon-grid {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .icon-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .icon-item span {
+    font-size: 11px;
+    color: #9CA3AF;
+    letter-spacing: 1px;
+  }
+  .icon-box {
+    border-radius: 22%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(79,70,229,0.15);
+  }
+  .icon-box.default { background: #6D28D9; }
+  .icon-box.dark { background: #0F0D2E; }
+  .icon-box.tinted { background: #000; }
+
+  @media (max-width: 700px) {
+    .card-row { flex-direction: column; }
+    .card { padding: 40px 28px; }
+    .logo-wordmark { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="showcase">
+
+  <!-- ======= PRIMARY HORIZONTAL ======= -->
+  <div class="section">
+    <div class="section-label">Primary — Horizontal</div>
+    <div class="card-row">
+      <div class="card light">
+        <div class="logo theme-light">
+          <svg width="56" height="68" viewBox="0 0 100 115">
+            <defs>
+              <linearGradient id="mg1" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#4F46E5"/>
+                <stop offset="100%" style="stop-color:#7C3AED"/>
+              </linearGradient>
+            </defs>
+            <rect x="30" y="2" width="40" height="50" rx="20" fill="url(#mg1)"/>
+            <line x1="39" y1="15" x2="61" y2="15" stroke="#fff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <line x1="39" y1="23" x2="61" y2="23" stroke="#fff" stroke-width="2.2" opacity=".5" stroke-linecap="round"/>
+            <line x1="39" y1="31" x2="61" y2="31" stroke="#fff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <path d="M26 40 Q26 62, 50 62 Q74 62, 74 40" fill="none" stroke="url(#mg1)" stroke-width="5" stroke-linecap="round"/>
+            <rect x="46" y="62" width="8" height="28" rx="2" fill="url(#mg1)"/>
+            <polygon points="44,90 56,90 50,112" fill="url(#mg1)"/>
+            <line x1="50" y1="94" x2="50" y2="108" stroke="#F5F3FF" stroke-width="1.4" opacity=".55"/>
+            <path d="M20 16 Q14 26, 20 36" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M12 10 Q3 26, 12 42" fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+            <path d="M80 16 Q86 26, 80 36" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M88 10 Q97 26, 88 42" fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+          </svg>
+          <div class="logo-text">
+            <div class="logo-wordmark"><span class="talk">Talk</span><span class="draft">draft</span></div>
+            <div class="logo-tagline">SPEAK · TRANSCRIBE · REFINE</div>
+          </div>
+        </div>
+      </div>
+      <div class="card dark">
+        <div class="logo theme-dark">
+          <svg width="56" height="68" viewBox="0 0 100 115">
+            <defs>
+              <linearGradient id="mg2" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#818CF8"/>
+                <stop offset="100%" style="stop-color:#A78BFA"/>
+              </linearGradient>
+            </defs>
+            <rect x="30" y="2" width="40" height="50" rx="20" fill="url(#mg2)"/>
+            <line x1="39" y1="15" x2="61" y2="15" stroke="#0F0D2E" stroke-width="2.2" opacity=".25" stroke-linecap="round"/>
+            <line x1="39" y1="23" x2="61" y2="23" stroke="#0F0D2E" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <line x1="39" y1="31" x2="61" y2="31" stroke="#0F0D2E" stroke-width="2.2" opacity=".25" stroke-linecap="round"/>
+            <path d="M26 40 Q26 62, 50 62 Q74 62, 74 40" fill="none" stroke="url(#mg2)" stroke-width="5" stroke-linecap="round"/>
+            <rect x="46" y="62" width="8" height="28" rx="2" fill="url(#mg2)"/>
+            <polygon points="44,90 56,90 50,112" fill="url(#mg2)"/>
+            <line x1="50" y1="94" x2="50" y2="108" stroke="#0F0D2E" stroke-width="1.4" opacity=".35"/>
+            <path d="M20 16 Q14 26, 20 36" fill="none" stroke="#6366F1" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M12 10 Q3 26, 12 42" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+            <path d="M80 16 Q86 26, 80 36" fill="none" stroke="#6366F1" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M88 10 Q97 26, 88 42" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+          </svg>
+          <div class="logo-text">
+            <div class="logo-wordmark"><span class="talk">Talk</span><span class="draft">draft</span></div>
+            <div class="logo-tagline">SPEAK · TRANSCRIBE · REFINE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= ON GRADIENT ======= -->
+  <div class="section">
+    <div class="section-label">On Brand Gradient</div>
+    <div class="card-row">
+      <div class="card gradient">
+        <div class="logo theme-white">
+          <svg width="56" height="68" viewBox="0 0 100 115">
+            <rect x="30" y="2" width="40" height="50" rx="20" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
+            <line x1="39" y1="15" x2="61" y2="15" stroke="#fff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <line x1="39" y1="23" x2="61" y2="23" stroke="#fff" stroke-width="2.2" opacity=".5" stroke-linecap="round"/>
+            <line x1="39" y1="31" x2="61" y2="31" stroke="#fff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <path d="M26 40 Q26 62, 50 62 Q74 62, 74 40" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="5" stroke-linecap="round"/>
+            <rect x="46" y="62" width="8" height="28" rx="2" fill="rgba(255,255,255,0.6)"/>
+            <polygon points="44,90 56,90 50,112" fill="rgba(255,255,255,0.6)"/>
+            <line x1="50" y1="94" x2="50" y2="108" stroke="#7C3AED" stroke-width="1.4" opacity=".3"/>
+            <path d="M20 16 Q14 26, 20 36" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" opacity=".3"/>
+            <path d="M12 10 Q3 26, 12 42" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".15"/>
+            <path d="M80 16 Q86 26, 80 36" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" opacity=".3"/>
+            <path d="M88 10 Q97 26, 88 42" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".15"/>
+          </svg>
+          <div class="logo-text">
+            <div class="logo-wordmark"><span class="talk">Talk</span><span class="draft">draft</span></div>
+            <div class="logo-tagline">SPEAK · TRANSCRIBE · REFINE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= STACKED VERSION ======= -->
+  <div class="section">
+    <div class="section-label">Stacked</div>
+    <div class="card-row">
+      <div class="card light" style="padding: 52px 40px;">
+        <div class="logo stacked theme-light">
+          <svg width="64" height="78" viewBox="0 0 100 115">
+            <defs>
+              <linearGradient id="mg3" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#4F46E5"/>
+                <stop offset="100%" style="stop-color:#7C3AED"/>
+              </linearGradient>
+            </defs>
+            <rect x="30" y="2" width="40" height="50" rx="20" fill="url(#mg3)"/>
+            <line x1="39" y1="15" x2="61" y2="15" stroke="#fff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <line x1="39" y1="23" x2="61" y2="23" stroke="#fff" stroke-width="2.2" opacity=".5" stroke-linecap="round"/>
+            <line x1="39" y1="31" x2="61" y2="31" stroke="#fff" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <path d="M26 40 Q26 62, 50 62 Q74 62, 74 40" fill="none" stroke="url(#mg3)" stroke-width="5" stroke-linecap="round"/>
+            <rect x="46" y="62" width="8" height="28" rx="2" fill="url(#mg3)"/>
+            <polygon points="44,90 56,90 50,112" fill="url(#mg3)"/>
+            <line x1="50" y1="94" x2="50" y2="108" stroke="#F5F3FF" stroke-width="1.4" opacity=".55"/>
+            <path d="M20 16 Q14 26, 20 36" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M12 10 Q3 26, 12 42" fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+            <path d="M80 16 Q86 26, 80 36" fill="none" stroke="#A78BFA" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M88 10 Q97 26, 88 42" fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+          </svg>
+          <div class="logo-text">
+            <div class="logo-wordmark"><span class="talk">Talk</span><span class="draft">draft</span></div>
+            <div class="logo-tagline">SPEAK · TRANSCRIBE · REFINE</div>
+          </div>
+        </div>
+      </div>
+      <div class="card dark" style="padding: 52px 40px;">
+        <div class="logo stacked theme-dark">
+          <svg width="64" height="78" viewBox="0 0 100 115">
+            <defs>
+              <linearGradient id="mg4" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#818CF8"/>
+                <stop offset="100%" style="stop-color:#A78BFA"/>
+              </linearGradient>
+            </defs>
+            <rect x="30" y="2" width="40" height="50" rx="20" fill="url(#mg4)"/>
+            <line x1="39" y1="15" x2="61" y2="15" stroke="#0F0D2E" stroke-width="2.2" opacity=".25" stroke-linecap="round"/>
+            <line x1="39" y1="23" x2="61" y2="23" stroke="#0F0D2E" stroke-width="2.2" opacity=".35" stroke-linecap="round"/>
+            <line x1="39" y1="31" x2="61" y2="31" stroke="#0F0D2E" stroke-width="2.2" opacity=".25" stroke-linecap="round"/>
+            <path d="M26 40 Q26 62, 50 62 Q74 62, 74 40" fill="none" stroke="url(#mg4)" stroke-width="5" stroke-linecap="round"/>
+            <rect x="46" y="62" width="8" height="28" rx="2" fill="url(#mg4)"/>
+            <polygon points="44,90 56,90 50,112" fill="url(#mg4)"/>
+            <line x1="50" y1="94" x2="50" y2="108" stroke="#0F0D2E" stroke-width="1.4" opacity=".35"/>
+            <path d="M20 16 Q14 26, 20 36" fill="none" stroke="#6366F1" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M12 10 Q3 26, 12 42" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+            <path d="M80 16 Q86 26, 80 36" fill="none" stroke="#6366F1" stroke-width="2.8" stroke-linecap="round" opacity=".45"/>
+            <path d="M88 10 Q97 26, 88 42" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" opacity=".25"/>
+          </svg>
+          <div class="logo-text">
+            <div class="logo-wordmark"><span class="talk">Talk</span><span class="draft">draft</span></div>
+            <div class="logo-tagline">SPEAK · TRANSCRIBE · REFINE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= APP ICONS ======= -->
+  <div class="section">
+    <div class="section-label">App Icons</div>
+    <div class="section-desc">Final 3D variants with glossy highlights and drop shadows. Default (solid purple), Dark (near-black navy), Tinted (Apple HIG grayscale).</div>
+    <div class="card-row">
+      <div class="card light" style="padding: 48px 40px;">
+        <div class="icon-grid">
+
+          <!-- Default -->
+          <div class="icon-item">
+            <img src="talkdraft-icon-default.png" style="width:96px; height:96px; border-radius:22%; box-shadow: 0 4px 20px rgba(79,70,229,0.15);">
+            <span>Default</span>
+          </div>
+
+          <!-- Dark -->
+          <div class="icon-item">
+            <img src="talkdraft-icon-dark.png" style="width:96px; height:96px; border-radius:22%; box-shadow: 0 4px 20px rgba(79,70,229,0.15);">
+            <span>Dark</span>
+          </div>
+
+          <!-- Tinted -->
+          <div class="icon-item">
+            <img src="talkdraft-icon-tinted.png" style="width:96px; height:96px; border-radius:22%; box-shadow: 0 4px 20px rgba(79,70,229,0.15);">
+            <span>Tinted</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= WORDMARK ONLY ======= -->
+  <div class="section">
+    <div class="section-label">Wordmark Only</div>
+    <div class="card-row">
+      <div class="card light" style="padding: 44px 60px;">
+        <div class="theme-light" style="text-align:center;">
+          <div class="logo-wordmark" style="font-size:52px;"><span class="talk">Talk</span><span class="draft">draft</span></div>
+        </div>
+      </div>
+      <div class="card dark" style="padding: 44px 60px;">
+        <div class="theme-dark" style="text-align:center;">
+          <div class="logo-wordmark" style="font-size:52px;"><span class="talk">Talk</span><span class="draft">draft</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

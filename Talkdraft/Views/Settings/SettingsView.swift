@@ -1,7 +1,10 @@
+import AVFoundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(AuthStore.self) private var authStore
+    @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
@@ -11,6 +14,8 @@ struct SettingsView: View {
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
     @State private var showPaywall = false
+    @State private var showAudioImporter = false
+    @State private var importedNote: Note?
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -95,6 +100,40 @@ struct SettingsView: View {
                             icon: "circle.lefthalf.filled",
                             title: "Appearance",
                             value: settingsStore.theme.displayName
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // MARK: - Tools
+
+                SettingsSection("Tools") {
+                    Button {
+                        if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                            showPaywall = true
+                        } else {
+                            showAudioImporter = true
+                        }
+                    } label: {
+                        SettingsRow(
+                            icon: "waveform.badge.plus",
+                            title: "Import Audio",
+                            showChevron: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // MARK: - Recently Deleted
+
+                SettingsSection("Recently Deleted") {
+                    NavigationLink {
+                        RecentlyDeletedView()
+                    } label: {
+                        SettingsRow(
+                            icon: "trash",
+                            title: "Recently Deleted",
+                            value: noteStore.deletedNotes.isEmpty ? nil : "\(noteStore.deletedNotes.count)"
                         )
                     }
                     .buttonStyle(.plain)
@@ -203,6 +242,16 @@ struct SettingsView: View {
         .background(backgroundColor.ignoresSafeArea())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $importedNote) { note in
+            NoteDetailView(note: note)
+        }
+        .fileImporter(
+            isPresented: $showAudioImporter,
+            allowedContentTypes: [.audio],
+            allowsMultipleSelection: false
+        ) { result in
+            handleAudioImport(result)
+        }
         .sheet(isPresented: $showPaywall) {
             PaywallView()
         }
@@ -268,20 +317,56 @@ struct SettingsView: View {
         return "\(version) (\(build))"
     }
 
-    private func languageDisplayName(_ code: String) -> String {
-        switch code {
-        case "auto": "Auto-detect"
-        case "en": "English"
-        case "es": "Spanish"
-        case "fr": "French"
-        case "de": "German"
-        case "pt": "Portuguese"
-        case "it": "Italian"
-        case "ja": "Japanese"
-        case "ko": "Korean"
-        case "zh": "Chinese"
-        default: code
+    private func handleAudioImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let sourceURL = urls.first else { return }
+        guard sourceURL.startAccessingSecurityScopedResource() else { return }
+        defer { sourceURL.stopAccessingSecurityScopedResource() }
+
+        let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Recordings", isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+
+            let fileName = "\(UUID().uuidString).\(sourceURL.pathExtension)"
+            let destinationURL = recordingsDir.appendingPathComponent(fileName)
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+
+            let asset = AVURLAsset(url: destinationURL)
+            let duration = CMTimeGetSeconds(asset.duration)
+
+            let noteId = UUID()
+            let note = Note(
+                id: noteId,
+                userId: authStore.userId,
+                categoryId: nil,
+                title: sourceURL.deletingPathExtension().lastPathComponent,
+                content: "Transcribing…",
+                source: .voice,
+                audioUrl: destinationURL.path,
+                durationSeconds: duration.isFinite ? Int(duration) : nil,
+                createdAt: .now,
+                updatedAt: .now
+            )
+
+            withAnimation(.snappy) {
+                noteStore.addNote(note)
+            }
+
+            importedNote = note
+
+            let language = settingsStore.language == "auto" ? nil : settingsStore.language
+            let userId = authStore.userId
+            noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
+        } catch {
+            noteStore.lastError = "Failed to import audio file"
         }
+    }
+
+    private func languageDisplayName(_ code: String) -> String {
+        if code == "auto" { return "Auto-detect" }
+        let locale = Locale(identifier: "en")
+        return locale.localizedString(forLanguageCode: code) ?? code
     }
 }
 
@@ -376,15 +461,63 @@ private struct LanguagePickerView: View {
 
     private let languages: [(String, String)] = [
         ("auto", "Auto-detect"),
+        ("af", "Afrikaans"),
+        ("ar", "Arabic"),
+        ("hy", "Armenian"),
+        ("az", "Azerbaijani"),
+        ("be", "Belarusian"),
+        ("bs", "Bosnian"),
+        ("bg", "Bulgarian"),
+        ("ca", "Catalan"),
+        ("zh", "Chinese"),
+        ("hr", "Croatian"),
+        ("cs", "Czech"),
+        ("da", "Danish"),
+        ("nl", "Dutch"),
         ("en", "English"),
-        ("es", "Spanish"),
+        ("et", "Estonian"),
+        ("fi", "Finnish"),
         ("fr", "French"),
+        ("gl", "Galician"),
         ("de", "German"),
-        ("pt", "Portuguese"),
+        ("el", "Greek"),
+        ("he", "Hebrew"),
+        ("hi", "Hindi"),
+        ("hu", "Hungarian"),
+        ("is", "Icelandic"),
+        ("id", "Indonesian"),
         ("it", "Italian"),
         ("ja", "Japanese"),
+        ("kn", "Kannada"),
+        ("kk", "Kazakh"),
         ("ko", "Korean"),
-        ("zh", "Chinese"),
+        ("lv", "Latvian"),
+        ("lt", "Lithuanian"),
+        ("mk", "Macedonian"),
+        ("ms", "Malay"),
+        ("mr", "Marathi"),
+        ("mi", "Maori"),
+        ("ne", "Nepali"),
+        ("no", "Norwegian"),
+        ("fa", "Persian"),
+        ("pl", "Polish"),
+        ("pt", "Portuguese"),
+        ("ro", "Romanian"),
+        ("ru", "Russian"),
+        ("sr", "Serbian"),
+        ("sk", "Slovak"),
+        ("sl", "Slovenian"),
+        ("es", "Spanish"),
+        ("sw", "Swahili"),
+        ("sv", "Swedish"),
+        ("tl", "Tagalog"),
+        ("ta", "Tamil"),
+        ("th", "Thai"),
+        ("tr", "Turkish"),
+        ("uk", "Ukrainian"),
+        ("ur", "Urdu"),
+        ("vi", "Vietnamese"),
+        ("cy", "Welsh"),
     ]
 
     var body: some View {

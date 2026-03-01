@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 enum NoteSortOrder: String, CaseIterable {
     case updatedAt = "Last Updated"
     case createdAt = "Creation Date"
+    case uncategorized = "Uncategorized First"
+    case actionItems = "Action Items First"
 }
 
 struct HomeView: View {
@@ -24,6 +26,7 @@ struct HomeView: View {
     @State private var selectedIds: Set<UUID> = []
     @State private var showDeleteConfirmation = false
     @State private var showCategoryPicker = false
+
     @State private var showAudioImporter = false
     @State private var showAddCategory = false
     @State private var editingCategory: Category?
@@ -31,6 +34,7 @@ struct HomeView: View {
     @State private var pendingNote: Note?
     @State private var keyboardHeight: CGFloat = 0
     @State private var showPaywall = false
+    @State private var draggingCategory: Category?
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
 
@@ -49,12 +53,6 @@ struct HomeView: View {
                 // Main content
                 ScrollView {
                     VStack(spacing: 12) {
-                        // Greeting (hidden when searching or selecting)
-                        if !isSearching && !isSelecting {
-                            greeting
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-
                         // Category chips
                         categoryChips
 
@@ -143,9 +141,16 @@ struct HomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
-                        Picker("Sort by", selection: $sortOrder) {
-                            ForEach(NoteSortOrder.allCases, id: \.self) { order in
-                                Text(order.rawValue)
+                        Section {
+                            Picker("Sort by", selection: $sortOrder) {
+                                Text(NoteSortOrder.updatedAt.rawValue).tag(NoteSortOrder.updatedAt)
+                                Text(NoteSortOrder.createdAt.rawValue).tag(NoteSortOrder.createdAt)
+                            }
+                        }
+                        Section {
+                            Picker("Sort by", selection: $sortOrder) {
+                                Text(NoteSortOrder.uncategorized.rawValue).tag(NoteSortOrder.uncategorized)
+                                Text(NoteSortOrder.actionItems.rawValue).tag(NoteSortOrder.actionItems)
                             }
                         }
                     } label: {
@@ -229,41 +234,6 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Greeting
-
-    private var greeting: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            Text("Say it ")
-            Text("messy")
-                .foregroundStyle(.secondary)
-                .overlay(alignment: .bottom) {
-                    ScribbleUnderline()
-                        .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                        .foregroundStyle(.secondary.opacity(0.5))
-                        .frame(height: 8)
-                        .offset(y: 4)
-                }
-            Text(".  ")
-                .foregroundStyle(.secondary)
-            Text("Read it ")
-            Text("clean")
-                .foregroundStyle(Color.brand)
-                .overlay(alignment: .bottom) {
-                    SmoothArcUnderline()
-                        .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .foregroundStyle(Color.brand)
-                        .frame(height: 5)
-                        .offset(y: 2)
-                }
-        }
-        .font(.title3)
-        .fontWeight(.semibold)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-    }
-
     // MARK: - Category Chips
 
     private var categoryChips: some View {
@@ -289,18 +259,16 @@ struct HomeView: View {
                                 selectedCategory = selectedCategory == category.id ? nil : category.id
                             }
                         }
-                        .contextMenu {
-                            Button {
-                                editingCategory = category
-                            } label: {
-                                Label("Edit Category", systemImage: "pencil")
-                            }
-                            Button(role: .destructive) {
-                                categoryToDelete = category
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
+                        .onDrag {
+                            draggingCategory = category
+                            return NSItemProvider(object: category.id.uuidString as NSString)
                         }
+                        .onDrop(of: [.text], delegate: CategoryReorderDelegate(
+                            target: category,
+                            categories: noteStore.categories,
+                            dragging: $draggingCategory,
+                            onMove: { noteStore.moveCategory(from: $0, to: $1) }
+                        ))
                         .id(category.id.uuidString)
                     }
 
@@ -410,38 +378,44 @@ struct HomeView: View {
 
     private var floatingButtons: some View {
         HStack(spacing: 40) {
-            // Upload audio button (left)
+            // Create text note button (left)
             Button {
                 if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
                     showPaywall = true
                 } else {
-                    showAudioImporter = true
+                    createTextNote()
                 }
             } label: {
-                Image(systemName: "icloud.and.arrow.up")
+                Image(systemName: "pencil")
                     .fontWeight(.medium)
                     .frame(width: 56, height: 56)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
 
-            // Record button (center)
-            Button {
-                if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
-                    showPaywall = true
-                } else {
-                    showRecordView = true
+            // Record button (center) — long-press to import audio
+            Image(systemName: "mic.fill")
+                .font(.title)
+                .foregroundStyle(.white)
+                .frame(width: 72, height: 72)
+                .background(Circle().fill(Color.brand))
+                .glassEffect(.regular.interactive(), in: .circle)
+                .onTapGesture {
+                    if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                        showPaywall = true
+                    } else {
+                        showRecordView = true
+                    }
                 }
-            } label: {
-                Image(systemName: "mic.fill")
-                    .font(.title)
-                    .foregroundStyle(.white)
-                    .frame(width: 72, height: 72)
-                    .background(Circle().fill(Color.brand))
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-            .matchedTransitionSource(id: "record", in: namespace)
+                .onLongPressGesture {
+                    if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                        showPaywall = true
+                    } else {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        showAudioImporter = true
+                    }
+                }
+                .matchedTransitionSource(id: "record", in: namespace)
 
             // Search button (right)
             Button {
@@ -488,7 +462,7 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .frame(height: 56)
+            .frame(height: 44)
             .glassEffect(.regular, in: .capsule)
 
             Button {
@@ -499,10 +473,10 @@ struct HomeView: View {
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.title3)
+                    .font(.body)
                     .fontWeight(.medium)
                     .foregroundStyle(.primary)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 44, height: 44)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
@@ -669,7 +643,6 @@ struct HomeView: View {
             let destinationURL = recordingsDir.appendingPathComponent(fileName)
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
 
-            // Get audio duration
             let asset = AVURLAsset(url: destinationURL)
             let duration = CMTimeGetSeconds(asset.duration)
 
@@ -693,13 +666,27 @@ struct HomeView: View {
 
             selectedNote = note
 
-            // Transcribe in background
             let language = settingsStore.language == "auto" ? nil : settingsStore.language
             let userId = authStore.userId
             noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
         } catch {
             noteStore.lastError = "Failed to import audio file"
         }
+    }
+
+    private func createTextNote() {
+        let note = Note(
+            id: UUID(),
+            userId: authStore.userId,
+            categoryId: selectedCategory,
+            title: nil,
+            content: "",
+            source: .text,
+            createdAt: .now,
+            updatedAt: .now
+        )
+
+        selectedNote = note
     }
 
     private var bottomSafeArea: CGFloat {
@@ -763,53 +750,48 @@ struct HomeView: View {
 
         return notes.sorted {
             switch sortOrder {
-            case .updatedAt: $0.updatedAt > $1.updatedAt
-            case .createdAt: $0.createdAt > $1.createdAt
+            case .updatedAt: return $0.updatedAt > $1.updatedAt
+            case .createdAt: return $0.createdAt > $1.createdAt
+            case .uncategorized:
+                if ($0.categoryId == nil) != ($1.categoryId == nil) {
+                    return $0.categoryId == nil
+                }
+                return $0.updatedAt > $1.updatedAt
+            case .actionItems:
+                let aHas = $0.content.contains("☐") || $0.content.contains("☑")
+                let bHas = $1.content.contains("☐") || $1.content.contains("☑")
+                if aHas != bHas { return aHas }
+                return $0.updatedAt > $1.updatedAt
             }
         }
     }
 }
 
-// MARK: - Greeting Underlines
+// MARK: - Category Reorder
 
-private struct ScribbleUnderline: Shape {
-    func path(in rect: CGRect) -> Path {
-        let w = rect.width
-        let h = rect.height
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: h * 0.5))
-        path.addCurve(
-            to: CGPoint(x: w * 0.2, y: h * 0.35),
-            control1: CGPoint(x: w * 0.05, y: h * 0.7),
-            control2: CGPoint(x: w * 0.12, y: h * 0.2)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.45, y: h * 0.65),
-            control1: CGPoint(x: w * 0.28, y: h * 0.45),
-            control2: CGPoint(x: w * 0.35, y: h * 0.75)
-        )
-        path.addCurve(
-            to: CGPoint(x: w * 0.7, y: h * 0.3),
-            control1: CGPoint(x: w * 0.55, y: h * 0.55),
-            control2: CGPoint(x: w * 0.62, y: h * 0.2)
-        )
-        path.addCurve(
-            to: CGPoint(x: w, y: h * 0.5),
-            control1: CGPoint(x: w * 0.78, y: h * 0.4),
-            control2: CGPoint(x: w * 0.9, y: h * 0.7)
-        )
-        return path
+private struct CategoryReorderDelegate: DropDelegate {
+    let target: Category
+    let categories: [Category]
+    @Binding var dragging: Category?
+    let onMove: (IndexSet, Int) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging,
+              dragging.id != target.id,
+              let fromIndex = categories.firstIndex(where: { $0.id == dragging.id }),
+              let toIndex = categories.firstIndex(where: { $0.id == target.id }) else { return }
+
+        withAnimation(.snappy) {
+            onMove(IndexSet(integer: fromIndex), toIndex > fromIndex ? toIndex + 1 : toIndex)
+        }
     }
-}
 
-private struct SmoothArcUnderline: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: rect.height))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.width, y: rect.height),
-            control: CGPoint(x: rect.width * 0.5, y: 0)
-        )
-        return path
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
     }
 }

@@ -18,12 +18,36 @@ struct NoteCard: View {
             .blended(opacity: 0.14, isDark: isDark)
     }
 
+    private var actionItemCounts: (completed: Int, total: Int)? {
+        let checked = note.content.filter { $0 == "☑" }.count
+        let unchecked = note.content.filter { $0 == "☐" }.count
+        let total = checked + unchecked
+        guard total > 0 else { return nil }
+        return (checked, total)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Date
-            Text(note.createdAt, style: .relative)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            // Date & action items
+            HStack(spacing: 4) {
+                Text(note.createdAt, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                if let counts = actionItemCounts {
+                    Text("·")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 2) {
+                        Image(systemName: counts.completed == counts.total ? "checkmark.circle.fill" : "circle")
+                        Text("\(counts.completed)/\(counts.total)")
+                    }
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundStyle(counts.completed == counts.total ? .secondary : Color.brand)
+                }
+            }
 
             // Title
             if let title = note.title, !title.isEmpty {
