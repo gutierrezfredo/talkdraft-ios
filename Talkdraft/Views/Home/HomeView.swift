@@ -91,15 +91,18 @@ struct HomeView: View {
                                 .padding(.horizontal, 12)
                             }
 
-                            // Fill remaining space
-                            Color.clear
-                                .frame(maxWidth: .infinity, minHeight: 300)
+                            // Fill remaining space (only when notes exist, to enable swipe gesture)
+                            if !filteredNotes.isEmpty {
+                                Color.clear
+                                    .frame(maxWidth: .infinity, minHeight: 300)
+                            }
                         }
                         .contentShape(Rectangle())
                         .simultaneousGesture(categorySwipeGesture)
                     }
                     .padding(.bottom, 120)
                 }
+                .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
                 .scrollDismissesKeyboard(.interactively)
                 .refreshable {
                     await noteStore.refresh()

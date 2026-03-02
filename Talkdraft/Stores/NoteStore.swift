@@ -202,7 +202,7 @@ final class NoteStore {
                 try await supabase
                     .from("notes")
                     .update(update)
-                    .in("id", values: Array(ids))
+                    .in("id", values: ids.map(\.uuidString))
                     .execute()
             } catch {
                 // Rollback on failure
@@ -272,7 +272,7 @@ final class NoteStore {
             try await supabase
                 .from("notes")
                 .delete()
-                .in("id", values: expiredIds)
+                .in("id", values: expiredIds.map(\.uuidString))
                 .execute()
         } catch {
             logger.error("purgeExpiredNotes failed: \(error)")
@@ -293,7 +293,7 @@ final class NoteStore {
                 try await supabase
                     .from("notes")
                     .update(update)
-                    .in("id", values: Array(ids))
+                    .in("id", values: ids.map(\.uuidString))
                     .execute()
             } catch {
                 // Rollback on failure

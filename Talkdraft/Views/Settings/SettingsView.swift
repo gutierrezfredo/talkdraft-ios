@@ -1,4 +1,5 @@
 import AVFoundation
+import StoreKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,7 +10,9 @@ struct SettingsView: View {
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.requestReview) private var requestReview
     @State private var showDeleteConfirmation = false
+    @State private var showFeedbackPrompt = false
     @State private var showSignOutConfirmation = false
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
@@ -122,11 +125,9 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                }
 
-                // MARK: - Recently Deleted
+                    SettingsDivider()
 
-                SettingsSection("Recently Deleted") {
                     NavigationLink {
                         RecentlyDeletedView()
                     } label: {
@@ -158,6 +159,32 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    Button {
+                        showFeedbackPrompt = true
+                    } label: {
+                        SettingsRow(
+                            icon: "star.bubble",
+                            title: "Send Feedback",
+                            showChevron: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    Button {
+                        openSupportEmail()
+                    } label: {
+                        SettingsRow(
+                            icon: "envelope",
+                            title: "Contact Support",
+                            showChevron: false
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // MARK: - Legal
@@ -182,11 +209,9 @@ struct SettingsView: View {
                         SettingsRow(icon: "doc.text", title: "Terms of Service")
                     }
                     .buttonStyle(.plain)
-                }
 
-                // MARK: - About
+                    SettingsDivider()
 
-                SettingsSection("About") {
                     SettingsRow(
                         icon: "info.circle",
                         title: "Version",
@@ -307,6 +332,21 @@ struct SettingsView: View {
         } message: {
             Text("Your account is scheduled for deletion. Would you like to cancel?")
         }
+        .confirmationDialog(
+            "Enjoying Talkdraft?",
+            isPresented: $showFeedbackPrompt,
+            titleVisibility: .visible
+        ) {
+            Button("Yes, I love it!") {
+                requestReview()
+            }
+            Button("Not really") {
+                openFeedbackEmail()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your feedback helps us improve.")
+        }
     }
 
     // MARK: - Helpers
@@ -360,6 +400,31 @@ struct SettingsView: View {
             noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
         } catch {
             noteStore.lastError = "Failed to import audio file"
+        }
+    }
+
+    private var supportEmailSubject: String {
+        "Talkdraft Support (\(appVersion))"
+    }
+
+    private var supportEmailBody: String {
+        let device = UIDevice.current
+        return "\n\n---\nApp: Talkdraft \(appVersion)\niOS: \(device.systemVersion)\nDevice: \(device.model)"
+    }
+
+    private func openSupportEmail() {
+        let subject = supportEmailSubject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let body = supportEmailBody.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "mailto:support@talkdraft.app?subject=\(subject)&body=\(body)") {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private func openFeedbackEmail() {
+        let subject = "Talkdraft Feedback (\(appVersion))".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let body = "I'd like to share some feedback:\n\n".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "mailto:support@talkdraft.app?subject=\(subject)&body=\(body)") {
+            UIApplication.shared.open(url)
         }
     }
 
