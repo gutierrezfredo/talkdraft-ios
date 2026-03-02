@@ -106,7 +106,7 @@ struct LoginView: View {
                 Spacer()
 
                 // Terms
-                Text("By signing in, you agree to our [Terms of Use](https://gutierrezfredo.github.io/talkdraft-ios/terms.html) and [Privacy Policy](https://gutierrezfredo.github.io/talkdraft-ios/privacy.html).")
+                Text("By signing in, you agree to our [Terms of Use](https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html) and [Privacy Policy](https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html).")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)

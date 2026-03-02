@@ -191,7 +191,7 @@ struct SettingsView: View {
 
                 SettingsSection("Legal") {
                     Button {
-                        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/privacy.html") {
+                        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html") {
                             UIApplication.shared.open(url)
                         }
                     } label: {
@@ -202,7 +202,7 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     Button {
-                        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/terms.html") {
+                        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html") {
                             UIApplication.shared.open(url)
                         }
                     } label: {

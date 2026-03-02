@@ -90,9 +90,22 @@
 - [x] RevenueCat subscription integration (SubscriptionStore, PaywallView)
 - [x] 7-day free trial with read-only mode after expiry (replaced feature-gating limits)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
+- [x] Feedback & support in Settings (sentiment gate → App Store review, pre-filled support email)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-03-02 (Session 11)
+- 7-day free trial: replaced feature-gating with `isReadOnly` gate, trial countdown badge (last 3 days)
+- PaywallView: trial-aware messaging, single feature list (60-min recordings, unlimited notes/categories, AI)
+- Share button fix: replaced UIActivityViewController with Button + @State + ShareSheet (no lag)
+- Toolbar background fix: gradient fade + solid opaque bg for both keyboard and non-keyboard states
+- ExpandingTextView: `isEditable` parameter to lock text during append recording/transcribing
+- Recording limit bumped to 60 min (from 15 min)
+- Settings: Send Feedback (sentiment gate), Contact Support (pre-filled email), restructured to 4 sections
+- NoteStore: fixed bulk `.in()` calls to use `.map(\.uuidString)` for Supabase SDK compatibility
+- HomeView: removed spacer and scroll indicators on empty state
+- Edge functions: upgraded `gemini-2.0-flash` → `gemini-2.5-flash` (rewrite + generate-title)
 
 ### 2026-03-01 (Session 10)
 - App icon: 3D default (#6D28D9), dark (#0F0D2E), tinted (black grayscale) with glossy highlights and drop shadows
