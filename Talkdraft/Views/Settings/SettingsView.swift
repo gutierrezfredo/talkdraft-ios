@@ -109,7 +109,7 @@ struct SettingsView: View {
 
                 SettingsSection("Tools") {
                     Button {
-                        if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                        if subscriptionStore.isReadOnly {
                             showPaywall = true
                         } else {
                             showAudioImporter = true
@@ -154,7 +154,7 @@ struct SettingsView: View {
                         SettingsRow(
                             icon: "creditcard",
                             title: "Manage Subscription",
-                            value: subscriptionStore.isPro ? "Pro" : "Free"
+                            value: subscriptionStore.isPro ? "Pro" : subscriptionStore.isTrialActive ? "Trial" : "Expired"
                         )
                     }
                     .buttonStyle(.plain)

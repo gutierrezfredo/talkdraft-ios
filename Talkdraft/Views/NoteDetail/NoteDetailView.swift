@@ -28,6 +28,7 @@ struct NoteDetailView: View {
     @State private var errorMessage: String?
     @State private var isDownloadingAudio = false
     @State private var audioShareItem: URL?
+    @State private var textShareItem: String?
     @State private var appendRecorder = AudioRecorder()
     @State private var isAppendRecording = false
     @State private var isAppendTranscribing = false
@@ -146,7 +147,9 @@ struct NoteDetailView: View {
                         Color.clear
                             .frame(minHeight: 500)
                             .contentShape(Rectangle())
-                            .onTapGesture { contentFocused = true }
+                            .onTapGesture {
+                                if !subscriptionStore.isReadOnly { contentFocused = true }
+                            }
                     }
                 }
                 .padding(.bottom, 120)
@@ -177,20 +180,35 @@ struct NoteDetailView: View {
                     LinearGradient(
                         colors: [
                             .clear,
-                            colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
+                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 40)
+                    .frame(height: 32)
 
                     bottomBar
-                        .padding(.vertical, 4)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.95))
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9))
                 }
             } else {
-                bottomBar
-                    .padding(.bottom, 12)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 32)
+
+                    bottomBar
+                        .padding(.bottom, 12)
+                        .frame(maxWidth: .infinity)
+                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9))
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -240,6 +258,7 @@ struct NoteDetailView: View {
                         .frame(width: 36, height: 36)
                 }
             }
+
         }
         .confirmationDialog(
             "Delete this note?",
@@ -314,6 +333,15 @@ struct NoteDetailView: View {
                     .presentationDetents([.medium])
             }
         }
+        .sheet(isPresented: .init(
+            get: { textShareItem != nil },
+            set: { if !$0 { textShareItem = nil } }
+        )) {
+            if let textShareItem {
+                ShareSheet(items: [textShareItem])
+                    .presentationDetents([.medium])
+            }
+        }
         .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
@@ -353,7 +381,7 @@ struct NoteDetailView: View {
             scheduleAutosave()
         }
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
-            if Int(elapsed) >= subscriptionStore.recordingLimitSeconds && appendRecorder.isRecording {
+            if Int(elapsed) >= 3600 && appendRecorder.isRecording {
                 stopAppendRecording()
             }
         }
@@ -464,6 +492,7 @@ struct NoteDetailView: View {
             .multilineTextAlignment(.center)
             .autocorrectionDisabled()
             .contentTransition(.opacity)
+            .disabled(subscriptionStore.isReadOnly)
     }
 
     // MARK: - Transcribing Indicator
@@ -566,11 +595,13 @@ struct NoteDetailView: View {
             cursorPosition: $cursorPosition,
             highlightRange: $highlightRange,
             preserveScroll: $preserveScroll,
+            isEditable: !isAppendRecording && !isAppendTranscribing,
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
             placeholder: "Start typing..."
         )
         .opacity(contentOpacity)
+        .disabled(subscriptionStore.isReadOnly)
     }
 
     private var keyboardVisible: Bool { contentFocused }
@@ -591,7 +622,9 @@ struct NoteDetailView: View {
         HStack(spacing: keyboardVisible ? 12 : 40) {
             // Tag
             Button {
-                showCategoryPicker = true
+                if !subscriptionStore.isReadOnly {
+                    showCategoryPicker = true
+                }
             } label: {
                 Image(systemName: "tag")
                     .font(keyboardVisible ? .callout : .title3)
@@ -605,29 +638,31 @@ struct NoteDetailView: View {
             .sensoryFeedback(.selection, trigger: showCategoryPicker)
 
             // Rewrite
-            Button {
-                showRewriteSheet = true
-            } label: {
-                if keyboardVisible {
-                    Image(systemName: "wand.and.stars")
-                        .font(.callout)
-                        .foregroundStyle(Color.brand)
-                        .frame(width: 40, height: 40)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                } else {
-                    Image(systemName: "wand.and.stars")
-                        .font(.title)
-                        .foregroundStyle(.white)
-                        .frame(width: 72, height: 72)
-                        .background(Circle().fill(Color.brand))
-                        .glassEffect(.regular.interactive(), in: .circle)
+            if !subscriptionStore.isReadOnly {
+                Button {
+                    showRewriteSheet = true
+                } label: {
+                    if keyboardVisible {
+                        Image(systemName: "wand.and.stars")
+                            .font(.callout)
+                            .foregroundStyle(Color.brand)
+                            .frame(width: 40, height: 40)
+                            .glassEffect(.regular.interactive(), in: .circle)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .font(.title)
+                            .foregroundStyle(.white)
+                            .frame(width: 72, height: 72)
+                            .background(Circle().fill(Color.brand))
+                            .glassEffect(.regular.interactive(), in: .circle)
+                    }
                 }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             // Share
             Button {
-                shareText()
+                textShareItem = buildShareText()
             } label: {
                 Image(systemName: "arrowshape.turn.up.right")
                     .font(keyboardVisible ? .callout : .title3)
@@ -637,7 +672,7 @@ struct NoteDetailView: View {
             }
             .buttonStyle(.plain)
 
-            if keyboardVisible {
+            if keyboardVisible && !subscriptionStore.isReadOnly {
                 Spacer()
 
                 // Append recording
@@ -852,6 +887,7 @@ struct NoteDetailView: View {
     }
 
     private func saveChanges() {
+        guard !subscriptionStore.isReadOnly else { return }
         var updated = note
         updated.title = editedTitle.isEmpty ? nil : editedTitle
         updated.content = editedContent
@@ -885,24 +921,6 @@ struct NoteDetailView: View {
         return title + editedContent
     }
 
-    private func shareText() {
-        let text = buildShareText()
-        let activityVC = UIActivityViewController(activityItems: [text], applicationActivities: nil)
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let root = windowScene.keyWindow?.rootViewController else { return }
-        var presenter = root
-        while let presented = presenter.presentedViewController {
-            presenter = presented
-        }
-        activityVC.popoverPresentationController?.sourceView = presenter.view
-        activityVC.popoverPresentationController?.sourceRect = CGRect(
-            x: presenter.view.bounds.midX,
-            y: presenter.view.bounds.maxY,
-            width: 0,
-            height: 0
-        )
-        presenter.present(activityVC, animated: true)
-    }
 
     // MARK: - Append Recording Actions
 

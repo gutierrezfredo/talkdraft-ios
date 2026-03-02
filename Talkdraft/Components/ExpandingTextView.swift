@@ -29,6 +29,7 @@ struct ExpandingTextView: UIViewRepresentable {
     @Binding var cursorPosition: Int
     @Binding var highlightRange: NSRange?
     @Binding var preserveScroll: Bool
+    var isEditable: Bool = true
     var font: UIFont = .preferredFont(forTextStyle: .body)
     var lineSpacing: CGFloat = 6
     var placeholder: String = ""
@@ -115,6 +116,9 @@ struct ExpandingTextView: UIViewRepresentable {
         if let label = tv.viewWithTag(999) as? UILabel {
             label.isHidden = !text.isEmpty
         }
+
+        // Editability
+        tv.isEditable = isEditable
 
         // Focus management — only act when the UITextView state doesn't match the binding.
         if isFocused && !tv.isFirstResponder {

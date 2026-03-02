@@ -158,10 +158,27 @@ struct HomeView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gearshape")
+                    HStack(spacing: 12) {
+                        if !subscriptionStore.isPro && subscriptionStore.isTrialActive && subscriptionStore.trialDaysRemaining <= 3 {
+                            Button {
+                                showPaywall = true
+                            } label: {
+                                Text(subscriptionStore.trialDaysRemaining == 0 ? "Last day" : "\(subscriptionStore.trialDaysRemaining)d left")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Capsule().fill(Color.brand))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
                     }
                 }
             }
@@ -273,7 +290,7 @@ struct HomeView: View {
                     }
 
                     Button {
-                        if let limit = subscriptionStore.categoriesLimit, noteStore.categories.count >= limit {
+                        if subscriptionStore.isReadOnly {
                             showPaywall = true
                         } else {
                             showAddCategory = true
@@ -380,7 +397,7 @@ struct HomeView: View {
         HStack(spacing: 40) {
             // Create text note button (left)
             Button {
-                if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                if subscriptionStore.isReadOnly {
                     showPaywall = true
                 } else {
                     createTextNote()
@@ -401,14 +418,14 @@ struct HomeView: View {
                 .background(Circle().fill(Color.brand))
                 .glassEffect(.regular.interactive(), in: .circle)
                 .onTapGesture {
-                    if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                    if subscriptionStore.isReadOnly {
                         showPaywall = true
                     } else {
                         showRecordView = true
                     }
                 }
                 .onLongPressGesture {
-                    if let limit = subscriptionStore.notesLimit, noteStore.notes.count >= limit {
+                    if subscriptionStore.isReadOnly {
                         showPaywall = true
                     } else {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()

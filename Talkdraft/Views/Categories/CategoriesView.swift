@@ -78,7 +78,7 @@ struct CategoriesView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    if let limit = subscriptionStore.categoriesLimit, noteStore.categories.count >= limit {
+                    if subscriptionStore.isReadOnly {
                         showPaywall = true
                     } else {
                         showAddSheet = true

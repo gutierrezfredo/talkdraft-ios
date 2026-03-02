@@ -40,6 +40,7 @@ struct ContentView: View {
                 if let userId = authStore.userId {
                     Task { await subscriptionStore.login(userId: userId) }
                 }
+                subscriptionStore.activateTrialIfNeeded()
             } else {
                 Task { await subscriptionStore.logout() }
             }

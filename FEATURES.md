@@ -18,7 +18,7 @@
 |------|----------|--------|
 | HomeView | `Views/Home/HomeView.swift` | Built — category chips, notes grid, search, bulk select, sort options |
 | LoginView | `Views/Auth/LoginView.swift` | Built — Apple, Google, Email/Password, Anonymous sign-in |
-| PaywallView | `Views/Paywall/PaywallView.swift` | Built — plan comparison, monthly/yearly selection, purchase, restore |
+| PaywallView | `Views/Paywall/PaywallView.swift` | Built — trial-aware messaging, feature list, monthly/yearly selection, purchase, restore |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
@@ -50,7 +50,7 @@
 | AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple/Google/Email/Anonymous sign-in, account deletion |
 | NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen, soft delete with 30-day auto-purge, restore |
 | SettingsStore | `Stores/SettingsStore.swift` | Language + theme preferences |
-| SubscriptionStore | `Stores/SubscriptionStore.swift` | StoreKit2 product fetch + purchase, RevenueCat entitlement management via syncPurchases() |
+| SubscriptionStore | `Stores/SubscriptionStore.swift` | 7-day free trial (UserDefaults), read-only after expiry, StoreKit2 purchases, RevenueCat entitlements |
 
 ### Services
 
@@ -87,7 +87,8 @@
 - [x] Action item counts on note cards
 - [x] Delete category from edit sheet
 - [x] App icon with 3D variants (default, dark, tinted — Apple HIG compliant)
-- [x] RevenueCat subscription integration (SubscriptionStore, PaywallView, feature gating)
+- [x] RevenueCat subscription integration (SubscriptionStore, PaywallView)
+- [x] 7-day free trial with read-only mode after expiry (replaced feature-gating limits)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
@@ -117,7 +118,7 @@
 - Skip redundant audio compression for append recordings
 - Account deletion: 30-day grace period via Supabase edge functions, red warning banner in Settings
 - Category reorder support (drag to reorder)
-- RevenueCat subscription integration: SubscriptionStore, custom PaywallView, feature gating (3min/50 notes/4 categories free, 15min/unlimited pro)
+- RevenueCat subscription integration: SubscriptionStore, custom PaywallView
 - Committed all changes and pushed to main
 
 ### 2026-02-25 (Session 5)

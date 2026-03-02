@@ -15,11 +15,46 @@ final class SubscriptionStore {
     var monthlyProduct: StoreKit.Product?
     var yearlyProduct: StoreKit.Product?
 
-    // MARK: - Limits
+    // MARK: - Trial
 
-    var recordingLimitSeconds: Int { isPro ? 900 : 180 }
-    var notesLimit: Int? { isPro ? nil : 50 }
-    var categoriesLimit: Int? { isPro ? nil : 4 }
+    private static let trialStartKey = "talkdraft.trialStartDate"
+    private static let trialDurationDays: Int = 7
+
+    /// Observation trigger for UserDefaults-backed trial date.
+    private var _trialStartDateLoaded: Bool = UserDefaults.standard.object(forKey: trialStartKey) != nil
+
+    var isTrialActive: Bool {
+        _ = _trialStartDateLoaded
+        guard !isPro else { return false }
+        guard let start = UserDefaults.standard.object(forKey: Self.trialStartKey) as? Date else {
+            return false
+        }
+        let elapsed = Calendar.current.dateComponents([.day], from: start, to: .now).day ?? 0
+        return elapsed < Self.trialDurationDays
+    }
+
+    var trialDaysRemaining: Int {
+        _ = _trialStartDateLoaded
+        guard let start = UserDefaults.standard.object(forKey: Self.trialStartKey) as? Date else {
+            return 0
+        }
+        let elapsed = Calendar.current.dateComponents([.day], from: start, to: .now).day ?? 0
+        return max(0, Self.trialDurationDays - elapsed)
+    }
+
+    /// Single gate for all write-action enforcement points.
+    var isReadOnly: Bool {
+        !isPro && !isTrialActive
+    }
+
+    /// Call once after successful login. Only sets date if not already stored.
+    func activateTrialIfNeeded() {
+        guard UserDefaults.standard.object(forKey: Self.trialStartKey) == nil else { return }
+        let now = Date()
+        UserDefaults.standard.set(now, forKey: Self.trialStartKey)
+        _trialStartDateLoaded = true
+        logger.info("Trial started: \(now)")
+    }
 
     var hasProducts: Bool { monthlyProduct != nil || yearlyProduct != nil }
 

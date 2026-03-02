@@ -50,7 +50,7 @@ struct PaywallView: View {
                 .padding(.top, 8)
             }
             .background(backgroundColor.ignoresSafeArea())
-            .navigationTitle("Upgrade to Pro")
+            .navigationTitle(subscriptionStore.isTrialActive ? "Go Pro" : "Subscribe to Continue")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -85,12 +85,14 @@ struct PaywallView: View {
                 .foregroundStyle(Color.brand)
                 .padding(.top, 16)
 
-            Text("Unlock the full experience")
+            Text(subscriptionStore.isTrialActive ? "Enjoying Talkdraft?" : "Your free trial has ended")
                 .font(.title3)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
 
-            Text("Longer recordings, unlimited notes, and more.")
+            Text(subscriptionStore.isTrialActive
+                 ? "Subscribe to keep full access after your trial."
+                 : "Subscribe to continue creating notes and recordings.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -101,35 +103,33 @@ struct PaywallView: View {
 
     private var featureComparison: some View {
         VStack(spacing: 0) {
-            featureRow("Recording length", free: "3 min", pro: "15 min")
-            Divider().padding(.leading, 16)
-            featureRow("Notes", free: "50", pro: "Unlimited")
-            Divider().padding(.leading, 16)
-            featureRow("Categories", free: "4", pro: "Unlimited")
-            Divider().padding(.leading, 16)
-            featureRow("AI titles", free: "Included", pro: "Included")
+            featureRow("60-minute recordings", systemImage: "mic.fill")
+            Divider().padding(.leading, 52)
+            featureRow("Unlimited notes", systemImage: "note.text")
+            Divider().padding(.leading, 52)
+            featureRow("Unlimited categories", systemImage: "folder.fill")
+            Divider().padding(.leading, 52)
+            featureRow("AI titles & rewriting", systemImage: "wand.and.stars")
         }
         .background(cardColor)
         .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
-    private func featureRow(_ feature: String, free: String, pro: String) -> some View {
-        HStack {
-            Text(feature)
+    private func featureRow(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(Color.brand)
+                .frame(width: 24)
+            Text(title)
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(free)
+                .foregroundStyle(.primary)
+            Spacer()
+            Image(systemName: "checkmark")
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 70)
-
-            Text(pro)
-                .font(.caption)
-                .fontWeight(.semibold)
+                .fontWeight(.bold)
                 .foregroundStyle(Color.brand)
-                .frame(width: 70)
         }
         .padding(.horizontal, 16)
         .frame(height: 48)

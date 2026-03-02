@@ -21,12 +21,13 @@
 4. **AI Title** — Gemini Flash generates a short title in the background
 5. **Browse** — list of all captures, filterable by category
 
-## User Roles
+## Pricing
 
-| Role | Key Features |
-|------|--------------|
-| Free user | 3 min recordings, 50 notes, 4 categories |
-| Pro user | 15 min recordings, unlimited notes/categories |
+| State | Access |
+|-------|--------|
+| Trial (7 days) | Full access — 60 min recordings, unlimited notes/categories, AI features |
+| Expired trial | Read-only — view, play, search, delete only |
+| Pro ($5.99/mo or $59.99/yr) | Full access permanently |
 
 ## Key Flows
 
@@ -59,7 +60,7 @@ Note detail → Translate action → Choose target language → Translated conte
 4. **Note Detail** — Full content, edit, change category, AI rewrite, translate, share/copy, download audio, append recording, delete
 5. **Categories** — List with colors, add/edit/delete/reorder
 6. **Settings** — General + Legal + Account sections
-7. **Paywall** — Plan comparison, subscribe CTA
+7. **Paywall** — Feature list, trial-aware messaging, subscribe CTA
 
 ## Terminology
 
