@@ -4,7 +4,6 @@ struct NoteDetailView: View {
     @Environment(NoteStore.self) private var noteStore
     @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
-    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
@@ -14,10 +13,12 @@ struct NoteDetailView: View {
     @State private var editedTitle: String
     @State private var editedContent: String
     @State private var showDeleteConfirmation = false
+    @State private var didDelete = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
     @State private var showRestoreConfirmation = false
     @State private var pendingRewrite: (tone: String?, instructions: String?)?
+    @State private var lastRewriteParams: (tone: String?, instructions: String?)?
     @State private var isRewriting = false
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
@@ -33,10 +34,12 @@ struct NoteDetailView: View {
     @State private var isAppendRecording = false
     @State private var isAppendTranscribing = false
     @State private var cursorPosition: Int = 0
+    @State private var lastKnownCursorPosition: Int = 0
     @State private var appendInsertPosition: Int = 0
     @State private var highlightRange: NSRange?
     @State private var preserveScroll = false
     @State private var autosaveTask: Task<Void, Never>?
+    @State private var keyboardHeight: CGFloat = 0
 
     private static let recordingPlaceholder = "Recording…"
     private static let transcribingPlaceholder = "Transcribing…"
@@ -46,6 +49,8 @@ struct NoteDetailView: View {
         self.initialNote = note
         self._editedTitle = State(initialValue: note.title ?? "")
         self._editedContent = State(initialValue: note.content)
+        // Auto-focus body for new text notes
+        self._contentFocused = State(initialValue: note.source == .text && note.content.isEmpty)
     }
 
     private var note: Note {
@@ -123,6 +128,7 @@ struct NoteDetailView: View {
                                 .tint(Color.brand)
                             Text("Rewriting…")
                                 .font(.subheadline)
+                                .italic()
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.top, 20)
@@ -142,20 +148,18 @@ struct NoteDetailView: View {
                         contentField
                             .padding(.top, 28)
                             .padding(.horizontal, 24)
-
-                        // Tap zone below content to focus editor
-                        Color.clear
-                            .frame(minHeight: 500)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if !subscriptionStore.isReadOnly { contentFocused = true }
-                            }
                     }
                 }
-                .padding(.bottom, 120)
+                .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 60 : 120)
             }
             .scrollDismissesKeyboard(.interactively)
+            .ignoresSafeArea(.keyboard)
             .onAppear { scrollProxy = proxy }
+            // Tap zone behind scroll to focus editor
+            .contentShape(Rectangle())
+            .onTapGesture {
+                contentFocused = true
+            }
             } // ScrollViewReader
 
             // Bottom fade
@@ -169,7 +173,7 @@ struct NoteDetailView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 90)
+                .frame(height: 160)
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
@@ -180,56 +184,75 @@ struct NoteDetailView: View {
                     LinearGradient(
                         colors: [
                             .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9),
+                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 32)
+                    .frame(height: 50)
 
                     bottomBar
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9))
+                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5))
                 }
             } else {
                 VStack(spacing: 0) {
                     LinearGradient(
                         colors: [
                             .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9),
+                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 32)
+                    .frame(height: 50)
 
                     bottomBar
                         .padding(.bottom, 12)
                         .frame(maxWidth: .infinity)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9))
+                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5))
                 }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if note.originalContent != nil {
-                ToolbarItem(placement: .principal) {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 16) {
                     Button {
                         showRestoreConfirmation = true
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.uturn.backward")
                                 .font(.caption2)
-                            Text("Restore Original")
+                            Text("Restore")
                                 .font(.caption)
                         }
                         .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
+
+                    if let params = lastRewriteParams {
+                        Button {
+                            performRewrite(tone: params.tone, instructions: params.instructions)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "arrow.trianglehead.2.clockwise")
+                                    .font(.caption2)
+                                Text("Try another")
+                                    .font(.caption)
+                            }
+                            .fontWeight(.medium)
+                            .foregroundStyle(Color.brand)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isRewriting)
+                    }
                 }
+                .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
+                .opacity(note.originalContent != nil && !isRewriting ? 1 : 0)
+                .animation(.easeIn(duration: 0.3), value: isRewriting)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
@@ -260,22 +283,19 @@ struct NoteDetailView: View {
             }
 
         }
-        .confirmationDialog(
-            "Delete this note?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
+        .alert("Delete this note?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
+                didDelete = true
                 noteStore.removeNote(id: note.id)
                 dismiss()
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This action cannot be undone.")
         }
         .sheet(isPresented: $showCategoryPicker) {
             CategoryPickerSheet(
-                note: note,
-                categories: noteStore.categories
+                note: note
             )
             .presentationDetents([.medium, .large])
             .presentationBackground {
@@ -291,6 +311,7 @@ struct NoteDetailView: View {
                 pendingRewrite = (tone, instructions)
             }
             .presentationDetents([.large])
+            .presentationContentInteraction(.scrolls)
             .presentationBackground {
                 SheetBackground()
             }
@@ -304,6 +325,7 @@ struct NoteDetailView: View {
                 isAppendTranscribing = false
             }
             autosaveTask?.cancel()
+            guard !didDelete else { return }
             let hasContent = !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !editedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             if hasContent && (hasChanges || !isInStore) {
@@ -324,6 +346,7 @@ struct NoteDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+
         .sheet(isPresented: .init(
             get: { audioShareItem != nil },
             set: { if !$0 { audioShareItem = nil } }
@@ -380,9 +403,26 @@ struct NoteDetailView: View {
         .onChange(of: editedContent) {
             scheduleAutosave()
         }
+        .onChange(of: cursorPosition) { _, newPos in
+            if contentFocused && newPos > 0 {
+                lastKnownCursorPosition = newPos
+            }
+        }
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
             if Int(elapsed) >= 3600 && appendRecorder.isRecording {
                 stopAppendRecording()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    keyboardHeight = frame.height
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) {
+                keyboardHeight = 0
             }
         }
     }
@@ -488,11 +528,10 @@ struct NoteDetailView: View {
 
     private var titleField: some View {
         TextField("Untitled", text: $editedTitle, axis: .vertical)
-            .font(.system(size: 28, weight: .bold))
+            .font(.brandTitle)
             .multilineTextAlignment(.center)
             .autocorrectionDisabled()
             .contentTransition(.opacity)
-            .disabled(subscriptionStore.isReadOnly)
     }
 
     // MARK: - Transcribing Indicator
@@ -500,6 +539,7 @@ struct NoteDetailView: View {
     private var transcribingIndicator: some View {
         Text("Transcribing…")
             .font(.body)
+            .italic()
             .foregroundStyle(Color.brand)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24)
@@ -582,7 +622,8 @@ struct NoteDetailView: View {
             id: noteId,
             audioFileURL: audioFileURL,
             language: language,
-            userId: authStore.userId
+            userId: authStore.userId,
+            customDictionary: settingsStore.customDictionary
         )
     }
 
@@ -601,7 +642,6 @@ struct NoteDetailView: View {
             placeholder: "Start typing..."
         )
         .opacity(contentOpacity)
-        .disabled(subscriptionStore.isReadOnly)
     }
 
     private var keyboardVisible: Bool { contentFocused }
@@ -622,9 +662,7 @@ struct NoteDetailView: View {
         HStack(spacing: keyboardVisible ? 12 : 40) {
             // Tag
             Button {
-                if !subscriptionStore.isReadOnly {
-                    showCategoryPicker = true
-                }
+                showCategoryPicker = true
             } label: {
                 Image(systemName: "tag")
                     .font(keyboardVisible ? .callout : .title3)
@@ -638,27 +676,25 @@ struct NoteDetailView: View {
             .sensoryFeedback(.selection, trigger: showCategoryPicker)
 
             // Rewrite
-            if !subscriptionStore.isReadOnly {
-                Button {
-                    showRewriteSheet = true
-                } label: {
-                    if keyboardVisible {
-                        Image(systemName: "wand.and.stars")
-                            .font(.callout)
-                            .foregroundStyle(Color.brand)
-                            .frame(width: 40, height: 40)
-                            .glassEffect(.regular.interactive(), in: .circle)
-                    } else {
-                        Image(systemName: "wand.and.stars")
-                            .font(.title)
-                            .foregroundStyle(.white)
-                            .frame(width: 72, height: 72)
-                            .background(Circle().fill(Color.brand))
-                            .glassEffect(.regular.interactive(), in: .circle)
-                    }
+            Button {
+                showRewriteSheet = true
+            } label: {
+                if keyboardVisible {
+                    Image(systemName: "wand.and.stars")
+                        .font(.callout)
+                        .foregroundStyle(Color.brand)
+                        .frame(width: 40, height: 40)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.title)
+                        .foregroundStyle(.white)
+                        .frame(width: 72, height: 72)
+                        .background(Circle().fill(Color.brand))
+                        .glassEffect(.regular.interactive(), in: .circle)
                 }
-                .buttonStyle(.plain)
             }
+            .buttonStyle(.plain)
 
             // Share
             Button {
@@ -672,7 +708,7 @@ struct NoteDetailView: View {
             }
             .buttonStyle(.plain)
 
-            if keyboardVisible && !subscriptionStore.isReadOnly {
+            if keyboardVisible {
                 Spacer()
 
                 // Append recording
@@ -688,7 +724,7 @@ struct NoteDetailView: View {
                     }
                     .foregroundStyle(Color.brand)
                     .padding(.horizontal, 14)
-                    .frame(height: 40)
+                    .frame(height: 50)
                     .glassEffect(.regular.interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -841,36 +877,74 @@ struct NoteDetailView: View {
     }
 
     private func performRewrite(tone: String?, instructions: String?) {
+        lastRewriteParams = (tone, instructions)
         isRewriting = true
         Task {
             do {
-                // Map "action-items" tone to custom instructions
-                let rewriteTone: String?
-                let rewriteInstructions: String?
-                if tone == "action-items" {
-                    rewriteTone = nil
-                    rewriteInstructions = "Extract action items from this text. Start with the action items using checkboxes (☐ ) for each task, one per line. Then add two line breaks and include the original content below, cleaned up and organized using bullet points (• ) where appropriate. Do not use markdown formatting (no **, no ##, no backticks). Only use ☐ for action items and • for bullet points. Keep the same language as the original."
-                } else {
-                    rewriteTone = tone
-                    rewriteInstructions = instructions
-                }
+                let sourceContent = note.originalContent ?? editedContent
 
-                let result = try await AIService.rewrite(
-                    content: editedContent,
-                    tone: rewriteTone,
-                    customInstructions: rewriteInstructions,
-                    language: note.language
-                )
+                // Preserve original before streaming starts
                 var updated = note
                 if updated.originalContent == nil {
                     updated.originalContent = editedContent
                 }
-                updated.content = result
+
+                // Stream with typewriter reveal
+                scrollToTop()
+
+                let stream = AIService.rewriteStreaming(
+                    content: sourceContent,
+                    tone: tone,
+                    customInstructions: instructions,
+                    language: note.language
+                )
+
+                // Buffer streamed chunks, reveal progressively by character index
+                var fullText = ""
+                var revealed = 0
+                var firstChunk = true
+
+                for try await chunk in stream {
+                    fullText += chunk
+
+                    // Clear old content when first chunk arrives
+                    if firstChunk {
+                        editedContent = ""
+                        firstChunk = false
+                    }
+
+                    // Reveal buffered text a few characters at a time
+                    while revealed < fullText.count {
+                        let end = min(revealed + 3, fullText.count)
+                        let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
+                        let endIdx = fullText.index(fullText.startIndex, offsetBy: end)
+                        editedContent += fullText[startIdx..<endIdx]
+                        revealed = end
+                        try await Task.sleep(for: .milliseconds(15))
+                    }
+                }
+
+                // Flush any remaining
+                if revealed < fullText.count {
+                    let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
+                    editedContent += fullText[startIdx...]
+                }
+
+                // Save once complete
+                updated.content = editedContent
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
-                revealContent(result)
+
+                // Auto-save custom instructions as a recent preset
+                if tone == nil, let instructions, !instructions.isEmpty {
+                    RecentPresetsStore.add(instructions: instructions)
+                }
             } catch {
+                if editedContent.isEmpty {
+                    // Restore original if nothing came through
+                    editedContent = note.originalContent ?? note.content ?? ""
+                }
                 errorMessage = "Rewrite failed: \(error.localizedDescription)"
             }
             isRewriting = false
@@ -887,7 +961,6 @@ struct NoteDetailView: View {
     }
 
     private func saveChanges() {
-        guard !subscriptionStore.isReadOnly else { return }
         var updated = note
         updated.title = editedTitle.isEmpty ? nil : editedTitle
         updated.content = editedContent
@@ -905,6 +978,7 @@ struct NoteDetailView: View {
         guard let original = note.originalContent else { return }
         contentOpacity = 0
         editedContent = original
+        lastRewriteParams = nil
         var updated = note
         updated.content = original
         updated.originalContent = nil
@@ -925,8 +999,9 @@ struct NoteDetailView: View {
     // MARK: - Append Recording Actions
 
     private func startAppendRecording() {
-        // Capture cursor position and insert placeholder
-        appendInsertPosition = min(cursorPosition, editedContent.count)
+        // Use last known cursor position, or end of content if cursor was never placed
+        let position = lastKnownCursorPosition > 0 ? lastKnownCursorPosition : editedContent.count
+        appendInsertPosition = min(position, editedContent.count)
         contentFocused = false
         insertPlaceholder(Self.recordingPlaceholder)
         do {
@@ -1013,7 +1088,8 @@ struct NoteDetailView: View {
                     audioData: audioData,
                     fileName: fileName,
                     language: language,
-                    userId: authStore.userId
+                    userId: authStore.userId,
+                    customDictionary: settingsStore.customDictionary
                 )
 
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1082,7 +1158,6 @@ private struct CategoryPickerSheet: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let note: Note
-    let categories: [Category]
 
     @State private var selectedCategoryId: UUID?
     @State private var showAddCategory = false
@@ -1093,7 +1168,7 @@ private struct CategoryPickerSheet: View {
                 VStack(spacing: 20) {
                     // Category grid
                     FlowLayout(spacing: 8) {
-                        ForEach(categories) { cat in
+                        ForEach(noteStore.categories) { cat in
                             let isSelected = selectedCategoryId == cat.id
                             Button {
                                 selectedCategoryId = cat.id
@@ -1191,12 +1266,65 @@ private struct CategoryPickerSheet: View {
                 updated.categoryId = newCategory.id
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
-                dismiss()
             }
         }
         .onAppear {
             selectedCategoryId = note.categoryId
         }
+    }
+}
+
+// MARK: - Recent Presets
+
+private struct RecentPreset: Codable, Identifiable {
+    let id: UUID
+    var instructions: String
+    var pinned: Bool
+    var usedAt: Date
+
+    init(instructions: String) {
+        self.id = UUID()
+        self.instructions = instructions
+        self.pinned = false
+        self.usedAt = Date()
+    }
+}
+
+private enum RecentPresetsStore {
+    private static let key = "recentRewritePresets"
+    private static let maxRecents = 8
+
+    static var all: [RecentPreset] {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([RecentPreset].self, from: data)) ?? []
+    }
+
+    static func add(instructions: String) {
+        var presets = all
+        // Don't duplicate — just bump to top
+        presets.removeAll { $0.instructions == instructions }
+        presets.insert(RecentPreset(instructions: instructions), at: 0)
+        // Keep pinned + cap unpinned at maxRecents
+        let pinned = presets.filter(\.pinned)
+        let unpinned = presets.filter { !$0.pinned }.prefix(maxRecents)
+        save(pinned + unpinned)
+    }
+
+    static func togglePin(id: UUID) {
+        var presets = all
+        guard let i = presets.firstIndex(where: { $0.id == id }) else { return }
+        presets[i].pinned.toggle()
+        save(presets)
+    }
+
+    static func remove(id: UUID) {
+        var presets = all
+        presets.removeAll { $0.id == id }
+        save(presets)
+    }
+
+    private static func save(_ presets: [RecentPreset]) {
+        UserDefaults.standard.set(try? JSONEncoder().encode(presets), forKey: key)
     }
 }
 
@@ -1206,37 +1334,65 @@ private struct RewriteTone: Identifiable {
     let id: String
     let label: String
     let emoji: String
+    let description: String
 }
 
-private struct ToneGroup: Identifiable {
+private struct RewriteFormat: Identifiable {
     let id: String
     let label: String
+    let emoji: String
+    let color: Color
     let tones: [RewriteTone]
 }
 
-private let toneGroups: [ToneGroup] = [
-    ToneGroup(id: "practical", label: "Practical", tones: [
-        RewriteTone(id: "clean-up", label: "Clean up", emoji: "✨"),
-        RewriteTone(id: "sharpen", label: "Sharpen", emoji: "⚡"),
-        RewriteTone(id: "structure", label: "Structure", emoji: "📋"),
-        RewriteTone(id: "formalize", label: "Formalize", emoji: "👔"),
-        RewriteTone(id: "action-items", label: "Action Items", emoji: "☑️"),
+private let rewriteFormats: [RewriteFormat] = [
+    RewriteFormat(id: "text-editing", label: "Text Editing", emoji: "✏️", color: .blue, tones: [
+        RewriteTone(id: "edit-grammar", label: "Grammar", emoji: "✨", description: "Fix grammar, punctuation, and flow"),
+        RewriteTone(id: "edit-shorter", label: "Shorter", emoji: "⚡", description: "Reduce length, keep the meaning"),
+        RewriteTone(id: "edit-list", label: "List", emoji: "📋", description: "Convert into bullet points"),
+        RewriteTone(id: "extract-actions", label: "Action Items", emoji: "✅", description: "Pull out tasks as checkboxes"),
     ]),
-    ToneGroup(id: "playful", label: "Playful", tones: [
-        RewriteTone(id: "flirty", label: "Flirty", emoji: "😘"),
-        RewriteTone(id: "for-kids", label: "For kids", emoji: "🧒"),
-        RewriteTone(id: "hype", label: "Hype", emoji: "🔥"),
-        RewriteTone(id: "poetic", label: "Poetic", emoji: "🍃"),
-        RewriteTone(id: "sarcastic", label: "Sarcastic", emoji: "😏"),
+    RewriteFormat(id: "emails", label: "Emails", emoji: "📧", color: .cyan, tones: [
+        RewriteTone(id: "email-casual", label: "Casual Email", emoji: "😎", description: "Compose an informal email"),
+        RewriteTone(id: "email-formal", label: "Formal Email", emoji: "👔", description: "Compose a professional email"),
     ]),
-    ToneGroup(id: "occasions", label: "Occasions", tones: [
-        RewriteTone(id: "birthday", label: "Birthday", emoji: "🎂"),
-        RewriteTone(id: "holiday", label: "Holiday", emoji: "❄️"),
-        RewriteTone(id: "thank-you", label: "Thank you", emoji: "🙏"),
-        RewriteTone(id: "congratulations", label: "Congrats", emoji: "🏆"),
-        RewriteTone(id: "apology", label: "Apology", emoji: "💐"),
-        RewriteTone(id: "love-letter", label: "Love letter", emoji: "💌"),
-        RewriteTone(id: "wedding-toast", label: "Wedding toast", emoji: "🥂"),
+    RewriteFormat(id: "content", label: "Content Creation", emoji: "📱", color: .purple, tones: [
+        RewriteTone(id: "content-blog", label: "Blog Post", emoji: "📝", description: "Intro, body, and conclusion"),
+        RewriteTone(id: "content-facebook", label: "Facebook Post", emoji: "👍", description: "Conversational and engaging"),
+        RewriteTone(id: "content-linkedin", label: "LinkedIn Post", emoji: "💼", description: "Professional with a takeaway"),
+        RewriteTone(id: "content-instagram", label: "Instagram Post", emoji: "📸", description: "Punchy caption with line breaks"),
+        RewriteTone(id: "content-x-post", label: "X Post", emoji: "𝕏", description: "Under 280 characters"),
+        RewriteTone(id: "content-x-thread", label: "X Thread", emoji: "🧵", description: "Numbered tweets, each under 280"),
+        RewriteTone(id: "content-video-script", label: "Video Script", emoji: "🎬", description: "Hook, sections, and CTA"),
+        RewriteTone(id: "content-newsletter", label: "Newsletter", emoji: "📰", description: "Engaging intro and sign-off"),
+    ]),
+    RewriteFormat(id: "journaling", label: "Journaling", emoji: "📓", color: .indigo, tones: [
+        RewriteTone(id: "journal-entry", label: "Journal Entry", emoji: "✍️", description: "Reflective and introspective"),
+        RewriteTone(id: "journal-gratitude", label: "Gratitude", emoji: "🙏", description: "Focus on what to be thankful for"),
+        RewriteTone(id: "journal-therapy", label: "Therapy Notes", emoji: "🧠", description: "Polish session notes, preserve raw thoughts"),
+    ]),
+    RewriteFormat(id: "personal", label: "Personal", emoji: "🏠", color: .green, tones: [
+        RewriteTone(id: "personal-grocery", label: "Grocery List", emoji: "🛒", description: "Extract items, group by category"),
+        RewriteTone(id: "personal-meal", label: "Meal Planner", emoji: "🍽️", description: "Organize meals with ingredients"),
+        RewriteTone(id: "personal-study", label: "Study Notes", emoji: "📚", description: "Headings, bullets, key concepts"),
+    ]),
+    RewriteFormat(id: "work", label: "Work", emoji: "💼", color: .orange, tones: [
+        RewriteTone(id: "work-brainstorm", label: "Brainstorming", emoji: "💡", description: "Group and organize ideas"),
+        RewriteTone(id: "work-progress", label: "Progress Report", emoji: "📊", description: "Done, status, and next steps"),
+        RewriteTone(id: "work-slides", label: "Presentation Slides", emoji: "🖥️", description: "Slide titles with bullet points"),
+        RewriteTone(id: "work-speech", label: "Speech Outline", emoji: "🎤", description: "Hook, key points, and closing"),
+        RewriteTone(id: "work-linkedin-msg", label: "LinkedIn Message", emoji: "💬", description: "Brief connection message"),
+    ]),
+    RewriteFormat(id: "style", label: "Writing Style", emoji: "🎨", color: .pink, tones: [
+        RewriteTone(id: "style-casual", label: "Casual", emoji: "😎", description: "Relaxed, like texting a friend"),
+        RewriteTone(id: "style-friendly", label: "Friendly", emoji: "😊", description: "Warm and approachable"),
+        RewriteTone(id: "style-confident", label: "Confident", emoji: "💪", description: "Bold and assertive"),
+        RewriteTone(id: "style-professional", label: "Professional", emoji: "💼", description: "Polished and work-ready"),
+    ]),
+    RewriteFormat(id: "summary", label: "Summary", emoji: "📄", color: .yellow, tones: [
+        RewriteTone(id: "summary-detailed", label: "Detailed Summary", emoji: "📖", description: "All key points and context"),
+        RewriteTone(id: "summary-short", label: "Short Summary", emoji: "⚡", description: "Essential points in 2-3 sentences"),
+        RewriteTone(id: "summary-meeting", label: "Meeting Takeaways", emoji: "🤝", description: "Decisions, actions, follow-ups"),
     ]),
 ]
 
@@ -1248,7 +1404,26 @@ private struct RewriteSheet: View {
 
     @State private var selectedTab = 0
     @State private var customInstructions = ""
+    @State private var searchText = ""
+    @State private var keyboardVisible = false
+    @State private var recentPresets: [RecentPreset] = RecentPresetsStore.all
+    @AppStorage("rewriteFavorites") private var favoritesData = Data()
     @FocusState private var customFocused: Bool
+
+    private var favoriteIds: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: favoritesData)) ?? []
+    }
+
+    private func toggleFavorite(_ toneId: String) {
+        var ids = favoriteIds
+        if ids.contains(toneId) {
+            ids.remove(toneId)
+        } else {
+            ids.insert(toneId)
+        }
+        favoritesData = (try? JSONEncoder().encode(ids)) ?? Data()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
 
     var body: some View {
         NavigationStack {
@@ -1260,6 +1435,10 @@ private struct RewriteSheet: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
+                .animation(.snappy, value: selectedTab)
+                .onChange(of: selectedTab) {
+                    customFocused = false
+                }
 
                 if selectedTab == 0 {
                     presetsView
@@ -1280,56 +1459,243 @@ private struct RewriteSheet: View {
                 }
             }
         }
+        .interactiveDismissDisabled(keyboardVisible)
+        .onAppear { recentPresets = RecentPresetsStore.all }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
+        }
     }
 
     // MARK: - Presets
 
-    private var presetsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                ForEach(toneGroups) { group in
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(group.label.uppercased())
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 20)
-
-                        FlowLayout(spacing: 8) {
-                            ForEach(group.tones) { tone in
-                                tonePill(tone)
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                }
+    private var filteredFormats: [(format: RewriteFormat, tones: [RewriteTone])] {
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else {
+            return rewriteFormats.map { ($0, $0.tones) }
+        }
+        return rewriteFormats.compactMap { format in
+            let matched = format.tones.filter {
+                $0.label.lowercased().contains(query) ||
+                $0.description.lowercased().contains(query) ||
+                format.label.lowercased().contains(query)
             }
-            .padding(.top, 20)
-            .padding(.bottom, 40)
+            return matched.isEmpty ? nil : (format, matched)
         }
     }
 
-    private func tonePill(_ tone: RewriteTone) -> some View {
-        Button {
+    private var favoriteTones: [(tone: RewriteTone, color: Color)] {
+        let ids = favoriteIds
+        guard !ids.isEmpty else { return [] }
+        var result: [(RewriteTone, Color)] = []
+        for format in rewriteFormats {
+            for tone in format.tones where ids.contains(tone.id) {
+                result.append((tone, format.color))
+            }
+        }
+        return result
+    }
+
+    private var presetsView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                // Recent custom presets
+                if searchText.isEmpty, !recentPresets.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Text("🕐")
+                            Text("RECENT CUSTOMS")
+                        }
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+
+                        recentPresetsGrid
+                            .padding(.horizontal, 20)
+                    }
+                }
+
+                // Favorites section
+                if searchText.isEmpty, !favoriteTones.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Text("⭐")
+                            Text("FAVORITES")
+                        }
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+
+                        favoritesGrid
+                            .padding(.horizontal, 20)
+                    }
+                }
+
+                ForEach(filteredFormats, id: \.format.id) { item in
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Text(item.format.emoji)
+                            Text(item.format.label.uppercased())
+                        }
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+
+                        toneGrid(for: item.tones, color: item.format.color)
+                            .padding(.horizontal, 20)
+                    }
+                }
+            }
+            .padding(.top, 16)
+            .padding(.bottom, 40)
+        }
+        .scrollDismissesKeyboard(.immediately)
+        .searchable(text: $searchText, prompt: "Search presets")
+    }
+
+    private var recentPresetsGrid: some View {
+        let items = recentPresets
+        let rowCount = (items.count + 1) / 2
+        return VStack(spacing: 12) {
+            ForEach(0..<rowCount, id: \.self) { row in
+                HStack(spacing: 12) {
+                    recentPresetCard(items[row * 2])
+                    if row * 2 + 1 < items.count {
+                        recentPresetCard(items[row * 2 + 1])
+                    } else {
+                        Color.clear
+                    }
+                }
+            }
+        }
+    }
+
+    private func recentPresetCard(_ preset: RecentPreset) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("🕐")
+                .font(.title2)
+
+            Text(preset.instructions)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(14)
+        .overlay(alignment: .topTrailing) {
+            if preset.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .padding(8)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.3, bounce: 0.4), value: preset.pinned)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.brand.opacity(colorScheme == .dark ? 0.12 : 0.1))
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onSelect(nil, preset.instructions)
+            dismiss()
+        }
+        .contextMenu {
+            Button {
+                RecentPresetsStore.togglePin(id: preset.id)
+                recentPresets = RecentPresetsStore.all
+            } label: {
+                Label(preset.pinned ? "Unpin" : "Pin", systemImage: preset.pinned ? "pin.slash" : "pin")
+            }
+            Button(role: .destructive) {
+                RecentPresetsStore.remove(id: preset.id)
+                recentPresets = RecentPresetsStore.all
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    private var favoritesGrid: some View {
+        let items = favoriteTones
+        let rowCount = (items.count + 1) / 2
+        return VStack(spacing: 12) {
+            ForEach(0..<rowCount, id: \.self) { row in
+                HStack(spacing: 12) {
+                    toneCard(items[row * 2].tone, color: items[row * 2].color)
+                    if row * 2 + 1 < items.count {
+                        toneCard(items[row * 2 + 1].tone, color: items[row * 2 + 1].color)
+                    } else {
+                        Color.clear
+                    }
+                }
+            }
+        }
+    }
+
+    private func toneGrid(for tones: [RewriteTone], color: Color) -> some View {
+        let rowCount = (tones.count + 1) / 2
+        return VStack(spacing: 12) {
+            ForEach(0..<rowCount, id: \.self) { row in
+                HStack(spacing: 12) {
+                    toneCard(tones[row * 2], color: color)
+                    if row * 2 + 1 < tones.count {
+                        toneCard(tones[row * 2 + 1], color: color)
+                    } else {
+                        Color.clear
+                    }
+                }
+            }
+        }
+    }
+
+    private func toneCard(_ tone: RewriteTone, color: Color) -> some View {
+        let isFavorite = favoriteIds.contains(tone.id)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(tone.emoji)
+                .font(.title2)
+
+            Text(tone.label)
+                .font(.callout)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+
+            Text(tone.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(14)
+        .overlay(alignment: .topTrailing) {
+            if isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.yellow)
+                    .padding(8)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.3, bounce: 0.4), value: isFavorite)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(color.opacity(colorScheme == .dark ? 0.12 : 0.1))
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
             onSelect(tone.id, nil)
             dismiss()
-        } label: {
-            HStack(spacing: 6) {
-                Text(tone.emoji)
-                    .font(.caption)
-                Text(tone.label)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                Capsule()
-                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-            )
         }
-        .buttonStyle(.plain)
+        .onLongPressGesture {
+            toggleFavorite(tone.id)
+        }
     }
 
     // MARK: - Custom
@@ -1367,7 +1733,6 @@ private struct RewriteSheet: View {
             Spacer()
         }
         .padding(.top, 20)
-        .onAppear { customFocused = true }
     }
 }
 

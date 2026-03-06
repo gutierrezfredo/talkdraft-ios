@@ -11,6 +11,14 @@ final class SettingsStore {
         didSet { UserDefaults.standard.set(theme.rawValue, forKey: "settings.theme") }
     }
 
+    var customDictionary: [String] = [] {
+        didSet {
+            if let data = try? JSONEncoder().encode(customDictionary) {
+                UserDefaults.standard.set(data, forKey: "settings.customDictionary")
+            }
+        }
+    }
+
     enum AppTheme: String, CaseIterable {
         case system
         case light
@@ -32,6 +40,10 @@ final class SettingsStore {
         if let themeRaw = UserDefaults.standard.string(forKey: "settings.theme"),
            let saved = AppTheme(rawValue: themeRaw) {
             theme = saved
+        }
+        if let data = UserDefaults.standard.data(forKey: "settings.customDictionary"),
+           let words = try? JSONDecoder().decode([String].self, from: data) {
+            customDictionary = words
         }
     }
 }

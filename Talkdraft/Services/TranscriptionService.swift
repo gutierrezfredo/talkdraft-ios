@@ -31,7 +31,7 @@ final class TranscriptionService: Sendable {
         "hi": "यह एक वॉइस नोट है।",
     ]
 
-    func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?) async throws -> TranscriptionResult {
+    func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = []) async throws -> TranscriptionResult {
         let boundary = UUID().uuidString
         let ext = (fileName as NSString).pathExtension.lowercased()
         let mimeType = Self.mimeType(for: ext)
@@ -55,9 +55,13 @@ final class TranscriptionService: Sendable {
             body.appendMultipart("\(language)\r\n")
         }
 
-        // Prompt hint — use device locale to bias language detection when auto
+        // Prompt — custom dictionary words + locale hint
         let promptLang = language ?? Locale.current.language.languageCode?.identifier
-        if let promptLang, let prompt = Self.localePrompts[promptLang] {
+        let localeHint = promptLang.flatMap { Self.localePrompts[$0] }
+        let dictionaryHint = customDictionary.isEmpty ? nil : customDictionary.joined(separator: ", ") + "."
+        let promptParts = [dictionaryHint, localeHint].compactMap { $0 }
+        if !promptParts.isEmpty {
+            let prompt = promptParts.joined(separator: " ")
             body.appendMultipart("--\(boundary)\r\n")
             body.appendMultipart("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
             body.appendMultipart("\(prompt)\r\n")

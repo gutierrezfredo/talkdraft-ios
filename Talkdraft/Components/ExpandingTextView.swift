@@ -5,18 +5,40 @@ import UIKit
 
 final class CheckboxAttachment: NSTextAttachment {
     let isChecked: Bool
+    private let textFont: UIFont
 
     init(checked: Bool, font: UIFont, color: UIColor) {
         self.isChecked = checked
+        self.textFont = font
         super.init(data: nil, ofType: nil)
         let symbolName = checked ? "checkmark.circle.fill" : "circle"
-        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        let config = UIImage.SymbolConfiguration(pointSize: 28, weight: checked ? .medium : .light)
         self.image = UIImage(systemName: symbolName, withConfiguration: config)?
             .withTintColor(color, renderingMode: .alwaysOriginal)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
+        guard let image else { return .zero }
+        // Use a fixed size so checked/unchecked don't cause layout shifts
+        let fixedSize: CGFloat = 28
+        let yOffset = (textFont.capHeight - fixedSize) / 2
+        return CGRect(x: 0, y: yOffset, width: fixedSize, height: fixedSize)
+    }
+}
+
+// MARK: - CheckboxTextView
+
+/// UITextView subclass that can temporarily block becoming first responder
+/// during checkbox toggles, preventing cursor/keyboard flash.
+final class CheckboxTextView: UITextView {
+    var blockFirstResponder = false
+
+    override var canBecomeFirstResponder: Bool {
+        blockFirstResponder ? false : super.canBecomeFirstResponder
+    }
 }
 
 // MARK: - ExpandingTextView
@@ -47,8 +69,8 @@ struct ExpandingTextView: UIViewRepresentable {
         Coordinator(self)
     }
 
-    func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
+    func makeUIView(context: Context) -> CheckboxTextView {
+        let tv = CheckboxTextView()
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
         tv.textContainerInset = .zero
@@ -73,7 +95,7 @@ struct ExpandingTextView: UIViewRepresentable {
         return tv
     }
 
-    func updateUIView(_ tv: UITextView, context: Context) {
+    func updateUIView(_ tv: CheckboxTextView, context: Context) {
         let needsRefresh = context.coordinator.needsAttributeRefresh
         context.coordinator.needsAttributeRefresh = false
         let currentPlain = Self.extractPlainText(from: tv)
@@ -142,11 +164,11 @@ struct ExpandingTextView: UIViewRepresentable {
         }
     }
 
-    static func dismantleUIView(_ tv: UITextView, coordinator: Coordinator) {
+    static func dismantleUIView(_ tv: CheckboxTextView, coordinator: Coordinator) {
         coordinator.invalidateDisplayLink()
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: CheckboxTextView, context: Context) -> CGSize? {
         let width = proposal.width ?? UIScreen.main.bounds.width
         let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         return CGSize(width: width, height: max(size.height, 40))
@@ -169,7 +191,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
     // MARK: - Apply styled attributes (☐/☑ → SF Symbol attachments)
 
-    private func applyTextAttributes(_ tv: UITextView) {
+    func applyTextAttributes(_ tv: UITextView) {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing
 
@@ -236,8 +258,15 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         // Replace checkbox chars with attachments (reverse order to preserve offsets)
+        let checkboxParaStyle = NSMutableParagraphStyle()
+        checkboxParaStyle.lineSpacing = lineSpacing - 2
+        checkboxParaStyle.paragraphSpacingBefore = 6
+        checkboxParaStyle.firstLineHeadIndent = 8
+        checkboxParaStyle.headIndent = 40
         for r in replacements.reversed() {
-            let attachStr = NSAttributedString(attachment: r.attachment)
+            let attachStr = NSMutableAttributedString(attachment: r.attachment)
+            attachStr.addAttribute(.paragraphStyle, value: checkboxParaStyle, range: NSRange(location: 0, length: attachStr.length))
+            attachStr.addAttribute(.kern, value: 16.0, range: NSRange(location: 0, length: attachStr.length))
             attributed.replaceCharacters(in: r.range, with: attachStr)
         }
 
@@ -398,46 +427,70 @@ struct ExpandingTextView: UIViewRepresentable {
             tv.addGestureRecognizer(tap)
         }
 
-        @objc private func handleCheckboxTap(_ gesture: UITapGestureRecognizer) {
-            guard let tv = gesture.view as? UITextView,
-                  let attributed = tv.attributedText else { return }
-            let point = gesture.location(in: tv)
-
-            // Find the nearest checkbox within a 44pt tap target
-            let hitRadius: CGFloat = 22
-            let attrLength = attributed.length
-            var bestIdx: Int?
-            var bestDist: CGFloat = .greatestFiniteMagnitude
-
-            attributed.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attrLength)) { value, range, stop in
-                guard value is CheckboxAttachment else { return }
-                guard let start = tv.position(from: tv.beginningOfDocument, offset: range.location),
-                      let end = tv.position(from: start, offset: range.length),
-                      let textRange = tv.textRange(from: start, to: end) else { return }
-                let rect = tv.firstRect(for: textRange)
-                guard !rect.isNull && !rect.isInfinite else { return }
-                // Expand rect to 44x44 minimum
-                let center = CGPoint(x: rect.midX, y: rect.midY)
-                let dx = max(0, abs(point.x - center.x) - rect.width / 2)
-                let dy = max(0, abs(point.y - center.y) - rect.height / 2)
-                let dist = hypot(dx, dy)
-                if dist < hitRadius && dist < bestDist {
-                    bestDist = dist
-                    bestIdx = range.location
-                }
-            }
-
-            guard let idx = bestIdx,
-                  let attachment = attributed.attribute(.attachment, at: idx, effectiveRange: nil) as? CheckboxAttachment else { return }
-            var chars = Array(parent.text)
-            guard idx < chars.count else { return }
-            chars[idx] = attachment.isChecked ? "☐" : "☑"
-            preserveScrollOnNextUpdate = true
-            parent.text = String(chars)
-        }
-
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             true
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard parent.text.contains("☐") || parent.text.contains("☑") else { return false }
+
+            // Block first responder BEFORE any tap action fires
+            if let tv = gestureRecognizer.view as? CheckboxTextView {
+                let point = gestureRecognizer.location(in: tv)
+                if checkboxIndex(near: point, in: tv) != nil {
+                    tv.blockFirstResponder = true
+                }
+            }
+            return true
+        }
+
+        @objc private func handleCheckboxTap(_ gesture: UITapGestureRecognizer) {
+            guard let tv = gesture.view as? CheckboxTextView else { return }
+            let point = gesture.location(in: tv)
+
+            // Always unblock first responder
+            defer {
+                DispatchQueue.main.async { tv.blockFirstResponder = false }
+            }
+
+            guard let idx = checkboxIndex(near: point, in: tv) else { return }
+
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+
+            var chars = Array(parent.text)
+            guard idx < chars.count else { return }
+            chars[idx] = (chars[idx] == "☑") ? "☐" : "☑"
+            preserveScrollOnNextUpdate = true
+
+            let savedSelection = tv.selectedRange
+            isAnimatingAttributes = true
+            parent.text = String(chars)
+            parent.applyTextAttributes(tv)
+            let len = tv.attributedText?.length ?? 0
+            if savedSelection.location + savedSelection.length <= len {
+                tv.selectedRange = savedSelection
+            }
+            isAnimatingAttributes = false
+        }
+
+        private func checkboxIndex(near point: CGPoint, in tv: UITextView) -> Int? {
+            guard let tapPosition = tv.closestPosition(to: point) else { return nil }
+            let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
+
+            let nsText = parent.text as NSString
+            guard nsText.length > 0 else { return nil }
+
+            let safeOffset = min(max(tapOffset, 0), nsText.length - 1)
+            let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
+            guard lineRange.length > 0 else { return nil }
+
+            let firstChar = nsText.character(at: lineRange.location)
+            guard firstChar == 0x2610 || firstChar == 0x2611 else { return nil }
+
+            let maxTapX: CGFloat = 32
+            guard point.x <= maxTapX else { return nil }
+
+            return lineRange.location
         }
 
         func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
@@ -525,10 +578,10 @@ struct ExpandingTextView: UIViewRepresentable {
             if let label = tv.viewWithTag(999) as? UILabel {
                 label.isHidden = !parent.text.isEmpty
             }
-            scrollCursorVisible(in: tv)
+            scrollCursorVisible(in: tv, animated: false)
         }
 
-        private func scrollCursorVisible(in tv: UITextView) {
+        private func scrollCursorVisible(in tv: UITextView, animated: Bool = true) {
             guard let cursorPosition = tv.position(from: tv.beginningOfDocument, offset: tv.selectedRange.location),
                   let caretRange = tv.textRange(from: cursorPosition, to: cursorPosition)
             else { return }
@@ -555,7 +608,7 @@ struct ExpandingTextView: UIViewRepresentable {
             // Calculate the bottom edge of visible area:
             // screen height - keyboard height - toolbar height (~88pt)
             let screenHeight = window.bounds.height
-            let keyboardHeight = scrollView.adjustedContentInset.bottom
+            let keyboardHeight = max(scrollView.adjustedContentInset.bottom, lastKnownKeyboardHeight)
             let toolbarHeight: CGFloat = 88
             let visibleBottom = screenHeight - keyboardHeight - toolbarHeight
 
@@ -567,22 +620,48 @@ struct ExpandingTextView: UIViewRepresentable {
                     x: scrollView.contentOffset.x,
                     y: scrollView.contentOffset.y + scrollAmount
                 )
-                scrollView.setContentOffset(newOffset, animated: true)
+                scrollView.setContentOffset(newOffset, animated: animated)
             }
         }
 
         func textViewDidChangeSelection(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
             parent.cursorPosition = tv.selectedRange.location
-            scrollCursorVisible(in: tv)
         }
 
         func textViewDidBeginEditing(_ tv: UITextView) {
             parent.isFocused = true
+            startKeyboardObserver(for: tv)
         }
 
         func textViewDidEndEditing(_ tv: UITextView) {
             parent.isFocused = false
+            stopKeyboardObserver()
+        }
+
+        // MARK: - Keyboard Observer
+
+        private var keyboardObserver: NSObjectProtocol?
+        private var lastKnownKeyboardHeight: CGFloat = 0
+
+        private func startKeyboardObserver(for tv: UITextView) {
+            stopKeyboardObserver()
+            keyboardObserver = NotificationCenter.default.addObserver(
+                forName: UIResponder.keyboardDidShowNotification,
+                object: nil,
+                queue: .main
+            ) { [weak tv] notification in
+                guard let tv, let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+                self.lastKnownKeyboardHeight = frame.height
+                self.scrollCursorVisible(in: tv)
+            }
+        }
+
+        private func stopKeyboardObserver() {
+            if let observer = keyboardObserver {
+                NotificationCenter.default.removeObserver(observer)
+                keyboardObserver = nil
+            }
         }
     }
 }

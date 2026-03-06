@@ -32,39 +32,26 @@ final class AuthStore {
         listenForAuthChanges()
     }
 
-    func signIn(email: String, password: String) async throws {
-        isLoading = true
+    func sendMagicLink(email: String) async throws {
         error = nil
-        defer { isLoading = false }
 
         do {
-            let session = try await supabase.auth.signIn(
+            try await supabase.auth.signInWithOTP(
                 email: email.trimmingCharacters(in: .whitespaces),
-                password: password
+                redirectTo: AppConfig.redirectURL
             )
-            await handleSession(session)
         } catch {
             self.error = error.localizedDescription
             throw error
         }
     }
 
-    func signUp(email: String, password: String) async throws {
-        isLoading = true
-        error = nil
-        defer { isLoading = false }
-
+    func handleURL(_ url: URL) async {
         do {
-            let response = try await supabase.auth.signUp(
-                email: email.trimmingCharacters(in: .whitespaces),
-                password: password
-            )
-            if let session = response.session {
-                await handleSession(session)
-            }
+            let session = try await supabase.auth.session(from: url)
+            await handleSession(session)
         } catch {
             self.error = error.localizedDescription
-            throw error
         }
     }
 

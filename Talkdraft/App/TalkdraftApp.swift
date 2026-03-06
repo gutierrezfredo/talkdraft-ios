@@ -20,7 +20,11 @@ struct TalkdraftApp: App {
                 .environment(settingsStore)
                 .environment(subscriptionStore)
                 .onOpenURL { url in
-                    GIDSignIn.sharedInstance.handle(url)
+                    if url.scheme == "talkdraft" {
+                        Task { await authStore.handleURL(url) }
+                    } else {
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
                 }
         }
     }

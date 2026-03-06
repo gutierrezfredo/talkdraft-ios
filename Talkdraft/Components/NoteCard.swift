@@ -52,7 +52,8 @@ struct NoteCard: View {
             // Title
             if let title = note.title, !title.isEmpty {
                 Text(title)
-                    .font(.headline)
+                    .font(.brandTitle3)
+                    .fontWeight(.regular)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }
@@ -116,7 +117,7 @@ struct NoteCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(
                     isSelected ? Color.brand
-                        : (category == nil && isDark ? Color.white.opacity(0.08) : .clear),
+                        : (category == nil ? (isDark ? Color.white.opacity(0.15) : Color.black.opacity(0.08)) : .clear),
                     lineWidth: isSelected ? 2 : 0.5
                 )
         )

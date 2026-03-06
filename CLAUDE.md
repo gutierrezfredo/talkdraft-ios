@@ -10,11 +10,12 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 
 ## Rules
 
-- Read `DESIGN_RULES.md` before any UI work
-- Read `PRODUCT.md` before any product/feature work
-- Read `FEATURES.md` before adding or modifying features
-- Build and test on physical device, not just simulator
-- **Code like a pro Apple engineer**: Write code the way Apple's own teams would. Prefer Apple's first-party frameworks and APIs over third-party or manual solutions. Use proper Swift concurrency (`Sendable`, actors, structured concurrency) — avoid `@unchecked Sendable` when real conformance is possible. No unnecessary `NSObject` inheritance, no force unwraps, no redundant pipelines. Favor single-responsibility classes, clean encapsulation, and pre-computed/pre-allocated data. Every architectural decision should reflect what a senior Apple engineer would ship.
+- Read `DESIGN_RULES.md` before any UI change. Do not write UI code without it.
+- Read `PRODUCT.md` before any product or feature work. Use its terminology exactly.
+- Update `FEATURES.md` after adding, changing, or removing any feature. Do not commit without it.
+- Build and test on a physical device, not just the simulator.
+- Every data-fetching view needs loading, error, and empty states.
+- Code like a senior Apple engineer. Prefer first-party frameworks over third-party. Use proper Swift concurrency (`Sendable`, actors, structured concurrency) — avoid `@unchecked Sendable` when real conformance is possible. No unnecessary `NSObject` inheritance, no force unwraps, no redundant pipelines. Favor single-responsibility, clean encapsulation, and pre-computed data.
 
 ## Tech Stack
 

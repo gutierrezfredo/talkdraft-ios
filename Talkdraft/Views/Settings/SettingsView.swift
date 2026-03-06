@@ -16,7 +16,6 @@ struct SettingsView: View {
     @State private var showSignOutConfirmation = false
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
-    @State private var showPaywall = false
     @State private var showAudioImporter = false
     @State private var importedNote: Note?
 
@@ -97,6 +96,21 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     NavigationLink {
+                        CustomDictionaryView()
+                    } label: {
+                        SettingsRow(
+                            icon: "text.book.closed",
+                            title: "Custom Dictionary",
+                            value: settingsStore.customDictionary.isEmpty
+                                ? nil
+                                : "\(settingsStore.customDictionary.count) word\(settingsStore.customDictionary.count == 1 ? "" : "s")"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    NavigationLink {
                         ThemePickerView()
                     } label: {
                         SettingsRow(
@@ -112,11 +126,7 @@ struct SettingsView: View {
 
                 SettingsSection("Tools") {
                     Button {
-                        if subscriptionStore.isReadOnly {
-                            showPaywall = true
-                        } else {
-                            showAudioImporter = true
-                        }
+                        showAudioImporter = true
                     } label: {
                         SettingsRow(
                             icon: "waveform.badge.plus",
@@ -144,18 +154,14 @@ struct SettingsView: View {
 
                 SettingsSection("Account") {
                     Button {
-                        if subscriptionStore.isPro {
-                            if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
-                                UIApplication.shared.open(url)
-                            }
-                        } else {
-                            showPaywall = true
+                        if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                            UIApplication.shared.open(url)
                         }
                     } label: {
                         SettingsRow(
                             icon: "creditcard",
                             title: "Manage Subscription",
-                            value: subscriptionStore.isPro ? "Pro" : subscriptionStore.isTrialActive ? "Trial" : "Expired"
+                            value: subscriptionStore.isPro ? "Pro" : "Free"
                         )
                     }
                     .buttonStyle(.plain)
@@ -277,27 +283,17 @@ struct SettingsView: View {
         ) { result in
             handleAudioImport(result)
         }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-        }
-        .confirmationDialog(
-            "Sign Out",
-            isPresented: $showSignOutConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Sign Out") {
+        .alert("Sign Out?", isPresented: $showSignOutConfirmation) {
+            Button("Sign Out", role: .destructive) {
                 Task { @MainActor in
                     try? await authStore.signOut()
                 }
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to sign out?")
         }
-        .confirmationDialog(
-            "Delete Account",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
+        .alert("Delete Account?", isPresented: $showDeleteConfirmation) {
             Button("Schedule Deletion", role: .destructive) {
                 Task {
                     isDeletionLoading = true
@@ -309,14 +305,11 @@ struct SettingsView: View {
                     }
                 }
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your account will be scheduled for deletion in 30 days. During this period you can sign back in and cancel. After 30 days, all your data will be permanently deleted.")
         }
-        .confirmationDialog(
-            "Cancel Deletion",
-            isPresented: $showCancelDeletion,
-            titleVisibility: .visible
-        ) {
+        .alert("Cancel Deletion?", isPresented: $showCancelDeletion) {
             Button("Cancel Deletion") {
                 Task {
                     isDeletionLoading = true
@@ -397,7 +390,7 @@ struct SettingsView: View {
 
             let language = settingsStore.language == "auto" ? nil : settingsStore.language
             let userId = authStore.userId
-            noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
+            noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId, customDictionary: settingsStore.customDictionary)
         } catch {
             noteStore.lastError = "Failed to import audio file"
         }

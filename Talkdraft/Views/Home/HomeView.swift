@@ -13,13 +13,13 @@ struct HomeView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
-    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedCategory: UUID?
     @State private var showRecordView = false
     @State private var sortOrder: NoteSortOrder = .updatedAt
     @State private var isSearching = false
     @State private var query = ""
+    @State private var isScrolled = false
     @State private var isSwiping = false
     @State private var selectedNote: Note?
     @State private var isSelecting = false
@@ -33,8 +33,9 @@ struct HomeView: View {
     @State private var categoryToDelete: Category?
     @State private var pendingNote: Note?
     @State private var keyboardHeight: CGFloat = 0
-    @State private var showPaywall = false
     @State private var draggingCategory: Category?
+    @State private var scrollViewHeight: CGFloat = 0
+    @State private var chipsHeight: CGFloat = 0
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
 
@@ -53,9 +54,6 @@ struct HomeView: View {
                 // Main content
                 ScrollView {
                     VStack(spacing: 12) {
-                        // Category chips
-                        categoryChips
-
                         // Notes grid + swipeable area
                         VStack(spacing: 0) {
                             if filteredNotes.isEmpty {
@@ -91,18 +89,36 @@ struct HomeView: View {
                                 .padding(.horizontal, 12)
                             }
 
-                            // Fill remaining space (only when notes exist, to enable swipe gesture)
+                            // Fill remaining space to enable swipe gesture on sparse screens
                             if !filteredNotes.isEmpty {
                                 Color.clear
-                                    .frame(maxWidth: .infinity, minHeight: 300)
+                                    .frame(maxWidth: .infinity, minHeight: filteredNotes.count <= 4 ? 0 : 40)
                             }
                         }
+                        .frame(minHeight: scrollViewHeight > 0 ? scrollViewHeight - chipsHeight : 0, alignment: .top)
                         .contentShape(Rectangle())
                         .simultaneousGesture(categorySwipeGesture)
                     }
-                    .padding(.bottom, 120)
                 }
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { newValue in
+                    scrollViewHeight = newValue
+                }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y > 20
+                } action: { _, newValue in
+                    withAnimation(.snappy) { isScrolled = newValue }
+                }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    chipsBar
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: 120)
+                }
+                .contentMargins(.top, 8)
                 .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
+                .scrollDisabled(false)
                 .scrollDismissesKeyboard(.interactively)
                 .refreshable {
                     await noteStore.refresh()
@@ -114,28 +130,34 @@ struct HomeView: View {
                     LinearGradient(
                         colors: [
                             .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground),
+                            colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 90)
+                    .frame(height: 160)
                 }
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
                 // Bottom bar — floating buttons, search bar, or selection toolbar
                 if isSelecting {
-                    selectionToolbar
-                        .padding(.bottom, 12)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    bottomBarWrapper {
+                        selectionToolbar
+                            .padding(.bottom, 12)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if isSearching {
-                    searchBar
-                        .padding(.bottom, keyboardHeight > 0 ? keyboardHeight - bottomSafeArea + 8 : 12)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    bottomBarWrapper {
+                        searchBar
+                            .padding(.bottom, keyboardHeight > 0 ? keyboardHeight - bottomSafeArea + 8 : 12)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
-                    floatingButtons
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    bottomBarWrapper {
+                        floatingButtons
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .ignoresSafeArea(.keyboard)
@@ -162,21 +184,6 @@ struct HomeView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 12) {
-                        if !subscriptionStore.isPro && subscriptionStore.isTrialActive && subscriptionStore.trialDaysRemaining <= 3 {
-                            Button {
-                                showPaywall = true
-                            } label: {
-                                Text(subscriptionStore.trialDaysRemaining == 0 ? "Last day" : "\(subscriptionStore.trialDaysRemaining)d left")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(Capsule().fill(Color.brand))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
                         NavigationLink {
                             SettingsView()
                         } label: {
@@ -187,6 +194,11 @@ struct HomeView: View {
             }
             .navigationDestination(item: $selectedNote) { note in
                 NoteDetailView(note: note)
+            }
+            .task {
+                if noteStore.categories.isEmpty || noteStore.notes.isEmpty {
+                    await noteStore.refresh()
+                }
             }
         }
         .fullScreenCover(isPresented: $showRecordView, onDismiss: {
@@ -207,16 +219,13 @@ struct HomeView: View {
         ) { result in
             handleAudioImport(result)
         }
-        .confirmationDialog(
-            "Delete \(selectedIds.count) Note\(selectedIds.count == 1 ? "" : "s")",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
+        .alert("Delete \(selectedIds.count) Note\(selectedIds.count == 1 ? "" : "s")?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 noteStore.removeNotes(ids: selectedIds)
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 exitSelection()
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This can't be undone.")
         }
@@ -241,9 +250,6 @@ struct HomeView: View {
                 keyboardHeight = 0
             }
         }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-        }
         .alert("Error", isPresented: .init(
             get: { noteStore.lastError != nil },
             set: { if !$0 { noteStore.lastError = nil } }
@@ -255,6 +261,39 @@ struct HomeView: View {
     }
 
     // MARK: - Category Chips
+
+    private var chipsBar: some View {
+        categoryChips
+            .padding(.top, -6)
+            .padding(.bottom, 0)
+            .background(
+                (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
+                    .opacity(0.8)
+                    .ignoresSafeArea(edges: .top)
+            )
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [
+                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.8),
+                        .clear,
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 12)
+                .offset(y: 12)
+                .allowsHitTesting(false)
+            }
+            .background(
+                Color.clear
+                    .ignoresSafeArea(edges: .top)
+            )
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newValue in
+                chipsHeight = newValue
+            }
+    }
 
     private var categoryChips: some View {
         ScrollViewReader { proxy in
@@ -293,11 +332,7 @@ struct HomeView: View {
                     }
 
                     Button {
-                        if subscriptionStore.isReadOnly {
-                            showPaywall = true
-                        } else {
-                            showAddCategory = true
-                        }
+                        showAddCategory = true
                     } label: {
                         Image(systemName: "plus")
                             .font(.subheadline)
@@ -329,14 +364,10 @@ struct HomeView: View {
         .sheet(item: $editingCategory) { category in
             CategoryFormSheet(mode: .edit(category))
         }
-        .confirmationDialog(
-            "Delete Category",
-            isPresented: .init(
-                get: { categoryToDelete != nil },
-                set: { if !$0 { categoryToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
+        .alert("Delete Category?", isPresented: .init(
+            get: { categoryToDelete != nil },
+            set: { if !$0 { categoryToDelete = nil } }
+        )) {
             if let category = categoryToDelete {
                 Button("Delete", role: .destructive) {
                     if selectedCategory == category.id {
@@ -348,6 +379,7 @@ struct HomeView: View {
                     categoryToDelete = nil
                 }
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             let count = noteStore.notes.filter { $0.categoryId == categoryToDelete?.id }.count
             Text("This will unassign \(count) note\(count == 1 ? "" : "s") from this category. Notes won't be deleted.")
@@ -362,49 +394,100 @@ struct HomeView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            if isSearching && !query.isEmpty {
-                Label("No results", systemImage: "magnifyingglass")
+        Group {
+            if isSearching && !query.isEmpty || selectedCategory != nil {
+                // Standard empty state for search/category filters
+                VStack(spacing: 12) {
+                    Group {
+                        if isSearching && !query.isEmpty {
+                            Image("search-empty")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 60)
+                        } else {
+                            Image("category-empty")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 60)
+                        }
+                    }
+                    .foregroundStyle(.secondary)
+
+                    Text(isSearching && !query.isEmpty ? "No results" : "No notes yet")
+                        .font(.brandTitle2)
+
+                    Group {
+                        if isSearching && !query.isEmpty, let cat = selectedCategoryModel {
+                            Text("No notes matching \"\(query)\" in ")
+                                + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
+                                + Text(".")
+                        } else if isSearching && !query.isEmpty {
+                            Text("No notes matching \"\(query)\".")
+                        } else if let cat = selectedCategoryModel {
+                            Text("No notes in ")
+                                + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
+                                + Text(".")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 80)
             } else {
-                Label(
-                    selectedCategory == nil
-                        ? "Capture your thoughts"
-                        : "No notes yet",
-                    systemImage: selectedCategory == nil
-                        ? "waveform"
-                        : "tray"
-                )
-            }
-        } description: {
-            if isSearching && !query.isEmpty, let cat = selectedCategoryModel {
-                Text("No notes matching \"\(query)\" in ")
-                    + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
-                    + Text(".")
-            } else if isSearching && !query.isEmpty {
-                Text("No notes matching \"\(query)\".")
-            } else if let cat = selectedCategoryModel {
-                Text("No notes in ")
-                    + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
-                    + Text(".")
-            } else {
-                Text("Tap the mic to record your first thought.")
+                // Welcome empty state — no notes at all
+                VStack(spacing: 16) {
+                    Spacer()
+
+                    VStack(spacing: 8) {
+                        (Text("Your voice,\n")
+                            + Text("turned into words")
+                                .foregroundColor(.brand))
+                            .font(.brandLargeTitle)
+                            .multilineTextAlignment(.center)
+
+                        Text("Tap the mic and start talking")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HandDrawnArrow()
+                        .padding(.top, 40)
+
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 40)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 300)
-        .padding(.bottom, 0)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Floating Buttons
+
+    private func bottomBarWrapper<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    .clear,
+                    (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 50)
+
+            content()
+                .frame(maxWidth: .infinity)
+                .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5))
+        }
+    }
 
     private var floatingButtons: some View {
         HStack(spacing: 40) {
             // Create text note button (left)
             Button {
-                if subscriptionStore.isReadOnly {
-                    showPaywall = true
-                } else {
-                    createTextNote()
-                }
+                createTextNote()
             } label: {
                 Image(systemName: "pencil")
                     .fontWeight(.medium)
@@ -421,19 +504,11 @@ struct HomeView: View {
                 .background(Circle().fill(Color.brand))
                 .glassEffect(.regular.interactive(), in: .circle)
                 .onTapGesture {
-                    if subscriptionStore.isReadOnly {
-                        showPaywall = true
-                    } else {
-                        showRecordView = true
-                    }
+                    showRecordView = true
                 }
                 .onLongPressGesture {
-                    if subscriptionStore.isReadOnly {
-                        showPaywall = true
-                    } else {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        showAudioImporter = true
-                    }
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showAudioImporter = true
                 }
                 .matchedTransitionSource(id: "record", in: namespace)
 
@@ -450,6 +525,8 @@ struct HomeView: View {
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+            .disabled(noteStore.notes.isEmpty)
+            .opacity(noteStore.notes.isEmpty ? 0.4 : 1)
         }
         .padding(.bottom, 12)
         .padding(.horizontal, 20)
@@ -688,7 +765,7 @@ struct HomeView: View {
 
             let language = settingsStore.language == "auto" ? nil : settingsStore.language
             let userId = authStore.userId
-            noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
+            noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId, customDictionary: settingsStore.customDictionary)
         } catch {
             noteStore.lastError = "Failed to import audio file"
         }
@@ -787,6 +864,19 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Hand-Drawn Arrow
+
+private struct HandDrawnArrow: View {
+    var body: some View {
+        Image("hand-drawn-arrow")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 130)
+            .foregroundStyle(.tertiary)
+            .rotationEffect(.degrees(15))
+    }
+}
+
 // MARK: - Category Reorder
 
 private struct CategoryReorderDelegate: DropDelegate {
@@ -815,3 +905,4 @@ private struct CategoryReorderDelegate: DropDelegate {
         return true
     }
 }
+

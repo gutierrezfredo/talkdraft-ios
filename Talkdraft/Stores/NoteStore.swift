@@ -53,7 +53,7 @@ final class NoteStore {
     /// Retry any notes stuck in "Waiting for connection…".
     /// Scans the notes array directly — works even after app restart.
     /// Each note goes through transcribeNote which has its own connectivity probe.
-    func retryWaitingNotes(language: String?, userId: UUID?) {
+    func retryWaitingNotes(language: String?, userId: UUID?, customDictionary: [String] = []) {
         let waiting = notes.filter {
             $0.content == "Waiting for connection…" || $0.content == "Transcription failed — tap to edit"
         }
@@ -67,7 +67,7 @@ final class NoteStore {
             else { continue }
 
             setNoteContent(id: note.id, content: "Transcribing…")
-            transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId)
+            transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId, customDictionary: customDictionary)
         }
     }
 
@@ -181,10 +181,7 @@ final class NoteStore {
                     .eq("id", value: id)
                     .execute()
             } catch {
-                // Rollback on failure
-                removed.deletedAt = nil
-                deletedNotes.removeAll { $0.id == id }
-                notes.insert(removed, at: min(index, notes.count))
+                // Sync failure is non-fatal — note is already removed locally
             }
         }
     }
@@ -197,19 +194,21 @@ final class NoteStore {
         deletedNotes.insert(contentsOf: removed, at: 0)
 
         Task {
-            do {
-                let update = SoftDeleteUpdate(deletedAt: now)
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .in("id", values: ids.map(\.uuidString))
-                    .execute()
-            } catch {
-                // Rollback on failure
-                for i in removed.indices { removed[i].deletedAt = nil }
-                deletedNotes.removeAll { ids.contains($0.id) }
-                notes.append(contentsOf: removed)
-                notes.sort { $0.createdAt > $1.createdAt }
+            // Batch in chunks of 20 to avoid oversized IN clauses
+            let idArray = Array(ids)
+            for chunk in stride(from: 0, to: idArray.count, by: 20).map({
+                Array(idArray[$0..<min($0 + 20, idArray.count)])
+            }) {
+                do {
+                    let update = SoftDeleteUpdate(deletedAt: now)
+                    try await supabase
+                        .from("notes")
+                        .update(update)
+                        .in("id", values: chunk.map(\.uuidString))
+                        .execute()
+                } catch {
+                    // Sync failure is non-fatal — notes are already removed locally
+                }
             }
         }
     }
@@ -308,7 +307,7 @@ final class NoteStore {
 
     // MARK: - Transcription
 
-    func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?) {
+    func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?, customDictionary: [String] = []) {
         Task {
             var compressedURL: URL?
             defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
@@ -324,12 +323,17 @@ final class NoteStore {
                     return
                 }
 
-                // Connectivity probe — fast HEAD request to detect offline before heavy upload
+                // Connectivity probe — quick request to verify network before heavy upload
                 do {
-                    var probe = URLRequest(url: AppConfig.supabaseUrl)
-                    probe.httpMethod = "HEAD"
-                    probe.timeoutInterval = 5
-                    _ = try await URLSession.shared.data(for: probe)
+                    var probe = URLRequest(url: AppConfig.supabaseUrl.appendingPathComponent("rest/v1/"))
+                    probe.httpMethod = "GET"
+                    probe.timeoutInterval = 8
+                    probe.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+                    probe.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+                    let (_, response) = try await URLSession.shared.data(for: probe)
+                    guard let http = response as? HTTPURLResponse, http.statusCode < 500 else {
+                        throw URLError(.cannotConnectToHost)
+                    }
                 } catch {
                     logger.info("Connectivity probe failed — device appears offline: \(error)")
                     setNoteContent(id: id, content: "Waiting for connection…")
@@ -355,7 +359,8 @@ final class NoteStore {
                     audioData: audioData,
                     fileName: fileName,
                     language: language,
-                    userId: userId
+                    userId: userId,
+                    customDictionary: customDictionary
                 )
 
                 // Guard against empty transcription
@@ -418,7 +423,7 @@ final class NoteStore {
                 note.updatedAt = Date()
                 updateNote(note)
             } catch {
-                // AI title failed — keep the quick title, no big deal
+                logger.error("generateTitle failed for \(noteId): \(error)")
             }
         }
     }

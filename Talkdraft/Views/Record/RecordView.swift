@@ -217,7 +217,7 @@ struct RecordView: View {
 
         // Transcribe in background
         Task { @MainActor in
-            noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId)
+            noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId, customDictionary: settingsStore.customDictionary)
         }
 
         onNoteSaved?(note)
