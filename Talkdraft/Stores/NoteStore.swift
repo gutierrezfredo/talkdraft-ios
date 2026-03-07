@@ -464,6 +464,25 @@ final class NoteStore {
         }
     }
 
+    func deleteRewrite(_ rewrite: NoteRewrite) {
+        rewritesCache[rewrite.noteId]?.removeAll { $0.id == rewrite.id }
+
+        Task {
+            do {
+                try await supabase
+                    .from("note_rewrites")
+                    .delete()
+                    .eq("id", value: rewrite.id.uuidString)
+                    .execute()
+            } catch {
+                logger.error("deleteRewrite failed: \(error)")
+                var current = rewritesCache[rewrite.noteId] ?? []
+                current.append(rewrite)
+                rewritesCache[rewrite.noteId] = current
+            }
+        }
+    }
+
     func deleteRewrites(for noteId: UUID) {
         rewritesCache[noteId] = nil
 

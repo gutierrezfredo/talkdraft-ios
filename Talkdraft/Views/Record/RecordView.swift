@@ -70,8 +70,6 @@ struct RecordView: View {
                 stopAndSave()
             }
         }
-        .sensoryFeedback(.impact(weight: .medium), trigger: recorder.isRecording)
-        .sensoryFeedback(.selection, trigger: recorder.isPaused)
     }
 
     // MARK: - Header
@@ -135,6 +133,7 @@ struct RecordView: View {
 
             // Stop (save)
             Button {
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
                 stopAndSave()
             } label: {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -148,6 +147,7 @@ struct RecordView: View {
 
             // Pause / Resume
             Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 if recorder.isPaused {
                     recorder.resumeRecording()
                 } else {

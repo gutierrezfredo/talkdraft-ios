@@ -476,20 +476,22 @@ struct HomeView: View {
             .buttonStyle(.plain)
 
             // Record button (center) — long-press to import audio
-            Image(systemName: "mic.fill")
-                .font(.title)
-                .foregroundStyle(.white)
-                .frame(width: 72, height: 72)
-                .background(Circle().fill(Color.brand))
-                .glassEffect(.regular.interactive(), in: .circle)
-                .onTapGesture {
-                    showRecordView = true
-                }
-                .onLongPressGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showAudioImporter = true
-                }
-                .matchedTransitionSource(id: "record", in: namespace)
+            Button {
+                showRecordView = true
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.title)
+                    .foregroundStyle(.white)
+                    .frame(width: 72, height: 72)
+                    .background(Circle().fill(Color.brand))
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .matchedTransitionSource(id: "record", in: namespace)
+            }
+            .buttonStyle(.plain)
+            .onLongPressGesture {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                showAudioImporter = true
+            }
 
             // Search button (right)
             Button {

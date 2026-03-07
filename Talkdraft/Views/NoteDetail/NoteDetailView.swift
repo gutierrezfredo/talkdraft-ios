@@ -13,6 +13,7 @@ struct NoteDetailView: View {
     @State private var editedTitle: String
     @State private var editedContent: String
     @State private var showDeleteConfirmation = false
+    @State private var pendingDeleteRewrite: NoteRewrite?
     @State private var didDelete = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
@@ -255,8 +256,13 @@ struct NoteDetailView: View {
                                 .fontWeight(.medium)
                                 .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
                                 .foregroundStyle(Color.primary)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
                         }
                         .disabled(rewrites.isEmpty)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        })
                     }
                 }
                 .opacity(rewriteLabelOpacity)
@@ -278,6 +284,15 @@ struct NoteDetailView: View {
                         .disabled(isDownloadingAudio)
                     }
 
+                    if let rewriteId = activeRewriteId,
+                       let rewrite = rewrites.first(where: { $0.id == rewriteId }) {
+                        Button(role: .destructive) {
+                            pendingDeleteRewrite = rewrite
+                        } label: {
+                            Label("Delete this rewrite", systemImage: "wand.and.sparkles")
+                        }
+                    }
+
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
                     } label: {
@@ -296,6 +311,21 @@ struct NoteDetailView: View {
                 didDelete = true
                 noteStore.removeNote(id: note.id)
                 dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
+        }
+        .alert("Delete this rewrite?", isPresented: .init(
+            get: { pendingDeleteRewrite != nil },
+            set: { if !$0 { pendingDeleteRewrite = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let rewrite = pendingDeleteRewrite {
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                    deleteActiveRewrite(rewrite)
+                    pendingDeleteRewrite = nil
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -459,7 +489,9 @@ struct NoteDetailView: View {
             }
 
             // Date
-            Text(note.createdAt, format: .dateTime.month(.wide).day().year())
+            (Text(note.createdAt, format: .dateTime.month(.wide).day().year())
+                + Text(" · ").foregroundStyle(.tertiary)
+                + Text(note.createdAt, format: .dateTime.hour().minute()))
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
@@ -679,6 +711,7 @@ struct NoteDetailView: View {
 
             // Rewrite
             Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 showRewriteSheet = true
             } label: {
                 if keyboardVisible {
@@ -970,6 +1003,7 @@ struct NoteDetailView: View {
 
     private func switchToRewrite(_ rewrite: NoteRewrite) {
         guard rewrite.id != activeRewriteId else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
         rewriteLabelOpacity = 0
         activeRewriteId = rewrite.id
         contentOpacity = 0
@@ -986,8 +1020,25 @@ struct NoteDetailView: View {
         }
     }
 
+    private func deleteActiveRewrite(_ rewrite: NoteRewrite) {
+        noteStore.deleteRewrite(rewrite)
+        rewrites.removeAll { $0.id == rewrite.id }
+
+        // If there are remaining rewrites, switch to the last one; otherwise restore original
+        if let last = rewrites.last {
+            switchToRewrite(last)
+        } else {
+            switchToOriginal()
+            // No rewrites left — clear originalContent so the note is back to plain state
+            var updated = note
+            updated.originalContent = nil
+            noteStore.updateNote(updated)
+        }
+    }
+
     private func switchToOriginal() {
         guard let original = note.originalContent else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
         rewriteLabelOpacity = 0
         activeRewriteId = nil
         contentOpacity = 0
