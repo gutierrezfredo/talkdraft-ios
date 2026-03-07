@@ -13,8 +13,18 @@ final class CheckboxAttachment: NSTextAttachment {
         super.init(data: nil, ofType: nil)
         let symbolName = checked ? "checkmark.circle.fill" : "circle"
         let config = UIImage.SymbolConfiguration(pointSize: 28, weight: checked ? .medium : .light)
-        self.image = UIImage(systemName: symbolName, withConfiguration: config)?
-            .withTintColor(color, renderingMode: .alwaysOriginal)
+        if let symbol = UIImage(systemName: symbolName, withConfiguration: config)?
+            .withTintColor(color, renderingMode: .alwaysOriginal) {
+            // Draw icon into a wider canvas (icon + 16pt trailing padding) so
+            // the layout engine reserves the correct space on the first line too.
+            // Force exactly 28×28 for the icon to ensure perfect square proportions.
+            let iconSize: CGFloat = 28
+            let paddedSize = CGSize(width: iconSize + 12, height: iconSize)
+            let renderer = UIGraphicsImageRenderer(size: paddedSize)
+            self.image = renderer.image { _ in
+                symbol.draw(in: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
+            }
+        }
     }
 
     @available(*, unavailable)
@@ -25,7 +35,7 @@ final class CheckboxAttachment: NSTextAttachment {
         // Use a fixed size so checked/unchecked don't cause layout shifts
         let fixedSize: CGFloat = 28
         let yOffset = (textFont.capHeight - fixedSize) / 2
-        return CGRect(x: 0, y: yOffset, width: fixedSize, height: fixedSize)
+        return CGRect(x: 0, y: yOffset, width: fixedSize + 12, height: fixedSize)
     }
 }
 
@@ -181,7 +191,7 @@ struct ExpandingTextView: UIViewRepresentable {
         var result = ""
         attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, range, _ in
             if let attachment = attrs[.attachment] as? CheckboxAttachment {
-                result += attachment.isChecked ? "☑" : "☐"
+                result += attachment.isChecked ? "☑ " : "☐ "
             } else {
                 result += (attributed.string as NSString).substring(with: range)
             }
@@ -240,7 +250,9 @@ struct ExpandingTextView: UIViewRepresentable {
                 if isUnchecked || isChecked {
                     let color: UIColor = isChecked ? Self.brandColor : .secondaryLabel
                     let attachment = CheckboxAttachment(checked: isChecked, font: font, color: color)
-                    let charRange = NSRange(location: lineOffset, length: 1)
+                    // Replace checkbox + space (2 chars) so no stray space precedes the text on line 1
+                    let replaceLen = (lineLen > 1 && lineNS.character(at: 1) == 0x0020) ? 2 : 1
+                    let charRange = NSRange(location: lineOffset, length: replaceLen)
                     let textRange: NSRange? = (isChecked && lineLen > 2)
                         ? NSRange(location: lineOffset + 2, length: lineLen - 2) : nil
                     replacements.append((charRange, attachment, textRange))
@@ -261,12 +273,11 @@ struct ExpandingTextView: UIViewRepresentable {
         let checkboxParaStyle = NSMutableParagraphStyle()
         checkboxParaStyle.lineSpacing = lineSpacing - 2
         checkboxParaStyle.paragraphSpacingBefore = 6
-        checkboxParaStyle.firstLineHeadIndent = 8
+        checkboxParaStyle.firstLineHeadIndent = 0
         checkboxParaStyle.headIndent = 40
         for r in replacements.reversed() {
             let attachStr = NSMutableAttributedString(attachment: r.attachment)
             attachStr.addAttribute(.paragraphStyle, value: checkboxParaStyle, range: NSRange(location: 0, length: attachStr.length))
-            attachStr.addAttribute(.kern, value: 16.0, range: NSRange(location: 0, length: attachStr.length))
             attributed.replaceCharacters(in: r.range, with: attachStr)
         }
 
@@ -477,17 +488,29 @@ struct ExpandingTextView: UIViewRepresentable {
             guard let tapPosition = tv.closestPosition(to: point) else { return nil }
             let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
 
+            // tapOffset is in attributed text coordinates. Each CheckboxAttachment occupies
+            // 1 char in attributed text but 2 chars in parent.text (☐/☑ + space), so
+            // translate by counting attachments before the tap point.
+            var checkboxCount = 0
+            if let attributed = tv.attributedText {
+                let scanRange = NSRange(location: 0, length: min(tapOffset, attributed.length))
+                attributed.enumerateAttributes(in: scanRange) { attrs, _, _ in
+                    if attrs[.attachment] is CheckboxAttachment { checkboxCount += 1 }
+                }
+            }
+            let plainOffset = tapOffset + checkboxCount
+
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
 
-            let safeOffset = min(max(tapOffset, 0), nsText.length - 1)
+            let safeOffset = min(max(plainOffset, 0), nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             guard lineRange.length > 0 else { return nil }
 
             let firstChar = nsText.character(at: lineRange.location)
             guard firstChar == 0x2610 || firstChar == 0x2611 else { return nil }
 
-            let maxTapX: CGFloat = 32
+            let maxTapX: CGFloat = 48
             guard point.x <= maxTapX else { return nil }
 
             return lineRange.location

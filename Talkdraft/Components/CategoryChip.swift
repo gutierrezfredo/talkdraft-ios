@@ -22,7 +22,7 @@ struct CategoryChip: View {
                 Capsule()
                     .fill(colorScheme == .dark ? Color.darkSurface : .white)
             )
-            .shadow(color: .black.opacity(0.05), radius: 3, x: 0, y: 1)
+            .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
             .overlay(
                 Capsule()
                     .strokeBorder(isSelected ? color : .clear, lineWidth: 2)

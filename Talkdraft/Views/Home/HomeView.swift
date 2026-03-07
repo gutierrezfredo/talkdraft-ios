@@ -264,24 +264,30 @@ struct HomeView: View {
 
     private var chipsBar: some View {
         categoryChips
-            .padding(.top, -6)
+            .padding(.top, -10)
             .padding(.bottom, 0)
             .background(
-                (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
-                    .opacity(0.8)
-                    .ignoresSafeArea(edges: .top)
-            )
-            .overlay(alignment: .bottom) {
                 LinearGradient(
                     colors: [
-                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.8),
+                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
                         .clear,
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 12)
-                .offset(y: 12)
+                .ignoresSafeArea(edges: .top)
+            )
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [
+                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.2),
+                        .clear,
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 40)
+                .offset(y: 40)
                 .allowsHitTesting(false)
             }
             .background(
