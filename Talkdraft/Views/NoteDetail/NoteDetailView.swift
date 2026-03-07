@@ -121,6 +121,14 @@ struct NoteDetailView: View {
                         .padding(.top, 20)
                         .padding(.horizontal, 24)
 
+                    if note.originalContent != nil, !isRewriting, let params = lastRewriteParams {
+                        rewritePromptBadge(params: params)
+                            .padding(.top, 12)
+                            .padding(.horizontal, 24)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     // Rewriting indicator
                     if isRewriting {
                         HStack(spacing: 8) {
@@ -525,6 +533,26 @@ struct NoteDetailView: View {
     }
 
     // MARK: - Title
+
+    private func rewritePromptBadge(params: (tone: String?, instructions: String?)) -> some View {
+        let label: String = {
+            if let toneId = params.tone,
+               let tone = rewriteFormats.flatMap(\.tones).first(where: { $0.id == toneId }) {
+                return "\(tone.emoji) \(tone.label)"
+            } else if let instructions = params.instructions {
+                let preview = String(instructions.prefix(40))
+                return instructions.count > 40 ? "\(preview)…" : preview
+            }
+            return "Rewritten"
+        }()
+
+        return Text(label)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.secondary.opacity(0.08), in: Capsule())
+    }
 
     private var titleField: some View {
         TextField("Untitled", text: $editedTitle, axis: .vertical)

@@ -266,34 +266,7 @@ struct HomeView: View {
         categoryChips
             .padding(.top, -10)
             .padding(.bottom, 0)
-            .background(
-                LinearGradient(
-                    colors: [
-                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
-                        .clear,
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea(edges: .top)
-            )
-            .overlay(alignment: .bottom) {
-                LinearGradient(
-                    colors: [
-                        (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.2),
-                        .clear,
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 40)
-                .offset(y: 40)
-                .allowsHitTesting(false)
-            }
-            .background(
-                Color.clear
-                    .ignoresSafeArea(edges: .top)
-            )
+            .background(Color.clear.ignoresSafeArea(edges: .top))
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { newValue in
