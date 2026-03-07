@@ -55,9 +55,8 @@ final class TranscriptionService: Sendable {
             body.appendMultipart("\(language)\r\n")
         }
 
-        // Prompt — custom dictionary words + locale hint
-        let promptLang = language ?? Locale.current.language.languageCode?.identifier
-        let localeHint = promptLang.flatMap { Self.localePrompts[$0] }
+        // Prompt — custom dictionary words + locale hint (only when language is explicitly set)
+        let localeHint = language.flatMap { Self.localePrompts[$0] }
         let dictionaryHint = customDictionary.isEmpty ? nil : customDictionary.joined(separator: ", ") + "."
         let promptParts = [dictionaryHint, localeHint].compactMap { $0 }
         if !promptParts.isEmpty {
