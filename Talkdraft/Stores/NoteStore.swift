@@ -46,6 +46,7 @@ final class NoteStore {
     var notes: [Note] = []
     var deletedNotes: [Note] = []
     var categories: [Category] = []
+    var rewritesCache: [UUID: [NoteRewrite]] = [:]
     var selectedCategoryId: UUID?
     var isLoading = false
     var lastError: String?
@@ -424,6 +425,57 @@ final class NoteStore {
                 updateNote(note)
             } catch {
                 logger.error("generateTitle failed for \(noteId): \(error)")
+            }
+        }
+    }
+
+    // MARK: - Rewrites
+
+    func fetchRewrites(for noteId: UUID) async {
+        do {
+            let fetched: [NoteRewrite] = try await supabase
+                .from("note_rewrites")
+                .select()
+                .eq("note_id", value: noteId)
+                .order("created_at", ascending: true)
+                .execute()
+                .value
+            rewritesCache[noteId] = fetched
+        } catch {
+            logger.error("fetchRewrites failed: \(error)")
+        }
+    }
+
+    func saveRewrite(_ rewrite: NoteRewrite) {
+        var current = rewritesCache[rewrite.noteId] ?? []
+        current.append(rewrite)
+        rewritesCache[rewrite.noteId] = current
+
+        Task {
+            do {
+                try await supabase
+                    .from("note_rewrites")
+                    .insert(rewrite)
+                    .execute()
+            } catch {
+                logger.error("saveRewrite failed: \(error)")
+                rewritesCache[rewrite.noteId]?.removeAll { $0.id == rewrite.id }
+            }
+        }
+    }
+
+    func deleteRewrites(for noteId: UUID) {
+        rewritesCache[noteId] = nil
+
+        Task {
+            do {
+                try await supabase
+                    .from("note_rewrites")
+                    .delete()
+                    .eq("note_id", value: noteId.uuidString)
+                    .execute()
+            } catch {
+                logger.error("deleteRewrites failed: \(error)")
             }
         }
     }

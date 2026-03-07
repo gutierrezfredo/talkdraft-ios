@@ -16,10 +16,11 @@ struct NoteDetailView: View {
     @State private var didDelete = false
     @State private var showCategoryPicker = false
     @State private var showRewriteSheet = false
-    @State private var showRestoreConfirmation = false
-    @State private var pendingRewrite: (tone: String?, instructions: String?)?
-    @State private var lastRewriteParams: (tone: String?, instructions: String?)?
+    @State private var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
     @State private var isRewriting = false
+    @State private var rewrites: [NoteRewrite] = []
+    @State private var activeRewriteId: UUID?
+    @State private var rewriteLabelOpacity: Double = 0
     @State private var audioExpanded = false
     @State private var player = AudioPlayer()
     @State private var typewriterTask: Task<Void, Never>?
@@ -121,27 +122,6 @@ struct NoteDetailView: View {
                         .padding(.top, 20)
                         .padding(.horizontal, 24)
 
-                    if note.originalContent != nil, !isRewriting, let params = lastRewriteParams {
-                        rewritePromptBadge(params: params)
-                            .padding(.top, 12)
-                            .padding(.horizontal, 24)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    // Rewriting indicator
-                    if isRewriting {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(Color.brand)
-                            Text("Rewriting…")
-                                .font(.subheadline)
-                                .italic()
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 20)
-                        .transition(.opacity)
-                    }
 
                     if isTranscribing {
                         transcribingIndicator
@@ -224,43 +204,63 @@ struct NoteDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await noteStore.fetchRewrites(for: noteId)
+            rewrites = noteStore.rewritesCache[noteId] ?? []
+            activeRewriteId = rewrites.first { $0.content == note.content }?.id
+            if !rewrites.isEmpty {
+                try? await Task.sleep(for: .milliseconds(32))
+                rewriteLabelOpacity = 1
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 16) {
-                    Button {
-                        showRestoreConfirmation = true
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.caption2)
-                            Text("Restore")
-                                .font(.caption)
+                let activeRewrite = rewrites.first { $0.id == activeRewriteId }
+                let label = activeRewriteId == nil ? "Original" : (activeRewrite?.displayLabel ?? "Rewrite")
+                ZStack {
+                    if isRewriting {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .tint(.secondary)
+                                .scaleEffect(0.8)
+                            Text("Rewriting…")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-
-                    if let params = lastRewriteParams {
-                        Button {
-                            performRewrite(tone: params.tone, instructions: params.instructions)
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "arrow.trianglehead.2.clockwise")
-                                    .font(.caption2)
-                                Text("Try another")
-                                    .font(.caption)
+                    } else {
+                        Menu {
+                            Button {
+                                switchToOriginal()
+                            } label: {
+                                if activeRewriteId == nil {
+                                    Label("Original", systemImage: "checkmark")
+                                } else {
+                                    Text("Original")
+                                }
                             }
-                            .fontWeight(.medium)
-                            .foregroundStyle(Color.brand)
+                            ForEach(rewrites) { rewrite in
+                                Button {
+                                    switchToRewrite(rewrite)
+                                } label: {
+                                    if rewrite.id == activeRewriteId {
+                                        Label(rewrite.displayLabel, systemImage: "checkmark")
+                                    } else {
+                                        Text(rewrite.displayLabel)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text(label)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
+                                .foregroundStyle(Color.primary)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(isRewriting)
+                        .disabled(rewrites.isEmpty)
                     }
                 }
-                .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
-                .opacity(note.originalContent != nil && !isRewriting ? 1 : 0)
-                .animation(.easeIn(duration: 0.3), value: isRewriting)
+                .opacity(rewriteLabelOpacity)
+                .animation(.easeIn(duration: 0.25), value: rewriteLabelOpacity)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
@@ -313,10 +313,10 @@ struct NoteDetailView: View {
         .sheet(isPresented: $showRewriteSheet, onDismiss: {
             guard let rewrite = pendingRewrite else { return }
             pendingRewrite = nil
-            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions)
+            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions, toneLabel: rewrite.toneLabel, toneEmoji: rewrite.toneEmoji)
         }) {
-            RewriteSheet { tone, instructions in
-                pendingRewrite = (tone, instructions)
+            RewriteSheet { tone, instructions, toneLabel, toneEmoji in
+                pendingRewrite = (tone, instructions, toneLabel, toneEmoji)
             }
             .presentationDetents([.large])
             .presentationContentInteraction(.scrolls)
@@ -339,12 +339,6 @@ struct NoteDetailView: View {
             if hasContent && (hasChanges || !isInStore) {
                 saveChanges()
             }
-        }
-        .alert("Restore Original?", isPresented: $showRestoreConfirmation) {
-            Button("Restore", role: .destructive) { restoreOriginal() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This will discard all rewrites and restore the original content.")
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -533,26 +527,6 @@ struct NoteDetailView: View {
     }
 
     // MARK: - Title
-
-    private func rewritePromptBadge(params: (tone: String?, instructions: String?)) -> some View {
-        let label: String = {
-            if let toneId = params.tone,
-               let tone = rewriteFormats.flatMap(\.tones).first(where: { $0.id == toneId }) {
-                return "\(tone.emoji) \(tone.label)"
-            } else if let instructions = params.instructions {
-                let preview = String(instructions.prefix(40))
-                return instructions.count > 40 ? "\(preview)…" : preview
-            }
-            return "Rewritten"
-        }()
-
-        return Text(label)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(.secondary.opacity(0.08), in: Capsule())
-    }
 
     private var titleField: some View {
         TextField("Untitled", text: $editedTitle, axis: .vertical)
@@ -904,8 +878,7 @@ struct NoteDetailView: View {
         }
     }
 
-    private func performRewrite(tone: String?, instructions: String?) {
-        lastRewriteParams = (tone, instructions)
+    private func performRewrite(tone: String?, instructions: String?, toneLabel: String? = nil, toneEmoji: String? = nil) {
         isRewriting = true
         Task {
             do {
@@ -915,6 +888,7 @@ struct NoteDetailView: View {
                 var updated = note
                 if updated.originalContent == nil {
                     updated.originalContent = editedContent
+                    noteStore.updateNote(updated)
                 }
 
                 // Stream with typewriter reveal
@@ -958,7 +932,23 @@ struct NoteDetailView: View {
                     editedContent += fullText[startIdx...]
                 }
 
-                // Save once complete
+                // Save rewrite version
+                let rewrite = NoteRewrite(
+                    id: UUID(),
+                    noteId: noteId,
+                    userId: authStore.userId,
+                    tone: tone,
+                    toneLabel: toneLabel,
+                    toneEmoji: toneEmoji,
+                    instructions: instructions,
+                    content: editedContent,
+                    createdAt: Date()
+                )
+                noteStore.saveRewrite(rewrite)
+                rewrites = noteStore.rewritesCache[noteId] ?? []
+                activeRewriteId = rewrite.id
+
+                // Save note content
                 updated.content = editedContent
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
                 updated.updatedAt = Date()
@@ -970,12 +960,47 @@ struct NoteDetailView: View {
                 }
             } catch {
                 if editedContent.isEmpty {
-                    // Restore original if nothing came through
-                    editedContent = note.originalContent ?? note.content ?? ""
+                    editedContent = note.originalContent ?? note.content
                 }
                 errorMessage = "Rewrite failed: \(error.localizedDescription)"
             }
             isRewriting = false
+        }
+    }
+
+    private func switchToRewrite(_ rewrite: NoteRewrite) {
+        guard rewrite.id != activeRewriteId else { return }
+        rewriteLabelOpacity = 0
+        activeRewriteId = rewrite.id
+        contentOpacity = 0
+        editedContent = rewrite.content
+        scrollToTop()
+        var updated = note
+        updated.content = rewrite.content
+        updated.updatedAt = Date()
+        noteStore.updateNote(updated)
+        withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            rewriteLabelOpacity = 1
+        }
+    }
+
+    private func switchToOriginal() {
+        guard let original = note.originalContent else { return }
+        rewriteLabelOpacity = 0
+        activeRewriteId = nil
+        contentOpacity = 0
+        editedContent = original
+        scrollToTop()
+        var updated = note
+        updated.content = original
+        updated.updatedAt = Date()
+        noteStore.updateNote(updated)
+        withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            rewriteLabelOpacity = 1
         }
     }
 
@@ -999,22 +1024,6 @@ struct NoteDetailView: View {
             withAnimation(.snappy) {
                 noteStore.addNote(updated)
             }
-        }
-    }
-
-    private func restoreOriginal() {
-        guard let original = note.originalContent else { return }
-        contentOpacity = 0
-        editedContent = original
-        lastRewriteParams = nil
-        var updated = note
-        updated.content = original
-        updated.originalContent = nil
-        updated.updatedAt = Date()
-        noteStore.updateNote(updated)
-        scrollToTop()
-        withAnimation(.easeIn(duration: 0.5)) {
-            contentOpacity = 1
         }
     }
 
@@ -1425,7 +1434,8 @@ private let rewriteFormats: [RewriteFormat] = [
 ]
 
 private struct RewriteSheet: View {
-    let onSelect: (String?, String?) -> Void
+    /// (toneId, instructions, toneLabel, toneEmoji)
+    let onSelect: (String?, String?, String?, String?) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -1632,7 +1642,7 @@ private struct RewriteSheet: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            onSelect(nil, preset.instructions)
+            onSelect(nil, preset.instructions, nil, nil)
             dismiss()
         }
         .contextMenu {
@@ -1718,7 +1728,7 @@ private struct RewriteSheet: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            onSelect(tone.id, nil)
+            onSelect(tone.id, nil, tone.label, tone.emoji)
             dismiss()
         }
         .onLongPressGesture {
@@ -1742,7 +1752,7 @@ private struct RewriteSheet: View {
                 .padding(.horizontal, 20)
 
             Button {
-                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces))
+                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces), nil, nil)
                 dismiss()
             } label: {
                 Text("Rewrite")

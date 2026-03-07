@@ -21,6 +21,7 @@
 		32948EAC91D210A14C9739BC /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0937EE6C7C8D009DAD2F9FE /* Typography.swift */; };
 		33CE1A9C063E4F0348D629D6 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2CCD11FC8E2A95409CE8BA /* AudioPlayer.swift */; };
 		35F5DA9385067C04FD8143BF /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68318B2AD005D23ED4B13B79 /* AuthStore.swift */; };
+		393F6E31B24CBEFE5A02FA89 /* NoteRewrite.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFD757A8571C9CBCB63CF61E /* NoteRewrite.swift */; };
 		3A1AE7B85529488BAE0100E9 /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0351D4ABA240C67B23BD3A87 /* NoteStore.swift */; };
 		3C25BCBCFA17EE8C12B253E1 /* ExpandingTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB52AA1847AFE6605C97861E /* ExpandingTextView.swift */; };
 		482D0349409B6E8C53C38B78 /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60AFAFE3388B31B8B0F2BDE1 /* Category.swift */; };
@@ -101,6 +102,7 @@
 		F0937EE6C7C8D009DAD2F9FE /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		F175F2B6D8263BF06EA07FB4 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
 		FDB92BBFFE4739EE0C8BB2DC /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
+		FFD757A8571C9CBCB63CF61E /* NoteRewrite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRewrite.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +124,7 @@
 			children = (
 				60AFAFE3388B31B8B0F2BDE1 /* Category.swift */,
 				432C74333A4280F6714A563C /* Note.swift */,
+				FFD757A8571C9CBCB63CF61E /* NoteRewrite.swift */,
 				7E2F84881BDB810593D03A13 /* Profile.swift */,
 			);
 			path = Models;
@@ -429,6 +432,7 @@
 				AC172818C85D4D874DC04A76 /* Note.swift in Sources */,
 				7E4991614F7FDD1C5C1F55DA /* NoteCard.swift in Sources */,
 				989DB87F5A6CA425EB6D7BF6 /* NoteDetailView.swift in Sources */,
+				393F6E31B24CBEFE5A02FA89 /* NoteRewrite.swift in Sources */,
 				3A1AE7B85529488BAE0100E9 /* NoteStore.swift in Sources */,
 				1E9A4642F4FF6C83B2330A1D /* PaywallView.swift in Sources */,
 				F27A7E074D93E06C9D45907F /* Profile.swift in Sources */,
