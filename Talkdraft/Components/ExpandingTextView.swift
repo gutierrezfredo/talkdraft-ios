@@ -510,7 +510,7 @@ struct ExpandingTextView: UIViewRepresentable {
             let firstChar = nsText.character(at: lineRange.location)
             guard firstChar == 0x2610 || firstChar == 0x2611 else { return nil }
 
-            let maxTapX: CGFloat = 48
+            let maxTapX: CGFloat = 40
             guard point.x <= maxTapX else { return nil }
 
             return lineRange.location

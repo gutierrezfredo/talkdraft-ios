@@ -256,13 +256,8 @@ struct NoteDetailView: View {
                                 .fontWeight(.medium)
                                 .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
                                 .foregroundStyle(Color.primary)
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
                         }
                         .disabled(rewrites.isEmpty)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        })
                     }
                 }
                 .opacity(rewriteLabelOpacity)
@@ -980,6 +975,10 @@ struct NoteDetailView: View {
                 noteStore.saveRewrite(rewrite)
                 rewrites = noteStore.rewritesCache[noteId] ?? []
                 activeRewriteId = rewrite.id
+                if rewriteLabelOpacity == 0 {
+                    try? await Task.sleep(for: .milliseconds(32))
+                    rewriteLabelOpacity = 1
+                }
 
                 // Save note content
                 updated.content = editedContent

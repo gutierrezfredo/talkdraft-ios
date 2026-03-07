@@ -193,8 +193,7 @@ struct RecordView: View {
 
         guard duration >= 1 else {
             recorder.cancelRecording()
-            errorMessage = "Recording too short"
-            showError = true
+            dismiss()
             return
         }
 

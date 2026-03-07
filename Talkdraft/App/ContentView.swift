@@ -32,7 +32,7 @@ struct ContentView: View {
                         .scaleEffect(1.5)
                 }
             } else if authStore.isAuthenticated {
-                if subscriptionStore.entitlementChecked && !noteStore.isLoading {
+                if subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded {
                     HomeView()
                         .fullScreenCover(isPresented: showMandatoryPaywall) {
                             PaywallView(mandatory: true)

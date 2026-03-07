@@ -49,6 +49,7 @@ final class NoteStore {
     var rewritesCache: [UUID: [NoteRewrite]] = [:]
     var selectedCategoryId: UUID?
     var isLoading = false
+    var hasInitiallyLoaded = false
     var lastError: String?
 
     /// Retry any notes stuck in "Waiting for connection…".
@@ -81,7 +82,10 @@ final class NoteStore {
 
     func refresh() async {
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            hasInitiallyLoaded = true
+        }
 
         async let fetchedNotes: () = fetchNotes()
         async let fetchedCategories: () = fetchCategories()
