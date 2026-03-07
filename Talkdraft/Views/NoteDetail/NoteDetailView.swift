@@ -393,6 +393,11 @@ struct NoteDetailView: View {
             }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
+        .onChange(of: audioExpanded) { _, expanded in
+            if expanded, let url = audioURL {
+                player.preload(url: url)
+            }
+        }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
                 let isPlaceholder = oldValue == "Transcribing…"

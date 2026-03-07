@@ -17,26 +17,30 @@ final class AudioPlayer {
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
 
+    /// Call when the audio UI becomes visible to start buffering ahead of playback.
+    func preload(url: URL) {
+        guard currentURL != url else { return }
+        stop()
+        prepare(url: url)
+    }
+
     func play(url: URL) {
         if let player, currentURL == url {
-            // Resume existing player
+            // Resume or start already-prepared player
+            activateAudioSession()
             player.play()
             isPlaying = true
             return
         }
 
-        // New file
         stop()
+        prepare(url: url)
+        activateAudioSession()
+        player?.play()
+        isPlaying = true
+    }
 
-        // Route audio to speaker (not earpiece)
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
-            try session.setActive(true)
-        } catch {
-            logger.error("Failed to configure audio session: \(error)")
-        }
-
+    private func prepare(url: URL) {
         let item = AVPlayerItem(url: url)
         let newPlayer = AVPlayer(playerItem: item)
 
@@ -73,12 +77,20 @@ final class AudioPlayer {
             object: item
         )
 
-        newPlayer.play()
         self.player = newPlayer
         self.currentItem = item
         self.currentURL = url
         self.currentTime = 0
-        self.isPlaying = true
+    }
+
+    private func activateAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+        } catch {
+            logger.error("Failed to configure audio session: \(error)")
+        }
     }
 
     func pause() {
