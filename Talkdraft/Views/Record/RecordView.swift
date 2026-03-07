@@ -70,6 +70,8 @@ struct RecordView: View {
                 stopAndSave()
             }
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: recorder.isRecording)
+        .sensoryFeedback(.selection, trigger: recorder.isPaused)
     }
 
     // MARK: - Header
