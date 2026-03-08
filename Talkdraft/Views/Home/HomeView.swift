@@ -35,6 +35,7 @@ struct HomeView: View {
     @State private var keyboardHeight: CGFloat = 0
     @State private var draggingCategory: Category?
     @State private var scrollViewHeight: CGFloat = 0
+    @State private var chipsBarHeight: CGFloat = 0
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
 
@@ -50,11 +51,9 @@ struct HomeView: View {
                 (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                     .ignoresSafeArea()
 
-                // Main content — chips pinned above scroll view to avoid safeAreaInset
-                // measurement races on iOS 26 cold launch
-                VStack(spacing: 0) {
-                    chipsBar
-
+                // Main content — chips float over scroll view via ZStack to avoid
+                // safeAreaInset measurement races on iOS 26 cold launch
+                ZStack(alignment: .top) {
                     ScrollView {
                         VStack(spacing: 12) {
                             // Notes grid + swipeable area
@@ -99,6 +98,7 @@ struct HomeView: View {
                                 }
                             }
                             .frame(minHeight: scrollViewHeight > 0 ? scrollViewHeight : 0, alignment: .top)
+
                             .contentShape(Rectangle())
                             .simultaneousGesture(categorySwipeGesture)
                         }
@@ -116,13 +116,15 @@ struct HomeView: View {
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         Color.clear.frame(height: 120)
                     }
-                    .contentMargins(.top, 8)
+                    .contentMargins(.top, chipsBarHeight)
                     .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
                     .scrollDisabled(false)
                     .scrollDismissesKeyboard(.interactively)
                     .refreshable {
                         await noteStore.refresh()
                     }
+
+                    chipsBar
                 }
 
                 // Bottom fade
@@ -268,7 +270,19 @@ struct HomeView: View {
     // MARK: - Category Chips
 
     private var chipsBar: some View {
-        categoryChips
+        let bg = colorScheme == .dark ? Color.darkBackground : Color.warmBackground
+        return categoryChips
+            .padding(.bottom, 12)
+            .background(
+                LinearGradient(
+                    colors: [bg.opacity(0.7), bg.opacity(0.5), bg.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+            )
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chipsBarHeight = $0 }
     }
 
     private var categoryChips: some View {
