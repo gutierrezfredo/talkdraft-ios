@@ -280,10 +280,49 @@ struct ExpandingTextView: UIViewRepresentable {
             attributed.replaceCharacters(in: r.range, with: attachStr)
         }
 
+        // Apply hanging indent to bullet lines so wrapped text aligns under the text, not the bullet
+        let bulletIndent = ("• " as NSString).size(withAttributes: [.font: font]).width
+        let bulletParaStyle = NSMutableParagraphStyle()
+        bulletParaStyle.lineSpacing = lineSpacing
+        bulletParaStyle.firstLineHeadIndent = 0
+        bulletParaStyle.headIndent = bulletIndent
+        var bulletOffset = 0
+        for line in lines {
+            let lineNS = line as NSString
+            let lineLen = lineNS.length
+            if lineLen >= 2 && lineNS.character(at: 0) == 0x2022 && lineNS.character(at: 1) == 0x0020 { // • + space
+                // Include the trailing \n so UIKit applies the paragraph style to the full paragraph
+                let rangeLen = min(lineLen + 1, attributed.length - bulletOffset)
+                if rangeLen > 0 {
+                    attributed.addAttribute(.paragraphStyle, value: bulletParaStyle, range: NSRange(location: bulletOffset, length: rangeLen))
+                }
+            }
+            bulletOffset += lineLen + 1
+        }
+
         tv.attributedText = attributed
         // Reset typingAttributes after setting attributedText — UIKit resets them to the
         // attributes at the cursor position, which for checkbox attachments lacks .foregroundColor.
-        tv.typingAttributes = attributes
+        // Use cursor-aware attributes so bullet lines keep their headIndent while typing.
+        tv.typingAttributes = typingAttributesForCurrentLine(in: tv, baseAttributes: attributes, bulletParaStyle: bulletParaStyle)
+    }
+
+    /// Returns the correct typingAttributes for the line the cursor is currently on.
+    func typingAttributesForCurrentLine(
+        in tv: UITextView,
+        baseAttributes: [NSAttributedString.Key: Any],
+        bulletParaStyle: NSParagraphStyle
+    ) -> [NSAttributedString.Key: Any] {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return baseAttributes }
+        let cursorLoc = tv.selectedRange.location
+        let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
+        let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
+        guard lineRange.location < nsText.length,
+              nsText.character(at: lineRange.location) == 0x2022 else { return baseAttributes }
+        var attrs = baseAttributes
+        attrs[.paragraphStyle] = bulletParaStyle
+        return attrs
     }
 
     // MARK: - Coordinator
@@ -652,6 +691,33 @@ struct ExpandingTextView: UIViewRepresentable {
         func textViewDidChangeSelection(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
             parent.cursorPosition = tv.selectedRange.location
+            syncTypingAttributesToCurrentLine(tv)
+        }
+
+        private func syncTypingAttributesToCurrentLine(_ tv: UITextView) {
+            let nsText = parent.text as NSString
+            let baseStyle = NSMutableParagraphStyle()
+            baseStyle.lineSpacing = parent.lineSpacing
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: parent.font,
+                .foregroundColor: UIColor.label,
+                .paragraphStyle: baseStyle,
+            ]
+            if nsText.length > 0 {
+                let cursorLoc = tv.selectedRange.location
+                let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
+                let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
+                if lineRange.location < nsText.length,
+                   nsText.character(at: lineRange.location) == 0x2022 {
+                    let bulletIndent = ("• " as NSString).size(withAttributes: [.font: parent.font]).width
+                    let bulletStyle = NSMutableParagraphStyle()
+                    bulletStyle.lineSpacing = parent.lineSpacing
+                    bulletStyle.firstLineHeadIndent = 0
+                    bulletStyle.headIndent = bulletIndent
+                    attrs[.paragraphStyle] = bulletStyle
+                }
+            }
+            tv.typingAttributes = attrs
         }
 
         func textViewDidBeginEditing(_ tv: UITextView) {
