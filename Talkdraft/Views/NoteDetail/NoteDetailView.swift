@@ -230,23 +230,27 @@ struct NoteDetailView: View {
                         }
                     } else {
                         Menu {
-                            Button {
-                                switchToOriginal()
-                            } label: {
-                                if activeRewriteId == nil {
-                                    Label("Original", systemImage: "checkmark")
-                                } else {
-                                    Text("Original")
+                            Section {
+                                Button {
+                                    switchToOriginal()
+                                } label: {
+                                    if activeRewriteId == nil {
+                                        Label("Original", systemImage: "checkmark")
+                                    } else {
+                                        Text("Original")
+                                    }
                                 }
                             }
-                            ForEach(rewrites) { rewrite in
-                                Button {
-                                    switchToRewrite(rewrite)
-                                } label: {
-                                    if rewrite.id == activeRewriteId {
-                                        Label(rewrite.displayLabel, systemImage: "checkmark")
-                                    } else {
-                                        Text(rewrite.displayLabel)
+                            Section {
+                                ForEach(rewrites) { rewrite in
+                                    Button {
+                                        switchToRewrite(rewrite)
+                                    } label: {
+                                        if rewrite.id == activeRewriteId {
+                                            Label(rewrite.displayLabel, systemImage: "checkmark")
+                                        } else {
+                                            Text(rewrite.displayLabel)
+                                        }
                                     }
                                 }
                             }

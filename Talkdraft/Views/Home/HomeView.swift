@@ -34,7 +34,6 @@ struct HomeView: View {
     @State private var pendingNote: Note?
     @State private var keyboardHeight: CGFloat = 0
     @State private var draggingCategory: Category?
-    @State private var scrollViewHeight: CGFloat = 0
     @State private var chipsBarHeight: CGFloat = 0
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
@@ -55,59 +54,42 @@ struct HomeView: View {
                 // safeAreaInset measurement races on iOS 26 cold launch
                 ZStack(alignment: .top) {
                     ScrollView {
-                        VStack(spacing: 12) {
-                            // Notes grid + swipeable area
-                            VStack(spacing: 0) {
-                                if filteredNotes.isEmpty {
-                                    emptyState
-                                } else {
-                                    LazyVGrid(columns: columns, spacing: 8) {
-                                        ForEach(filteredNotes) { note in
-                                            let category = noteStore.categories.first { $0.id == note.categoryId }
-                                            NoteCard(
-                                                note: note,
-                                                category: category,
-                                                selectionMode: isSelecting,
-                                                isSelected: selectedIds.contains(note.id)
-                                            )
-                                            .contentShape(Rectangle())
-                                            .onTapGesture {
-                                                guard !isSwiping else { return }
-                                                if isSelecting {
-                                                    toggleSelection(note.id)
-                                                } else {
-                                                    if isSearching {
-                                                        searchFocused = false
-                                                        keyboardHeight = 0
-                                                    }
-                                                    selectedNote = note
+                        VStack(spacing: 0) {
+                            if filteredNotes.isEmpty {
+                                emptyState
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 8) {
+                                    ForEach(filteredNotes) { note in
+                                        let category = noteStore.categories.first { $0.id == note.categoryId }
+                                        NoteCard(
+                                            note: note,
+                                            category: category,
+                                            selectionMode: isSelecting,
+                                            isSelected: selectedIds.contains(note.id)
+                                        )
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            guard !isSwiping else { return }
+                                            if isSelecting {
+                                                toggleSelection(note.id)
+                                            } else {
+                                                if isSearching {
+                                                    searchFocused = false
+                                                    keyboardHeight = 0
                                                 }
-                                            }
-                                            .onLongPressGesture {
-                                                enterSelection(note.id)
+                                                selectedNote = note
                                             }
                                         }
+                                        .onLongPressGesture {
+                                            enterSelection(note.id)
+                                        }
                                     }
-                                    .padding(.horizontal, 12)
                                 }
-
-                                // Fill remaining space to enable swipe gesture on sparse screens
-                                if !filteredNotes.isEmpty {
-                                    Color.clear
-                                        .frame(maxWidth: .infinity, minHeight: filteredNotes.count <= 4 ? 0 : 40)
-                                }
+                                .padding(.horizontal, 12)
                             }
-                            .frame(minHeight: scrollViewHeight > 0 ? scrollViewHeight : 0, alignment: .top)
-
-                            .contentShape(Rectangle())
-                            .simultaneousGesture(categorySwipeGesture)
                         }
                     }
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { newValue in
-                        scrollViewHeight = newValue
-                    }
+                    .simultaneousGesture(categorySwipeGesture)
                     .onScrollGeometryChange(for: Bool.self) { geometry in
                         geometry.contentOffset.y > 20
                     } action: { _, newValue in
@@ -117,8 +99,8 @@ struct HomeView: View {
                         Color.clear.frame(height: 120)
                     }
                     .contentMargins(.top, chipsBarHeight)
+                    .scrollBounceBehavior(.basedOnSize)
                     .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
-                    .scrollDisabled(false)
                     .scrollDismissesKeyboard(.interactively)
                     .refreshable {
                         await noteStore.refresh()
@@ -428,8 +410,6 @@ struct HomeView: View {
             } else {
                 // Welcome empty state — no notes at all
                 VStack(spacing: 16) {
-                    Spacer()
-
                     VStack(spacing: 8) {
                         (Text("Your voice,\n")
                             + Text("turned into words")
@@ -444,9 +424,9 @@ struct HomeView: View {
 
                     HandDrawnArrow()
                         .padding(.top, 40)
-
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 200)
                 .padding(.bottom, 40)
             }
         }
