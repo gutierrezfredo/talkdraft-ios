@@ -139,6 +139,7 @@ struct NoteDetailView: View {
                     }
                 }
                 .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 60 : 120)
+                Color.clear.frame(height: 0).id("scrollBottom")
             }
             .scrollDismissesKeyboard(.interactively)
             .ignoresSafeArea(.keyboard)
@@ -284,6 +285,13 @@ struct NoteDetailView: View {
 
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        startAppendRecording()
+                    } label: {
+                        Label("Record more", systemImage: "mic")
+                    }
+                    .disabled(isAppendRecording || isAppendTranscribing || isRewriting)
+
                     if note.audioUrl != nil {
                         Button {
                             downloadAudio()
@@ -1154,6 +1162,12 @@ struct NoteDetailView: View {
         do {
             try appendRecorder.startRecording()
             isAppendRecording = true
+            // Scroll to bottom so the Recording… placeholder is visible
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
+                }
+            }
         } catch {
             removePlaceholder()
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
