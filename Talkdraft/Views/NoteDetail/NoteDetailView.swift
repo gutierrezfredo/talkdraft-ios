@@ -217,7 +217,7 @@ struct NoteDetailView: View {
             // Auto-focus for new text notes — delay lets the view hierarchy and trait
             // collection fully settle before the keyboard appears, preventing a color flash.
             guard initialNote.source == .text && initialNote.content.isEmpty else { return }
-            try? await Task.sleep(for: .milliseconds(400))
+            try? await Task.sleep(for: .milliseconds(450))
             contentFocused = true
         }
         .toolbar {
