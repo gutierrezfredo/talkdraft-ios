@@ -261,11 +261,19 @@ struct NoteDetailView: View {
                                 }
                             }
                         } label: {
-                            Text(label)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
-                                .foregroundStyle(Color.primary)
+                            HStack(spacing: 4) {
+                                Text(label)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                if !rewrites.isEmpty {
+                                    Image(systemName: "chevron.up.chevron.down")
+                                        .font(.system(size: 9))
+                                        .fontWeight(.regular)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
+                            .foregroundStyle(Color.primary)
                         }
                         .disabled(rewrites.isEmpty)
                     }
