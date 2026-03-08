@@ -211,10 +211,9 @@ struct ExpandingTextView: UIViewRepresentable {
             .paragraphStyle: style,
         ]
 
-        tv.typingAttributes = attributes
-
         guard !text.isEmpty else {
             tv.text = ""
+            tv.typingAttributes = attributes
             return
         }
 
@@ -282,6 +281,9 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         tv.attributedText = attributed
+        // Reset typingAttributes after setting attributedText — UIKit resets them to the
+        // attributes at the cursor position, which for checkbox attachments lacks .foregroundColor.
+        tv.typingAttributes = attributes
     }
 
     // MARK: - Coordinator

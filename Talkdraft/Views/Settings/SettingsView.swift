@@ -201,7 +201,7 @@ struct SettingsView: View {
                             UIApplication.shared.open(url)
                         }
                     } label: {
-                        SettingsRow(icon: "hand.raised", title: "Privacy Policy")
+                        SettingsRow(icon: "hand.raised", title: "Privacy Policy", showChevron: false, trailingIcon: "arrow.up.right.square")
                     }
                     .buttonStyle(.plain)
 
@@ -212,7 +212,7 @@ struct SettingsView: View {
                             UIApplication.shared.open(url)
                         }
                     } label: {
-                        SettingsRow(icon: "doc.text", title: "Terms of Service")
+                        SettingsRow(icon: "doc.text", title: "Terms of Service", showChevron: false, trailingIcon: "arrow.up.right.square")
                     }
                     .buttonStyle(.plain)
 
@@ -465,6 +465,7 @@ private struct SettingsRow: View {
     let title: String
     var value: String? = nil
     var showChevron: Bool = true
+    var trailingIcon: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -486,7 +487,12 @@ private struct SettingsRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            if showChevron {
+            if let trailingIcon {
+                Image(systemName: trailingIcon)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.tertiary)
+            } else if showChevron {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .fontWeight(.semibold)

@@ -88,17 +88,13 @@ struct CustomDictionaryView: View {
     private func addWord() {
         let trimmed = newWord.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        guard !settingsStore.customDictionary.contains(trimmed) else {
-            newWord = ""
-            return
-        }
         withAnimation {
-            settingsStore.customDictionary.append(trimmed)
+            settingsStore.addWord(trimmed)
         }
         newWord = ""
     }
 
     private func removeWord(at index: Int) {
-        settingsStore.customDictionary.remove(at: index)
+        settingsStore.removeWord(at: index)
     }
 }

@@ -31,7 +31,7 @@ final class TranscriptionService: Sendable {
         "hi": "यह एक वॉइस नोट है।",
     ]
 
-    func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = []) async throws -> TranscriptionResult {
+    func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = [], whisperData: Data? = nil, whisperFileName: String? = nil) async throws -> TranscriptionResult {
         let boundary = UUID().uuidString
         let ext = (fileName as NSString).pathExtension.lowercased()
         let mimeType = Self.mimeType(for: ext)
@@ -47,6 +47,15 @@ final class TranscriptionService: Sendable {
         body.appendMultipart("Content-Type: \(mimeType)\r\n\r\n")
         body.append(audioData)
         body.appendMultipart("\r\n")
+
+        // Whisper file part (compressed version for transcription, if different from storage file)
+        if let whisperData, let whisperFileName {
+            body.appendMultipart("--\(boundary)\r\n")
+            body.appendMultipart("Content-Disposition: form-data; name=\"whisper_file\"; filename=\"\(whisperFileName)\"\r\n")
+            body.appendMultipart("Content-Type: audio/m4a\r\n\r\n")
+            body.append(whisperData)
+            body.appendMultipart("\r\n")
+        }
 
         // Language part
         if let language {

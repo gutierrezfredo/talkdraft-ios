@@ -16,7 +16,14 @@ final class AuthStore {
     private var authListener: Task<Void, Never>?
     private var currentNonce: String?
 
-    func initialize() async {
+    private var settingsStore: SettingsStore?
+
+    func initialize(settingsStore: SettingsStore) async {
+        self.settingsStore = settingsStore
+        await _initialize()
+    }
+
+    private func _initialize() async {
         isLoading = true
         defer { isLoading = false }
 
@@ -202,6 +209,7 @@ final class AuthStore {
                 .execute()
                 .value
             user = profile
+            settingsStore?.configure(userId: userId, dictionary: profile.customDictionary)
         } catch {
             // Profile may not exist yet (new signup) — create one
             let newProfile = Profile(
@@ -210,7 +218,8 @@ final class AuthStore {
                 plan: .free,
                 createdAt: Date(),
                 deletionScheduledAt: nil,
-                language: nil
+                language: nil,
+                customDictionary: []
             )
             do {
                 try await supabase
@@ -222,6 +231,7 @@ final class AuthStore {
                 // Profile creation failed — user can still use the app
                 user = newProfile
             }
+            settingsStore?.configure(userId: userId, dictionary: [])
         }
     }
 

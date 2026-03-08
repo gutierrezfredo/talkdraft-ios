@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Audio
 @Observable
 final class AudioPlayer {
     var isPlaying = false
+    var isBuffering = false
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
 
@@ -16,6 +17,7 @@ final class AudioPlayer {
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
+    private var bufferingObservation: NSKeyValueObservation?
 
     /// Call when the audio UI becomes visible to start buffering ahead of playback.
     func preload(url: URL) {
@@ -57,6 +59,12 @@ final class AudioPlayer {
         rateObservation = newPlayer.observe(\.rate) { [weak self] player, _ in
             guard let self else { return }
             self.isPlaying = player.rate > 0
+        }
+
+        // Observe buffering state
+        bufferingObservation = newPlayer.observe(\.timeControlStatus) { [weak self] player, _ in
+            guard let self else { return }
+            self.isBuffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         }
 
         // Periodic time updates
@@ -123,6 +131,8 @@ final class AudioPlayer {
         statusObservation = nil
         rateObservation?.invalidate()
         rateObservation = nil
+        bufferingObservation?.invalidate()
+        bufferingObservation = nil
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: currentItem)
         player?.pause()
         player = nil

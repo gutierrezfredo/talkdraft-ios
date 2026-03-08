@@ -10,6 +10,7 @@ struct RecordView: View {
     @State private var recorder = AudioRecorder()
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showCancelConfirmation = false
     let categoryId: UUID?
     var onNoteSaved: ((Note) -> Void)?
 
@@ -53,6 +54,16 @@ struct RecordView: View {
                     .padding(.bottom, 48)
             }
         }
+        .interactiveDismissDisabled(recorder.elapsedSeconds >= 1)
+        .alert("Discard Recording?", isPresented: $showCancelConfirmation) {
+            Button("Discard", role: .destructive) {
+                recorder.cancelRecording()
+                dismiss()
+            }
+            Button("Keep Recording", role: .cancel) {}
+        } message: {
+            Text("Your recording will be lost.")
+        }
         .alert("Recording Error", isPresented: $showError) {
             Button("OK") {
                 if !recorder.isRecording {
@@ -79,8 +90,12 @@ struct RecordView: View {
     private var header: some View {
         HStack {
             Button("Cancel") {
-                recorder.cancelRecording()
-                dismiss()
+                if recorder.elapsedSeconds >= 1 {
+                    showCancelConfirmation = true
+                } else {
+                    recorder.cancelRecording()
+                    dismiss()
+                }
             }
             .foregroundStyle(.white.opacity(0.7))
 

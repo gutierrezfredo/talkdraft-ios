@@ -351,11 +351,15 @@ struct NoteDetailView: View {
         }
         .onDisappear {
             player.stop()
-            if isAppendRecording || isAppendTranscribing {
-                appendRecorder.cancelRecording()
-                removePlaceholder()
-                isAppendRecording = false
-                isAppendTranscribing = false
+            if isAppendRecording {
+                if appendRecorder.elapsedSeconds >= 1 {
+                    // Stop and transcribe in background — don't discard what was recorded
+                    stopAppendRecording()
+                } else {
+                    appendRecorder.cancelRecording()
+                    removePlaceholder()
+                    isAppendRecording = false
+                }
             }
             autosaveTask?.cancel()
             guard !didDelete else { return }
@@ -441,7 +445,7 @@ struct NoteDetailView: View {
             }
         }
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
-            if Int(elapsed) >= 3600 && appendRecorder.isRecording {
+            if Int(elapsed) >= 900 && appendRecorder.isRecording {
                 stopAppendRecording()
             }
         }
@@ -508,12 +512,20 @@ struct NoteDetailView: View {
                 guard let url = audioURL else { return }
                 player.togglePlayback(url: url)
             } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.body)
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 36, height: 36)
+                ZStack {
+                    if player.isBuffering {
+                        ProgressView()
+                            .tint(Color.brand)
+                    } else {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.body)
+                            .foregroundStyle(Color.brand)
+                    }
+                }
+                .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
+            .disabled(player.isBuffering)
 
             // Progress bar
             GeometryReader { geo in
@@ -838,6 +850,10 @@ struct NoteDetailView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
+        .overlay(alignment: .top) {
+            appendRecordingPill
+                .offset(y: -44)
+        }
     }
 
     // MARK: - Append Recording Pill
@@ -856,7 +872,7 @@ struct NoteDetailView: View {
                 Circle()
                     .fill(.red)
                     .frame(width: 8, height: 8)
-                Text(formattedDuration(Int(appendRecorder.elapsedSeconds)))
+                Text(formattedDuration(max(0, 900 - Int(appendRecorder.elapsedSeconds))))
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .monospacedDigit()
@@ -866,7 +882,6 @@ struct NoteDetailView: View {
         .padding(.horizontal, 14)
         .frame(height: 36)
         .background(Capsule().fill(Color(white: 0.1)))
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Typewriter
@@ -1170,9 +1185,11 @@ struct NoteDetailView: View {
 
         Task {
             do {
-                // Skip compression — AudioRecorder already outputs 16kHz mono AAC
-                let audioData = try Data(contentsOf: audioFileURL)
-                let fileName = audioFileURL.lastPathComponent
+                let uploadURL = (try? await AudioCompressor.compress(sourceURL: audioFileURL)) ?? audioFileURL
+                defer { if uploadURL != audioFileURL { AudioCompressor.cleanup(uploadURL) } }
+
+                let audioData = try Data(contentsOf: uploadURL)
+                let fileName = uploadURL.lastPathComponent
 
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 let service = TranscriptionService()

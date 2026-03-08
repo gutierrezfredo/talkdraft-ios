@@ -89,7 +89,10 @@ final class NoteStore {
 
         async let fetchedNotes: () = fetchNotes()
         async let fetchedCategories: () = fetchCategories()
-        _ = try? await (fetchedNotes, fetchedCategories)
+        // Await independently so a failure in one doesn't cancel the other.
+        // Tuple await propagates the first error and implicitly cancels siblings.
+        try? await fetchedNotes
+        try? await fetchedCategories
     }
 
     func fetchNotes() async throws {
@@ -345,19 +348,20 @@ final class NoteStore {
                     return
                 }
 
-                // Compress audio to 16kHz mono AAC (what Whisper uses internally)
-                let uploadURL: URL
+                // Always upload original for storage quality; compress separately for Whisper
+                let audioData = try Data(contentsOf: audioFileURL)
+                let fileName = audioFileURL.lastPathComponent
+
+                var whisperData: Data? = nil
+                var whisperFileName: String? = nil
                 do {
                     let compressed = try await AudioCompressor.compress(sourceURL: audioFileURL)
                     compressedURL = compressed
-                    uploadURL = compressed
+                    whisperData = try Data(contentsOf: compressed)
+                    whisperFileName = compressed.lastPathComponent
                 } catch {
-                    logger.warning("Compression failed, using original: \(error)")
-                    uploadURL = audioFileURL
+                    logger.warning("Compression failed, Whisper will use original: \(error)")
                 }
-
-                let audioData = try Data(contentsOf: uploadURL)
-                let fileName = uploadURL.lastPathComponent
 
                 let service = TranscriptionService()
                 let result = try await service.transcribe(
@@ -365,7 +369,9 @@ final class NoteStore {
                     fileName: fileName,
                     language: language,
                     userId: userId,
-                    customDictionary: customDictionary
+                    customDictionary: customDictionary,
+                    whisperData: whisperData,
+                    whisperFileName: whisperFileName
                 )
 
                 // Guard against empty transcription

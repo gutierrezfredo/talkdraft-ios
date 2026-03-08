@@ -35,7 +35,6 @@ struct HomeView: View {
     @State private var keyboardHeight: CGFloat = 0
     @State private var draggingCategory: Category?
     @State private var scrollViewHeight: CGFloat = 0
-    @State private var chipsHeight: CGFloat = 0
     @Namespace private var namespace
     @FocusState private var searchFocused: Bool
 
@@ -51,77 +50,79 @@ struct HomeView: View {
                 (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                     .ignoresSafeArea()
 
-                // Main content
-                ScrollView {
-                    VStack(spacing: 12) {
-                        // Notes grid + swipeable area
-                        VStack(spacing: 0) {
-                            if filteredNotes.isEmpty {
-                                emptyState
-                            } else {
-                                LazyVGrid(columns: columns, spacing: 8) {
-                                    ForEach(filteredNotes) { note in
-                                        let category = noteStore.categories.first { $0.id == note.categoryId }
-                                        NoteCard(
-                                            note: note,
-                                            category: category,
-                                            selectionMode: isSelecting,
-                                            isSelected: selectedIds.contains(note.id)
-                                        )
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            guard !isSwiping else { return }
-                                            if isSelecting {
-                                                toggleSelection(note.id)
-                                            } else {
-                                                if isSearching {
-                                                    searchFocused = false
-                                                    keyboardHeight = 0
+                // Main content — chips pinned above scroll view to avoid safeAreaInset
+                // measurement races on iOS 26 cold launch
+                VStack(spacing: 0) {
+                    chipsBar
+
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            // Notes grid + swipeable area
+                            VStack(spacing: 0) {
+                                if filteredNotes.isEmpty {
+                                    emptyState
+                                } else {
+                                    LazyVGrid(columns: columns, spacing: 8) {
+                                        ForEach(filteredNotes) { note in
+                                            let category = noteStore.categories.first { $0.id == note.categoryId }
+                                            NoteCard(
+                                                note: note,
+                                                category: category,
+                                                selectionMode: isSelecting,
+                                                isSelected: selectedIds.contains(note.id)
+                                            )
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                guard !isSwiping else { return }
+                                                if isSelecting {
+                                                    toggleSelection(note.id)
+                                                } else {
+                                                    if isSearching {
+                                                        searchFocused = false
+                                                        keyboardHeight = 0
+                                                    }
+                                                    selectedNote = note
                                                 }
-                                                selectedNote = note
+                                            }
+                                            .onLongPressGesture {
+                                                enterSelection(note.id)
                                             }
                                         }
-                                        .onLongPressGesture {
-                                            enterSelection(note.id)
-                                        }
                                     }
+                                    .padding(.horizontal, 12)
                                 }
-                                .padding(.horizontal, 12)
-                            }
 
-                            // Fill remaining space to enable swipe gesture on sparse screens
-                            if !filteredNotes.isEmpty {
-                                Color.clear
-                                    .frame(maxWidth: .infinity, minHeight: filteredNotes.count <= 4 ? 0 : 40)
+                                // Fill remaining space to enable swipe gesture on sparse screens
+                                if !filteredNotes.isEmpty {
+                                    Color.clear
+                                        .frame(maxWidth: .infinity, minHeight: filteredNotes.count <= 4 ? 0 : 40)
+                                }
                             }
+                            .frame(minHeight: scrollViewHeight > 0 ? scrollViewHeight : 0, alignment: .top)
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(categorySwipeGesture)
                         }
-                        .frame(minHeight: scrollViewHeight > 0 ? scrollViewHeight - chipsHeight : 0, alignment: .top)
-                        .contentShape(Rectangle())
-                        .simultaneousGesture(categorySwipeGesture)
                     }
-                }
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.height
-                } action: { newValue in
-                    scrollViewHeight = newValue
-                }
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.contentOffset.y > 20
-                } action: { _, newValue in
-                    withAnimation(.snappy) { isScrolled = newValue }
-                }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    chipsBar
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear.frame(height: 120)
-                }
-                .contentMargins(.top, 8)
-                .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
-                .scrollDisabled(false)
-                .scrollDismissesKeyboard(.interactively)
-                .refreshable {
-                    await noteStore.refresh()
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { newValue in
+                        scrollViewHeight = newValue
+                    }
+                    .onScrollGeometryChange(for: Bool.self) { geometry in
+                        geometry.contentOffset.y > 20
+                    } action: { _, newValue in
+                        withAnimation(.snappy) { isScrolled = newValue }
+                    }
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        Color.clear.frame(height: 120)
+                    }
+                    .contentMargins(.top, 8)
+                    .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
+                    .scrollDisabled(false)
+                    .scrollDismissesKeyboard(.interactively)
+                    .refreshable {
+                        await noteStore.refresh()
+                    }
                 }
 
                 // Bottom fade
@@ -196,7 +197,11 @@ struct HomeView: View {
                 NoteDetailView(note: note)
             }
             .task {
-                if noteStore.categories.isEmpty || noteStore.notes.isEmpty {
+                // Catch any cold-launch race where categories failed to load
+                if noteStore.categories.isEmpty {
+                    try? await noteStore.fetchCategories()
+                }
+                if noteStore.notes.isEmpty {
                     await noteStore.refresh()
                 }
             }
@@ -264,14 +269,6 @@ struct HomeView: View {
 
     private var chipsBar: some View {
         categoryChips
-            .padding(.top, -10)
-            .padding(.bottom, 0)
-            .background(Color.clear.ignoresSafeArea(edges: .top))
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newValue in
-                chipsHeight = newValue
-            }
     }
 
     private var categoryChips: some View {

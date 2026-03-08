@@ -51,7 +51,11 @@ struct ContentView: View {
         }
         .preferredColorScheme(colorScheme)
         .task {
-            await authStore.initialize()
+            await authStore.initialize(settingsStore: settingsStore)
+            // Belt-and-suspenders: if onChange didn't fire or refresh hasn't run yet, do it here.
+            if authStore.isAuthenticated && !noteStore.hasInitiallyLoaded {
+                await noteStore.refresh()
+            }
         }
         .onChange(of: authStore.isAuthenticated) { _, authenticated in
             if authenticated {

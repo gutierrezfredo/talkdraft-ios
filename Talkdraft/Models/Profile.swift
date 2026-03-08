@@ -7,6 +7,7 @@ struct Profile: Codable, Sendable {
     let createdAt: Date
     var deletionScheduledAt: Date?
     var language: String?
+    var customDictionary: [String]
 
     enum Plan: String, Codable, Sendable {
         case free
