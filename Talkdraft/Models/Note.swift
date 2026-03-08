@@ -8,6 +8,7 @@ struct Note: Identifiable, Codable, Hashable, Sendable {
     var title: String?
     var content: String
     var originalContent: String?
+    var activeRewriteId: UUID?
     var source: NoteSource
     var language: String?
     var audioUrl: String?
@@ -29,6 +30,7 @@ struct Note: Identifiable, Codable, Hashable, Sendable {
         case title
         case content
         case originalContent = "original_content"
+        case activeRewriteId = "active_rewrite_id"
         case source
         case language
         case audioUrl = "audio_url"

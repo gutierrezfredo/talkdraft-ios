@@ -208,7 +208,7 @@ struct NoteDetailView: View {
         .task {
             await noteStore.fetchRewrites(for: noteId)
             rewrites = noteStore.rewritesCache[noteId] ?? []
-            activeRewriteId = rewrites.first { $0.content == note.content }?.id
+            activeRewriteId = note.activeRewriteId
             if !rewrites.isEmpty {
                 try? await Task.sleep(for: .milliseconds(32))
                 rewriteLabelOpacity = 1
@@ -992,7 +992,7 @@ struct NoteDetailView: View {
                     content: editedContent,
                     createdAt: Date()
                 )
-                noteStore.saveRewrite(rewrite)
+                await noteStore.saveRewrite(rewrite)
                 rewrites = noteStore.rewritesCache[noteId] ?? []
                 activeRewriteId = rewrite.id
                 if rewriteLabelOpacity == 0 {
@@ -1002,6 +1002,7 @@ struct NoteDetailView: View {
 
                 // Save note content
                 updated.content = editedContent
+                updated.activeRewriteId = rewrite.id
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
@@ -1030,6 +1031,7 @@ struct NoteDetailView: View {
         scrollToTop()
         var updated = note
         updated.content = rewrite.content
+        updated.activeRewriteId = rewrite.id
         updated.updatedAt = Date()
         noteStore.updateNote(updated)
         withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
@@ -1048,9 +1050,10 @@ struct NoteDetailView: View {
             switchToRewrite(last)
         } else {
             switchToOriginal()
-            // No rewrites left — clear originalContent so the note is back to plain state
+            // No rewrites left — clear originalContent and activeRewriteId so the note is back to plain state
             var updated = note
             updated.originalContent = nil
+            updated.activeRewriteId = nil
             noteStore.updateNote(updated)
         }
     }
@@ -1065,6 +1068,7 @@ struct NoteDetailView: View {
         scrollToTop()
         var updated = note
         updated.content = original
+        updated.activeRewriteId = nil
         updated.updatedAt = Date()
         noteStore.updateNote(updated)
         withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }

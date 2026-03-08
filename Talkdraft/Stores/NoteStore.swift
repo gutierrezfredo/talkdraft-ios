@@ -11,6 +11,7 @@ private struct NoteUpdate: Encodable {
     var title: String?
     var content: String
     var originalContent: String?
+    var activeRewriteId: UUID?
     var source: Note.NoteSource
     var language: String?
     var audioUrl: String?
@@ -21,6 +22,7 @@ private struct NoteUpdate: Encodable {
         case categoryId = "category_id"
         case title, content
         case originalContent = "original_content"
+        case activeRewriteId = "active_rewrite_id"
         case source, language
         case audioUrl = "audio_url"
         case durationSeconds = "duration_seconds"
@@ -32,6 +34,7 @@ private struct NoteUpdate: Encodable {
         self.title = note.title
         self.content = note.content
         self.originalContent = note.originalContent
+        self.activeRewriteId = note.activeRewriteId
         self.source = note.source
         self.language = note.language
         self.audioUrl = note.audioUrl
@@ -456,21 +459,19 @@ final class NoteStore {
         }
     }
 
-    func saveRewrite(_ rewrite: NoteRewrite) {
+    func saveRewrite(_ rewrite: NoteRewrite) async {
         var current = rewritesCache[rewrite.noteId] ?? []
         current.append(rewrite)
         rewritesCache[rewrite.noteId] = current
 
-        Task {
-            do {
-                try await supabase
-                    .from("note_rewrites")
-                    .insert(rewrite)
-                    .execute()
-            } catch {
-                logger.error("saveRewrite failed: \(error)")
-                rewritesCache[rewrite.noteId]?.removeAll { $0.id == rewrite.id }
-            }
+        do {
+            try await supabase
+                .from("note_rewrites")
+                .insert(rewrite)
+                .execute()
+        } catch {
+            logger.error("saveRewrite failed: \(error)")
+            rewritesCache[rewrite.noteId]?.removeAll { $0.id == rewrite.id }
         }
     }
 
