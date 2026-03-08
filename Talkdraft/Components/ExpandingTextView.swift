@@ -49,6 +49,14 @@ final class CheckboxTextView: UITextView {
     override var canBecomeFirstResponder: Bool {
         blockFirstResponder ? false : super.canBecomeFirstResponder
     }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        // Keep keyboardAppearance in sync with UIKit traits so the keyboard
+        // never momentarily shows the wrong color scheme.
+        keyboardAppearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
+        if isFirstResponder { reloadInputViews() }
+    }
 }
 
 // MARK: - ExpandingTextView
@@ -65,6 +73,7 @@ struct ExpandingTextView: UIViewRepresentable {
     var font: UIFont = .preferredFont(forTextStyle: .body)
     var lineSpacing: CGFloat = 6
     var placeholder: String = ""
+    @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
     static let styledPlaceholders = ["Recording…", "Transcribing…"]
@@ -85,6 +94,7 @@ struct ExpandingTextView: UIViewRepresentable {
         tv.backgroundColor = .clear
         tv.textContainerInset = .zero
         tv.textContainer.lineFragmentPadding = 0
+        tv.keyboardAppearance = colorScheme == .dark ? .dark : .light
         tv.delegate = context.coordinator
 
         // Placeholder label
@@ -149,6 +159,13 @@ struct ExpandingTextView: UIViewRepresentable {
             label.isHidden = !text.isEmpty
         }
 
+        // Keyboard appearance — set explicitly to avoid a flash when becoming first responder
+        // before the trait collection has fully propagated the color scheme.
+        let desiredAppearance: UIKeyboardAppearance = colorScheme == .dark ? .dark : .light
+        if tv.keyboardAppearance != desiredAppearance {
+            tv.keyboardAppearance = desiredAppearance
+        }
+
         // Editability
         tv.isEditable = isEditable
 
@@ -156,6 +173,9 @@ struct ExpandingTextView: UIViewRepresentable {
         if isFocused && !tv.isFirstResponder {
             DispatchQueue.main.async {
                 guard !tv.isFirstResponder else { return }
+                // Read traitCollection directly at call time — more reliable than the
+                // SwiftUI colorScheme captured earlier, preventing a keyboard color flash.
+                tv.keyboardAppearance = tv.traitCollection.userInterfaceStyle == .dark ? .dark : .light
                 tv.becomeFirstResponder()
                 let end = tv.attributedText?.length ?? 0
                 tv.selectedRange = NSRange(location: end, length: 0)

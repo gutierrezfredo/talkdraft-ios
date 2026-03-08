@@ -48,16 +48,23 @@ final class SettingsStore {
         Task { await saveToSupabase() }
     }
 
+    private struct DictionaryUpdate: Encodable {
+        let customDictionary: [String]
+        enum CodingKeys: String, CodingKey {
+            case customDictionary = "custom_dictionary"
+        }
+    }
+
     private func saveToSupabase() async {
         guard let userId else { return }
         do {
             try await supabase
                 .from("profiles")
-                .update(["custom_dictionary": customDictionary])
+                .update(DictionaryUpdate(customDictionary: customDictionary))
                 .eq("id", value: userId)
                 .execute()
         } catch {
-            // Non-fatal — local state is still correct
+            print("❌ CustomDictionary save error:", error)
         }
     }
 

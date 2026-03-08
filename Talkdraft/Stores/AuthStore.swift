@@ -211,6 +211,7 @@ final class AuthStore {
             user = profile
             settingsStore?.configure(userId: userId, dictionary: profile.customDictionary)
         } catch {
+            print("❌ fetchProfile decode error:", error)
             // Profile may not exist yet (new signup) — create one
             let newProfile = Profile(
                 id: userId,

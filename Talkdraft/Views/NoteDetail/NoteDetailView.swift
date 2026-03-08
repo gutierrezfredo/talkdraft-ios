@@ -51,8 +51,7 @@ struct NoteDetailView: View {
         self.initialNote = note
         self._editedTitle = State(initialValue: note.title ?? "")
         self._editedContent = State(initialValue: note.content)
-        // Auto-focus body for new text notes
-        self._contentFocused = State(initialValue: note.source == .text && note.content.isEmpty)
+        self._contentFocused = State(initialValue: false)
     }
 
     private var note: Note {
@@ -213,6 +212,13 @@ struct NoteDetailView: View {
                 try? await Task.sleep(for: .milliseconds(32))
                 rewriteLabelOpacity = 1
             }
+        }
+        .task {
+            // Auto-focus for new text notes — delay lets the view hierarchy and trait
+            // collection fully settle before the keyboard appears, preventing a color flash.
+            guard initialNote.source == .text && initialNote.content.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            contentFocused = true
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -458,6 +464,18 @@ struct NoteDetailView: View {
                 withAnimation(.easeOut(duration: 0.25)) {
                     keyboardHeight = frame.height
                 }
+            }
+        }
+        // QuickType suggestions bar appears after the initial keyboard animation and changes
+        // the keyboard frame via this separate notification — keep keyboardHeight in sync
+        // so the layout doesn't momentarily flash as the bar slides in.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            guard keyboardHeight > 0,
+                  let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+                  let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
+            else { return }
+            withAnimation(.easeOut(duration: duration)) {
+                keyboardHeight = frame.height
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
@@ -983,6 +1001,12 @@ struct NoteDetailView: View {
                     let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
                     editedContent += fullText[startIdx...]
                 }
+
+                // Normalize any "- " line starts to "• " (safety net if model ignores prompt)
+                editedContent = editedContent
+                    .components(separatedBy: "\n")
+                    .map { $0.hasPrefix("- ") ? "• " + $0.dropFirst(2) : $0 }
+                    .joined(separator: "\n")
 
                 // Save rewrite version
                 let rewrite = NoteRewrite(
