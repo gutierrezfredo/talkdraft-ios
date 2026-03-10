@@ -52,6 +52,7 @@ struct NoteDetailView: View {
     @State private var typewriterTask: Task<Void, Never>?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var contentFocused = false
+    @State private var moveCursorToEnd = false
     @FocusState private var titleFocused: Bool
     @State private var contentOpacity: Double = 1
     @State private var errorMessage: String?
@@ -231,9 +232,9 @@ struct NoteDetailView: View {
                 VStack(spacing: 0) {
                     scrollContent
                     Color.clear
-                        .frame(maxWidth: .infinity, minHeight: 120)
+                        .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height)
                         .contentShape(Rectangle())
-                        .onTapGesture { contentFocused = true }
+                        .onTapGesture { contentFocused = true; moveCursorToEnd = true }
                 }
                 .background(ScrollViewKeyboardDismissSetup())
                 Color.clear.frame(height: 0).id("scrollBottom")
@@ -1025,7 +1026,8 @@ struct NoteDetailView: View {
             lineSpacing: 6,
             placeholder: "Start typing...",
             speakerColors: speakerColorMap,
-            horizontalPadding: 24
+            horizontalPadding: 24,
+            moveCursorToEnd: $moveCursorToEnd
         )
         .opacity(contentOpacity)
     }

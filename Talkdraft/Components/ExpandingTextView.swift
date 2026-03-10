@@ -75,6 +75,7 @@ struct ExpandingTextView: UIViewRepresentable {
     var placeholder: String = ""
     var speakerColors: [String: UIColor] = [:]
     var horizontalPadding: CGFloat = 0
+    var moveCursorToEnd: Binding<Bool> = .constant(false)
     @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
@@ -207,6 +208,17 @@ struct ExpandingTextView: UIViewRepresentable {
             }
         } else if !isFocused && tv.isFirstResponder {
             DispatchQueue.main.async { tv.resignFirstResponder() }
+        }
+
+        // Move cursor to end (e.g. tapping empty space below content while already focused)
+        if moveCursorToEnd.wrappedValue {
+            DispatchQueue.main.async {
+                if tv.isFirstResponder {
+                    let end = tv.attributedText?.length ?? 0
+                    tv.selectedRange = NSRange(location: end, length: 0)
+                }
+                moveCursorToEnd.wrappedValue = false
+            }
         }
 
         // Pulse animation for placeholders
