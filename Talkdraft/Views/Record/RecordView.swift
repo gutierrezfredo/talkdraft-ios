@@ -151,7 +151,7 @@ struct RecordView: View {
                     ZStack {
                         Text("0").opacity(0) // widest reference
                         Text(String(char))
-                            .transition(.opacity)
+                            .transition(.blurFade)
                             .id(char)
                     }
                     .font(.custom("Fraunces-Light", size: 88))

@@ -4,7 +4,11 @@ import SwiftUI
 /// Walks up from a SwiftUI scroll content view to find the parent UIScrollView
 /// and configures it for native interactive keyboard dismissal.
 private struct ScrollViewKeyboardDismissSetup: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView { UIView() }
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isUserInteractionEnabled = false
+        return v
+    }
     func updateUIView(_ uiView: UIView, context: Context) {
         DispatchQueue.main.async {
             var view: UIView? = uiView.superview
