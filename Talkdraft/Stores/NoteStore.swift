@@ -583,6 +583,22 @@ final class NoteStore {
         }
     }
 
+    func updateRewrite(_ rewrite: NoteRewrite) {
+        guard let idx = rewritesCache[rewrite.noteId]?.firstIndex(where: { $0.id == rewrite.id }) else { return }
+        rewritesCache[rewrite.noteId]?[idx] = rewrite
+        Task {
+            do {
+                try await supabase
+                    .from("note_rewrites")
+                    .update(["content": rewrite.content])
+                    .eq("id", value: rewrite.id.uuidString)
+                    .execute()
+            } catch {
+                logger.error("updateRewrite failed: \(error)")
+            }
+        }
+    }
+
     /// Renames a speaker in all cached rewrites (in-memory + Supabase).
     func renameSpeakerInRewrites(noteId: UUID, oldName: String, newName: String) {
         guard var rewrites = rewritesCache[noteId] else { return }

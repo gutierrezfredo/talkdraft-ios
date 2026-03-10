@@ -178,7 +178,10 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(item: $selectedNote) { note in
-                NoteDetailView(note: note)
+                let cachedContent = note.activeRewriteId.flatMap { id in
+                    noteStore.rewritesCache[note.id]?.first { $0.id == id }?.content
+                }
+                NoteDetailView(note: note, initialContent: cachedContent)
             }
             .task {
                 // Catch any cold-launch race where categories failed to load

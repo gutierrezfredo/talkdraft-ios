@@ -115,11 +115,11 @@ struct NoteDetailView: View {
     private static let recordingPlaceholder = "Recording…"
     private static let transcribingPlaceholder = "Transcribing…"
 
-    init(note: Note) {
+    init(note: Note, initialContent: String? = nil) {
         self.noteId = note.id
         self.initialNote = note
         self._editedTitle = State(initialValue: note.title ?? "")
-        self._editedContent = State(initialValue: note.content)
+        self._editedContent = State(initialValue: initialContent ?? note.content)
         self._contentFocused = State(initialValue: false)
     }
 
@@ -454,6 +454,14 @@ struct NoteDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private func deadZone(height: CGFloat) -> some View {
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .contentShape(Rectangle())
+            .onTapGesture {}
+    }
+
     // MARK: - Metadata Row
 
     private var metadataRow: some View {
@@ -483,15 +491,18 @@ struct NoteDetailView: View {
                 .buttonStyle(.plain)
             }
 
-            // Date
+            // Date — non-tappable
             (Text(note.createdAt, format: .dateTime.month(.wide).day().year())
                 + Text(" · ").foregroundStyle(.tertiary)
                 + Text(note.createdAt, format: .dateTime.hour().minute()))
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {}
     }
 
     // MARK: - Audio Player
@@ -737,18 +748,17 @@ struct NoteDetailView: View {
             Color.clear.frame(height: 0).id("scrollTop")
 
             if !isTranscribing {
+                deadZone(height: 12)
                 metadataRow
-                    .padding(.top, 12)
 
                 if audioExpanded, audioURL != nil {
+                    deadZone(height: 12)
                     audioPlayerView
-                        .padding(.top, 12)
                         .padding(.horizontal, 24)
                 }
 
+                deadZone(height: 20)
                 titleField
-                    .padding(.top, 20)
-                    .padding(.horizontal, 24)
             }
 
             if isTranscribing {
@@ -765,9 +775,11 @@ struct NoteDetailView: View {
                         .padding(.top, 28)
                         .padding(.horizontal, 24)
                 }
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+                    .contentShape(Rectangle())
+                    .onTapGesture {}
                 contentField
-                    .padding(.top, detectedSpeakers.isEmpty ? 28 : 28)
-                    .padding(.horizontal, 24)
             }
         }
     }
@@ -1009,7 +1021,8 @@ struct NoteDetailView: View {
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
             placeholder: "Start typing...",
-            speakerColors: speakerColorMap
+            speakerColors: speakerColorMap,
+            horizontalPadding: 24
         )
         .opacity(contentOpacity)
     }
@@ -1470,9 +1483,21 @@ struct NoteDetailView: View {
     }
 
     private func saveChanges() {
+        // If viewing a rewrite, save edits to the rewrite — not note.content
+        if let rewriteId = activeRewriteId,
+           let rewrite = rewrites.first(where: { $0.id == rewriteId }),
+           editedContent != rewrite.content {
+            var updatedRewrite = rewrite
+            updatedRewrite.content = editedContent
+            rewrites = rewrites.map { $0.id == rewriteId ? updatedRewrite : $0 }
+            noteStore.updateRewrite(updatedRewrite)
+        }
+
         var updated = note
         updated.title = editedTitle.isEmpty ? nil : editedTitle
-        updated.content = editedContent
+        if activeRewriteId == nil {
+            updated.content = editedContent
+        }
         updated.updatedAt = Date()
         if isInStore {
             noteStore.updateNote(updated)

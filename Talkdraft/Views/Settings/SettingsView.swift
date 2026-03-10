@@ -274,7 +274,10 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $importedNote) { note in
-            NoteDetailView(note: note)
+            let cachedContent = note.activeRewriteId.flatMap { id in
+                noteStore.rewritesCache[note.id]?.first { $0.id == id }?.content
+            }
+            NoteDetailView(note: note, initialContent: cachedContent)
         }
         .fileImporter(
             isPresented: $showAudioImporter,

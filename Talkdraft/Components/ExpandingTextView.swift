@@ -74,6 +74,7 @@ struct ExpandingTextView: UIViewRepresentable {
     var lineSpacing: CGFloat = 6
     var placeholder: String = ""
     var speakerColors: [String: UIColor] = [:]
+    var horizontalPadding: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
@@ -93,7 +94,7 @@ struct ExpandingTextView: UIViewRepresentable {
         let tv = CheckboxTextView()
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
-        tv.textContainerInset = .zero
+        tv.textContainerInset = UIEdgeInsets(top: 0, left: horizontalPadding, bottom: 0, right: horizontalPadding)
         tv.textContainer.lineFragmentPadding = 0
         tv.keyboardAppearance = colorScheme == .dark ? .dark : .light
         tv.delegate = context.coordinator
@@ -108,7 +109,7 @@ struct ExpandingTextView: UIViewRepresentable {
         tv.addSubview(label)
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: tv.topAnchor),
-            label.leadingAnchor.constraint(equalTo: tv.leadingAnchor),
+            label.leadingAnchor.constraint(equalTo: tv.leadingAnchor, constant: horizontalPadding),
         ])
 
         applyTextAttributes(tv)
@@ -150,11 +151,27 @@ struct ExpandingTextView: UIViewRepresentable {
                 }
             }
 
+            // Count literal (non-attachment) ☐/☑ chars before cursor.
+            // applyTextAttributes converts each "☐ " (2 chars) → attachment (1 char),
+            // shifting positions after them by -1.
+            var literalCheckboxesBefore = 0
+            if let oldAttr = tv.attributedText {
+                let limit = min(selected.location, oldAttr.length)
+                if limit > 0 {
+                    oldAttr.enumerateAttributes(in: NSRange(location: 0, length: limit)) { attrs, range, _ in
+                        guard !(attrs[.attachment] is CheckboxAttachment) else { return }
+                        let sub = (oldAttr.string as NSString).substring(with: range)
+                        for scalar in sub.unicodeScalars where scalar.value == 0x2610 || scalar.value == 0x2611 {
+                            literalCheckboxesBefore += 1
+                        }
+                    }
+                }
+            }
+
             applyTextAttributes(tv)
             let len = tv.attributedText?.length ?? 0
-            if selected.location + selected.length <= len {
-                tv.selectedRange = selected
-            }
+            let adjustedLoc = max(0, selected.location - literalCheckboxesBefore)
+            tv.selectedRange = NSRange(location: min(adjustedLoc, len), length: 0)
 
             // Restore scroll position
             if let offset = savedOffset, let sv = enclosingScroll {
@@ -734,24 +751,41 @@ struct ExpandingTextView: UIViewRepresentable {
             // Handle return key for bullet/checkbox continuation
             guard text == "\n" else { return true }
 
-            guard range.location <= nsText.length else { return true }
-            let safeLocation = min(range.location, max(nsText.length - 1, 0))
+            // Use plainOffset (not range.location) for line lookup — attributed and plain
+            // text positions diverge by 1 per attachment, so using attributed coords here
+            // lands on the wrong line after multiple checkbox insertions.
+            guard plainOffset <= nsText.length else { return true }
+            let safeLocation = min(plainOffset, max(nsText.length - 1, 0))
             let lineRange = nsText.lineRange(for: NSRange(location: safeLocation, length: 0))
             let currentLine = nsText.substring(with: lineRange).trimmingCharacters(in: .newlines)
+
+            // Find the current line boundaries in attributed text for delete/replace ops.
+            // (lineRange is in plain-text coords; we need attributed coords for tv.selectedRange.)
+            let attrStr = (tv.attributedText?.string ?? "") as NSString
+            let attrLen = tv.attributedText?.length ?? 0
+            var attrLineStart = range.location
+            while attrLineStart > 0 && attrStr.character(at: attrLineStart - 1) != 0x000A {
+                attrLineStart -= 1
+            }
+            var attrLineEnd = range.location
+            while attrLineEnd < attrLen {
+                if attrStr.character(at: attrLineEnd) == 0x000A { attrLineEnd += 1; break }
+                attrLineEnd += 1
+            }
 
             // Checkbox continuation
             if currentLine.hasPrefix("☐ ") || currentLine.hasPrefix("☑ ") {
                 let trimmed = currentLine.trimmingCharacters(in: .whitespaces)
                 if trimmed == "☐" || trimmed == "☑" {
-                    let deleteRange = NSRange(
-                        location: lineRange.location,
-                        length: min(lineRange.length, nsText.length - lineRange.location)
-                    )
-                    tv.selectedRange = deleteRange
-                    tv.insertText("")
+                    // Remove only the checkbox attachment, leaving an empty plain line
+                    tv.selectedRange = NSRange(location: attrLineStart, length: 1)
+                    tv.replace(tv.selectedTextRange!, withText: "")
+                    tv.selectedRange = NSRange(location: attrLineStart, length: 0)
                     return false
                 }
-                tv.insertText("\n" + Self.uncheckedPrefix)
+                if let sel = tv.selectedTextRange {
+                    tv.replace(sel, withText: "\n" + Self.uncheckedPrefix)
+                }
                 needsAttributeRefresh = true
                 return false
             }
@@ -760,16 +794,17 @@ struct ExpandingTextView: UIViewRepresentable {
             guard currentLine.hasPrefix(Self.bulletPrefix) else { return true }
 
             if currentLine == Self.bulletPrefix.trimmingCharacters(in: .whitespaces) || currentLine == Self.bulletPrefix {
-                let deleteRange = NSRange(
-                    location: lineRange.location,
-                    length: min(lineRange.length, nsText.length - lineRange.location)
-                )
-                tv.selectedRange = deleteRange
-                tv.insertText("")
+                // Remove only the bullet prefix ("• "), leaving an empty plain line
+                let bulletLen = (Self.bulletPrefix as NSString).length
+                tv.selectedRange = NSRange(location: attrLineStart, length: bulletLen)
+                tv.replace(tv.selectedTextRange!, withText: "")
+                tv.selectedRange = NSRange(location: attrLineStart, length: 0)
                 return false
             }
 
-            tv.insertText("\n" + Self.bulletPrefix)
+            if let sel = tv.selectedTextRange {
+                tv.replace(sel, withText: "\n" + Self.bulletPrefix)
+            }
             return false
         }
 
