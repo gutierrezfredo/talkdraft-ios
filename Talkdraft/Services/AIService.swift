@@ -65,7 +65,8 @@ enum AIService {
         content: String,
         tone: String?,
         customInstructions: String?,
-        language: String?
+        language: String?,
+        multiSpeaker: Bool = false
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -75,6 +76,7 @@ enum AIService {
                         tone: tone,
                         customInstructions: customInstructions,
                         language: language,
+                        multiSpeaker: multiSpeaker,
                         continuation: continuation
                     )
                 } catch let error as URLError where error.code == .networkConnectionLost {
@@ -85,6 +87,7 @@ enum AIService {
                             tone: tone,
                             customInstructions: customInstructions,
                             language: language,
+                            multiSpeaker: multiSpeaker,
                             continuation: continuation
                         )
                     } catch {
@@ -102,6 +105,7 @@ enum AIService {
         tone: String?,
         customInstructions: String?,
         language: String?,
+        multiSpeaker: Bool = false,
         continuation: AsyncThrowingStream<String, Error>.Continuation
     ) async throws {
         let url = AppConfig.supabaseUrl.appendingPathComponent("functions/v1/rewrite")
@@ -116,6 +120,7 @@ enum AIService {
         if let tone { body["tone"] = tone }
         if let customInstructions, !customInstructions.isEmpty { body["customInstructions"] = customInstructions }
         if let language { body["language"] = language }
+        if multiSpeaker { body["multiSpeaker"] = true }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

@@ -245,11 +245,11 @@ private struct EmailSignInSheet: View {
             ZStack {
                 Circle()
                     .fill(Color.brand.opacity(0.12))
-                    .frame(width: 180, height: 180)
+                    .frame(width: 220, height: 220)
 
                 if let player = videoPlayer {
                     LoopingVideoView(player: player)
-                        .frame(width: 140, height: 140)
+                        .frame(width: 180, height: 180)
                 } else {
                     Image(systemName: "envelope.fill")
                         .font(.system(size: 36))
@@ -262,7 +262,7 @@ private struct EmailSignInSheet: View {
 
             // Title
             Text("Check your email")
-                .font(.brandTitle)
+                .font(.brandTitle2)
                 .padding(.bottom, 12)
 
             // Description
@@ -372,35 +372,3 @@ private struct EmailSignInSheet: View {
     }
 }
 
-// MARK: - Looping Video View
-
-private final class PlayerUIView: UIView {
-    private let playerLayer = AVPlayerLayer()
-
-    init(player: AVPlayer) {
-        super.init(frame: .zero)
-        backgroundColor = .clear
-        playerLayer.player = player
-        playerLayer.videoGravity = .resizeAspect
-        playerLayer.backgroundColor = UIColor.clear.cgColor
-        layer.addSublayer(playerLayer)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        playerLayer.frame = bounds
-    }
-}
-
-private struct LoopingVideoView: UIViewRepresentable {
-    let player: AVPlayer
-
-    func makeUIView(context: Context) -> PlayerUIView {
-        PlayerUIView(player: player)
-    }
-
-    func updateUIView(_ uiView: PlayerUIView, context: Context) {}
-}

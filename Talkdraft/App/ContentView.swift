@@ -8,7 +8,7 @@ struct ContentView: View {
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
-            get: { subscriptionStore.entitlementChecked && !subscriptionStore.isPro },
+            get: { false },
             set: { _ in }
         )
     }

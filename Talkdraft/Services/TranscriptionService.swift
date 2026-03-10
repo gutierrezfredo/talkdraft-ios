@@ -15,6 +15,9 @@ final class TranscriptionService: Sendable {
     private let edgeFunctionURL = AppConfig.supabaseUrl
         .appendingPathComponent("functions/v1/transcribe")
 
+    private let diarizedFunctionURL = AppConfig.supabaseUrl
+        .appendingPathComponent("functions/v1/transcribe-diarized")
+
     /// Locale-based prompt hints to bias Whisper's language detection
     private static let localePrompts: [String: String] = [
         "en": "This is a voice note.",
@@ -31,7 +34,7 @@ final class TranscriptionService: Sendable {
         "hi": "यह एक वॉइस नोट है।",
     ]
 
-    func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = [], whisperData: Data? = nil, whisperFileName: String? = nil) async throws -> TranscriptionResult {
+    func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = [], whisperData: Data? = nil, whisperFileName: String? = nil, multiSpeaker: Bool = false) async throws -> TranscriptionResult {
         let boundary = UUID().uuidString
         let ext = (fileName as NSString).pathExtension.lowercased()
         let mimeType = Self.mimeType(for: ext)
@@ -86,14 +89,22 @@ final class TranscriptionService: Sendable {
 
         logger.info("Request body size: \(String(format: "%.1f", Double(body.count) / 1_048_576.0))MB")
 
-        var request = URLRequest(url: edgeFunctionURL)
+        let targetURL = multiSpeaker ? diarizedFunctionURL : edgeFunctionURL
+        var request = URLRequest(url: targetURL)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = body
         request.timeoutInterval = 300 // 5 minutes — large files on slow connections
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Write body to a temp file so iOS can stream it rather than buffer the
+        // entire payload in memory — more resilient on slow/cellular connections.
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("multipart")
+        try body.write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempURL)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranscriptionError.invalidResponse

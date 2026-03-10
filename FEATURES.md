@@ -57,7 +57,7 @@
 | Service | Location | Description |
 |---------|----------|-------------|
 | SupabaseClient | `Services/SupabaseClient.swift` | Supabase connection |
-| TranscriptionService | `Services/TranscriptionService.swift` | Groq Whisper via multipart upload to edge function |
+| TranscriptionService | `Services/TranscriptionService.swift` | Groq Whisper (single-speaker) + Deepgram nova-2 (multi-speaker) via multipart upload to edge functions |
 | AIService | `Services/AIService.swift` | Rewrite + title gen via Supabase edge functions (Gemini Flash) |
 | AudioRecorder | `Services/AudioRecorder.swift` | AVAudioEngine recording + real-time FFT visualization |
 | AudioPlayer | `Services/AudioPlayer.swift` | AVPlayer playback with seek, speaker routing |
@@ -95,6 +95,18 @@
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-03-09 (Session 14)
+- Multi-speaker recording: toggle in RecordView routes to `transcribe-diarized` Supabase edge function
+- Deepgram nova-2 with `diarize=true` produces `[Speaker 1]: ...` / `[Speaker 2]: ...` labeled output
+- AudioCompressor: `shouldOptimizeForNetworkUse = true` moves M4A moov atom to file start (required for streaming decoders)
+- Deepgram edge function: `detect_language=true` for auto-detection, respects explicit language setting
+- Deepgram edge function: `Content-Type: audio/mp4` (correct MIME for M4A; `audio/m4a` is non-standard)
+- Edge function errors surfaced as note content (200 response) instead of HTTP 500 for better debugging
+- Empty states: custom SVG images for Home (notes-empty) and Categories (category-empty)
+- HomeView: search always enabled regardless of note count; scroll always bounces
+- NoteDetailView: title-cased menu items, keyboard dismissed before presenting sheets, rewrite tones reordered
+- Paywall disabled in ContentView for testing (`showMandatoryPaywall` returns false)
 
 ### 2026-03-04 (Session 13)
 - Mandatory paywall gate: fullScreenCover paywall after sign-in for non-Pro users, blocks all access until subscribed/trial started

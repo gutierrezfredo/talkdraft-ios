@@ -73,6 +73,7 @@ struct ExpandingTextView: UIViewRepresentable {
     var font: UIFont = .preferredFont(forTextStyle: .body)
     var lineSpacing: CGFloat = 6
     var placeholder: String = ""
+    var speakerColors: [String: UIColor] = [:]
     @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
@@ -116,6 +117,13 @@ struct ExpandingTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ tv: CheckboxTextView, context: Context) {
+        // Re-apply attributes if the speaker color map changed
+        let newSpeakerKeys = speakerColors.keys.sorted().joined(separator: ",")
+        if newSpeakerKeys != context.coordinator.lastSpeakerColorKeys {
+            context.coordinator.lastSpeakerColorKeys = newSpeakerKeys
+            context.coordinator.needsAttributeRefresh = true
+        }
+
         let needsRefresh = context.coordinator.needsAttributeRefresh
         context.coordinator.needsAttributeRefresh = false
         let currentPlain = Self.extractPlainText(from: tv)
@@ -254,6 +262,36 @@ struct ExpandingTextView: UIViewRepresentable {
             }
         }
 
+        // Color speaker name lines (new format: standalone line per speaker)
+        if !speakerColors.isEmpty {
+            let boldFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+            let speakerLines = nsText.components(separatedBy: .newlines)
+            let linesWithOffsets = speakerLines.reduce(into: [(line: String, offset: Int)]()) { result, line in
+                let offset = result.last.map { $0.offset + ($0.line as NSString).length + 1 } ?? 0
+                result.append((line, offset))
+            }
+            for (line, offset) in linesWithOffsets {
+                guard let color = speakerColors[line] else { continue }
+                let range = NSRange(location: offset, length: (line as NSString).length)
+                guard range.location + range.length <= attributed.length else { continue }
+                attributed.addAttribute(.foregroundColor, value: color, range: range)
+                attributed.addAttribute(.font, value: boldFont, range: range)
+            }
+            // Also handle legacy [Speaker N]: inline format
+            for (key, color) in speakerColors {
+                let label = "[\(key)]:"
+                var searchRange = NSRange(location: 0, length: nsText.length)
+                while searchRange.location < nsText.length {
+                    let range = nsText.range(of: label, range: searchRange)
+                    guard range.location != NSNotFound else { break }
+                    attributed.addAttribute(.foregroundColor, value: color, range: range)
+                    attributed.addAttribute(.font, value: boldFont, range: range)
+                    searchRange.location = range.location + range.length
+                    searchRange.length = nsText.length - searchRange.location
+                }
+            }
+        }
+
         // Replace ☐/☑ with SF Symbol attachments + style checked lines
         let lines = nsText.components(separatedBy: .newlines)
         var lineOffset = 0
@@ -355,6 +393,7 @@ struct ExpandingTextView: UIViewRepresentable {
         private var isAnimatingAttributes = false
         var preserveScrollOnNextUpdate = false
         var needsAttributeRefresh = false
+        var lastSpeakerColorKeys: String = ""
         private static let highlightOverlayTag = 888
 
         init(_ parent: ExpandingTextView) {
@@ -504,12 +543,16 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard parent.text.contains("☐") || parent.text.contains("☑") else { return false }
+            let hasCheckboxes = parent.text.contains("☐") || parent.text.contains("☑")
+            let hasSpeakers = !parent.speakerColors.isEmpty
+            guard hasCheckboxes || hasSpeakers else { return false }
 
             // Block first responder BEFORE any tap action fires
             if let tv = gestureRecognizer.view as? CheckboxTextView {
                 let point = gestureRecognizer.location(in: tv)
                 if checkboxIndex(near: point, in: tv) != nil {
+                    tv.blockFirstResponder = true
+                } else if hasSpeakers && speakerNameLine(at: point, in: tv) != nil {
                     tv.blockFirstResponder = true
                 }
             }
@@ -524,6 +567,9 @@ struct ExpandingTextView: UIViewRepresentable {
             defer {
                 DispatchQueue.main.async { tv.blockFirstResponder = false }
             }
+
+            // Tapping a speaker name line — block and return silently
+            if !parent.speakerColors.isEmpty && speakerNameLine(at: point, in: tv) != nil { return }
 
             guard let idx = checkboxIndex(near: point, in: tv) else { return }
 
@@ -574,7 +620,43 @@ struct ExpandingTextView: UIViewRepresentable {
             let maxTapX: CGFloat = 28
             guard point.x <= maxTapX else { return nil }
 
+            // Also restrict to the first visual line of the checkbox item.
+            // Wrapped lines fall below the checkbox icon — tapping them should not toggle.
+            // Convert the checkbox's plain-text position back to attributed-text offset
+            // by subtracting the number of checkbox chars (☐/☑) before it in plain text
+            // (each replaces 2 plain chars with 1 attributed char).
+            var checkboxesBeforeLine = 0
+            var idx = 0
+            while idx < lineRange.location && idx < nsText.length {
+                let ch = nsText.character(at: idx)
+                if ch == 0x2610 || ch == 0x2611 { checkboxesBeforeLine += 1 }
+                idx += 1
+            }
+            let attrCheckboxOffset = lineRange.location - checkboxesBeforeLine
+            if let checkboxPos = tv.position(from: tv.beginningOfDocument, offset: attrCheckboxOffset),
+               let textRange = tv.textRange(from: checkboxPos, to: checkboxPos) {
+                let firstLineRect = tv.firstRect(for: textRange)
+                guard !firstLineRect.isNull, !firstLineRect.isInfinite,
+                      point.y >= firstLineRect.minY && point.y <= firstLineRect.maxY else {
+                    return nil
+                }
+            }
+
             return lineRange.location
+        }
+
+        /// Returns the speaker name if the tap point lands on a speaker name line, else nil.
+        private func speakerNameLine(at point: CGPoint, in tv: UITextView) -> String? {
+            guard let tapPosition = tv.closestPosition(to: point) else { return nil }
+            let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
+            let nsText = parent.text as NSString
+            guard nsText.length > 0 else { return nil }
+            let safeOffset = min(tapOffset, nsText.length - 1)
+            let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
+            let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
+            guard trimLen > 0 else { return nil }
+            let line = nsText.substring(with: NSRange(location: lineRange.location, length: trimLen))
+            return parent.speakerColors[line] != nil ? line : nil
         }
 
         func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
@@ -583,6 +665,42 @@ struct ExpandingTextView: UIViewRepresentable {
             // Work with plain text representation for line analysis
             let plainText = ExpandingTextView.extractPlainText(from: tv)
             let nsText = plainText as NSString
+
+            // Convert attributed-text offset to plain-text offset (each checkbox attachment
+            // occupies 1 attributed char but 2 plain chars: ☐/☑ + space).
+            let plainOffset: Int = {
+                guard let attributed = tv.attributedText else { return range.location }
+                var count = 0
+                let scanRange = NSRange(location: 0, length: min(range.location, attributed.length))
+                attributed.enumerateAttributes(in: scanRange) { attrs, _, _ in
+                    if attrs[.attachment] is CheckboxAttachment { count += 1 }
+                }
+                return range.location + count
+            }()
+
+            // Block insertions at or before the ☐/☑ prefix on a checkbox line.
+            // (Deletions/selections spanning the prefix are still allowed.)
+            if !text.isEmpty, nsText.length > 0 {
+                let safeOffset = min(plainOffset, nsText.length - 1)
+                let cbLineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
+                if cbLineRange.location < nsText.length {
+                    let firstChar = nsText.character(at: cbLineRange.location)
+                    if (firstChar == 0x2610 || firstChar == 0x2611) && plainOffset <= cbLineRange.location + 1 {
+                        return false
+                    }
+                }
+            }
+
+            // Block edits on speaker name lines — they're structural markers, renamed via chips only
+            if !parent.speakerColors.isEmpty {
+                let safeLocation = min(plainOffset, max(nsText.length - 1, 0))
+                let lineRange = nsText.lineRange(for: NSRange(location: safeLocation, length: 0))
+                let currentLine = nsText.substring(with: NSRange(
+                    location: lineRange.location,
+                    length: max(0, lineRange.length - (nsText.length > lineRange.location + lineRange.length ? 1 : 0))
+                ))
+                if parent.speakerColors[currentLine] != nil { return false }
+            }
 
             // Auto-convert "[]" to "☐ " — triggered when user types "]"
             if text == "]" && range.location > 0 && range.location <= nsText.length {
@@ -712,6 +830,41 @@ struct ExpandingTextView: UIViewRepresentable {
             guard !isAnimatingAttributes else { return }
             parent.cursorPosition = tv.selectedRange.location
             syncTypingAttributesToCurrentLine(tv)
+            nudgeCursorOffCheckbox(tv)
+            if !parent.speakerColors.isEmpty {
+                nudgeCursorOffSpeakerLine(tv)
+            }
+        }
+
+        private func nudgeCursorOffCheckbox(_ tv: UITextView) {
+            guard tv.selectedRange.length == 0,
+                  let attributed = tv.attributedText else { return }
+            let cursor = tv.selectedRange.location
+            guard cursor < attributed.length else { return }
+            let attrs = attributed.attributes(at: cursor, effectiveRange: nil)
+            guard attrs[.attachment] is CheckboxAttachment else { return }
+            // Cursor is on the checkbox icon — move it past the attachment to the text
+            isAnimatingAttributes = true
+            tv.selectedRange = NSRange(location: cursor + 1, length: 0)
+            isAnimatingAttributes = false
+        }
+
+        private func nudgeCursorOffSpeakerLine(_ tv: UITextView) {
+            let nsText = parent.text as NSString
+            guard nsText.length > 0, tv.selectedRange.length == 0 else { return }
+            let cursor = tv.selectedRange.location
+            let safeOffset = min(cursor, nsText.length - 1)
+            let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
+            let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
+            guard trimLen > 0 else { return }
+            let line = nsText.substring(with: NSRange(location: lineRange.location, length: trimLen))
+            guard parent.speakerColors[line] != nil else { return }
+            // Move cursor to start of next line (after the \n), or before this line
+            let nextStart = lineRange.location + lineRange.length
+            let target = nextStart <= nsText.length ? nextStart : lineRange.location
+            isAnimatingAttributes = true
+            tv.selectedRange = NSRange(location: target, length: 0)
+            isAnimatingAttributes = false
         }
 
         private func syncTypingAttributesToCurrentLine(_ tv: UITextView) {

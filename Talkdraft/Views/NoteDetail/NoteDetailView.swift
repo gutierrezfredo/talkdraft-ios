@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct NoteDetailView: View {
@@ -19,6 +20,7 @@ struct NoteDetailView: View {
     @State private var showRewriteSheet = false
     @State private var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
     @State private var isRewriting = false
+    @State private var rewritingLabel: String = ""
     @State private var rewrites: [NoteRewrite] = []
     @State private var activeRewriteId: UUID?
     @State private var rewriteLabelOpacity: Double = 0
@@ -27,6 +29,7 @@ struct NoteDetailView: View {
     @State private var typewriterTask: Task<Void, Never>?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var contentFocused = false
+    @FocusState private var titleFocused: Bool
     @State private var contentOpacity: Double = 1
     @State private var errorMessage: String?
     @State private var isDownloadingAudio = false
@@ -37,11 +40,77 @@ struct NoteDetailView: View {
     @State private var isAppendTranscribing = false
     @State private var cursorPosition: Int = 0
     @State private var lastKnownCursorPosition: Int = 0
+    @State private var isCursorReady = false
     @State private var appendInsertPosition: Int = 0
     @State private var highlightRange: NSRange?
     @State private var preserveScroll = false
     @State private var autosaveTask: Task<Void, Never>?
     @State private var keyboardHeight: CGFloat = 0
+    @State private var transcribingVideoPlayer: AVQueuePlayer?
+    @State private var transcribingPlayerLooper: AVPlayerLooper?
+    @State private var transcribingPhraseIndex = 0
+    @State private var transcribingIsLong = false
+    @State private var whileIndex = 0
+    @State private var transcribingPulse = false
+    @State private var renamingSpeaker: String? = nil
+    @State private var renameText: String = ""
+    @State private var rewriteSweep: CGFloat = 0
+
+    private static let speakerColors: [Color] = [
+        Color(hex: "#7C3AED"), // violet (brand)
+        Color(hex: "#0284C7"), // sky blue
+        Color(hex: "#D97706"), // amber
+        Color(hex: "#059669"), // emerald
+        Color(hex: "#DC2626"), // red
+        Color(hex: "#DB2777"), // pink
+        Color(hex: "#7C3AED"), // wrap
+    ]
+
+    private static let speakerUIColors: [UIColor] = [
+        UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1),
+        UIColor(red: 0x02/255, green: 0x84/255, blue: 0xC7/255, alpha: 1),
+        UIColor(red: 0xD9/255, green: 0x77/255, blue: 0x06/255, alpha: 1),
+        UIColor(red: 0x05/255, green: 0x96/255, blue: 0x69/255, alpha: 1),
+        UIColor(red: 0xDC/255, green: 0x26/255, blue: 0x26/255, alpha: 1),
+        UIColor(red: 0xDB/255, green: 0x27/255, blue: 0x77/255, alpha: 1),
+    ]
+
+    private var speakerColorMap: [String: UIColor] {
+        Dictionary(uniqueKeysWithValues: detectedSpeakers.enumerated().map { index, key in
+            (key, Self.speakerUIColors[index % Self.speakerUIColors.count])
+        })
+    }
+
+    private let transcribingPhrases: [String] = [
+        "Feel free to leave — your note will be waiting for you",
+        "Safe to navigate away — we'll finish in the background",
+        "Nothing will be lost if you leave — come back when you're ready",
+        "You're free to go. We'll finish this in the background",
+    ]
+
+    private let whilePhrases: [(video: String, subtitle: String)] = [
+        ("while-binge", "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
+        ("while-hobby", "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
+        ("while-read", "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
+        ("while-outside", "This one might take a bit — maybe step outside for some fresh air? Your note will be here when you return"),
+        ("while-snack", "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
+        ("while-work", "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
+        ("while-rest", "This one might take a bit — maybe take a little rest? Your note will be waiting when you wake up"),
+    ]
+    @State private var titlePhraseIndex = 0
+    @State private var titleTypewriterTask: Task<Void, Never>?
+
+    private let titlePhrases = [
+        "Naming this masterpiece…",
+        "Cooking up a title…",
+        "Thinking really hard…",
+        "Consulting the title gods…",
+        "Squeezing out a title…",
+    ]
+
+    private var isGeneratingTitle: Bool {
+        noteStore.generatingTitleIds.contains(noteId)
+    }
 
     private static let recordingPlaceholder = "Recording…"
     private static let transcribingPlaceholder = "Transcribing…"
@@ -64,6 +133,7 @@ struct NoteDetailView: View {
 
     private var hasChanges: Bool {
         typewriterTask == nil
+            && titleTypewriterTask == nil
             && !isRewriting
             && (editedTitle != (note.title ?? "") || editedContent != note.content)
     }
@@ -81,6 +151,39 @@ struct NoteDetailView: View {
         editedContent == "Transcribing…"
     }
 
+    /// Unique speaker display names in order of first appearance.
+    /// Uses note.speakerNames as the authoritative source (survives renames),
+    /// falling back to content parsing for notes without it.
+    private var detectedSpeakers: [String] {
+        // Authoritative: use speakerNames dict (keys sorted to preserve original order)
+        if let names = note.speakerNames, !names.isEmpty {
+            return names.keys.sorted().map { names[$0] ?? $0 }
+        }
+        // New format: standalone "Speaker N" lines
+        var seen: [String] = []
+        for line in editedContent.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            if trimmed.range(of: #"^Speaker \d+$"#, options: .regularExpression) != nil,
+               !seen.contains(trimmed) {
+                seen.append(trimmed)
+            }
+        }
+        if !seen.isEmpty { return seen }
+        // Legacy format: [Speaker N]: inline
+        let pattern = /\[([^\]]+)\]:/
+        for match in editedContent.matches(of: pattern) {
+            let key = String(match.output.1)
+            if !seen.contains(key) { seen.append(key) }
+        }
+        return seen
+    }
+
+    private func speakerColor(for key: String) -> Color {
+        let index = detectedSpeakers.firstIndex(of: key) ?? 0
+        return Self.speakerColors[index % Self.speakerColors.count]
+    }
+
     private var isTranscriptionFailed: Bool {
         editedContent == "Transcription failed — tap to edit"
     }
@@ -89,14 +192,10 @@ struct NoteDetailView: View {
         editedContent == "Waiting for connection…"
     }
 
-    /// Returns the local audio file URL if it still exists on disk.
+    /// Returns the local audio file URL if it still exists on disk,
+    /// falling back to the persisted index in case the app was restarted after a failed transcription.
     private var localAudioFileURL: URL? {
-        guard let urlString = note.audioUrl,
-              let url = URL(string: urlString),
-              url.isFileURL,
-              FileManager.default.fileExists(atPath: url.path)
-        else { return nil }
-        return url
+        noteStore.localAudioFileURL(for: noteId, audioUrl: note.audioUrl)
     }
 
     var body: some View {
@@ -106,109 +205,37 @@ struct NoteDetailView: View {
 
             ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 0) {
-                    Color.clear.frame(height: 0).id("scrollTop")
-
-                    metadataRow
-                        .padding(.top, 12)
-
-                    if audioExpanded, audioURL != nil {
-                        audioPlayerView
-                            .padding(.top, 12)
-                            .padding(.horizontal, 24)
-                    }
-
-                    titleField
-                        .padding(.top, 20)
-                        .padding(.horizontal, 24)
-
-
-                    if isTranscribing {
-                        transcribingIndicator
-                            .padding(.top, 40)
-                    } else if isWaitingForConnection {
-                        waitingForConnectionView
-                            .padding(.top, 40)
-                    } else if isTranscriptionFailed {
-                        transcriptionFailedView
-                            .padding(.top, 40)
-                    } else {
-                        contentField
-                            .padding(.top, 28)
-                            .padding(.horizontal, 24)
-                    }
-                }
+                scrollContent
                 .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 60 : 120)
                 Color.clear.frame(height: 0).id("scrollBottom")
             }
             .scrollDismissesKeyboard(.interactively)
             .ignoresSafeArea(.keyboard)
             .onAppear { scrollProxy = proxy }
-            // Tap zone behind scroll to focus editor
             .contentShape(Rectangle())
-            .onTapGesture {
-                contentFocused = true
-            }
+            .onTapGesture { contentFocused = true }
             } // ScrollViewReader
 
-            // Bottom fade
-            VStack {
-                Spacer()
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 160)
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
+            bottomFade
 
-            // Bottom bar
-            if keyboardVisible {
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 50)
-
-                    bottomBar
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5))
-                }
-            } else {
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 50)
-
-                    bottomBar
-                        .padding(.bottom, 12)
-                        .frame(maxWidth: .infinity)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.5))
-                }
+            if !titleFocused && !isTranscribing && renamingSpeaker == nil {
+                bottomBarContainer
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.4), value: isRewriting)
+        .animation(.easeOut(duration: 0.25), value: renamingSpeaker == nil)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await noteStore.fetchRewrites(for: noteId)
             rewrites = noteStore.rewritesCache[noteId] ?? []
             activeRewriteId = note.activeRewriteId
+            // Sync editedContent to the active rewrite — note.content may be stale
+            if let rewriteId = activeRewriteId,
+               let rewrite = rewrites.first(where: { $0.id == rewriteId }),
+               editedContent != rewrite.content {
+                editedContent = rewrite.content
+            }
             if !rewrites.isEmpty {
                 try? await Task.sleep(for: .milliseconds(32))
                 rewriteLabelOpacity = 1
@@ -221,112 +248,7 @@ struct NoteDetailView: View {
             try? await Task.sleep(for: .milliseconds(450))
             contentFocused = true
         }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                let activeRewrite = rewrites.first { $0.id == activeRewriteId }
-                let label = activeRewriteId == nil ? "Original" : (activeRewrite?.displayLabel ?? "Rewrite")
-                ZStack {
-                    if isRewriting {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .tint(.secondary)
-                                .scaleEffect(0.8)
-                            Text("Rewriting…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Menu {
-                            Section {
-                                Button {
-                                    switchToOriginal()
-                                } label: {
-                                    if activeRewriteId == nil {
-                                        Label("Original", systemImage: "checkmark")
-                                    } else {
-                                        Text("Original")
-                                    }
-                                }
-                            }
-                            Section {
-                                ForEach(rewrites) { rewrite in
-                                    Button {
-                                        switchToRewrite(rewrite)
-                                    } label: {
-                                        if rewrite.id == activeRewriteId {
-                                            Label(rewrite.displayLabel, systemImage: "checkmark")
-                                        } else {
-                                            Text(rewrite.displayLabel)
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(label)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                if !rewrites.isEmpty {
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 9))
-                                        .fontWeight(.regular)
-                                        .foregroundStyle(.tertiary)
-                                }
-                            }
-                            .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
-                            .foregroundStyle(Color.primary)
-                        }
-                        .disabled(rewrites.isEmpty)
-                    }
-                }
-                .opacity(rewriteLabelOpacity)
-                .animation(.easeIn(duration: 0.25), value: rewriteLabelOpacity)
-            }
-
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        startAppendRecording()
-                    } label: {
-                        Label("Record more", systemImage: "mic")
-                    }
-                    .disabled(isAppendRecording || isAppendTranscribing || isRewriting)
-
-                    if note.audioUrl != nil {
-                        Button {
-                            downloadAudio()
-                        } label: {
-                            if isDownloadingAudio {
-                                Label { Text("Downloading…") } icon: { ProgressView() }
-                            } else {
-                                Label("Download Audio", systemImage: "arrow.down.circle")
-                            }
-                        }
-                        .disabled(isDownloadingAudio)
-                    }
-
-                    if let rewriteId = activeRewriteId,
-                       let rewrite = rewrites.first(where: { $0.id == rewriteId }) {
-                        Button(role: .destructive) {
-                            pendingDeleteRewrite = rewrite
-                        } label: {
-                            Label("Delete this rewrite", systemImage: "wand.and.sparkles")
-                        }
-                    }
-
-                    Button(role: .destructive) {
-                        showDeleteConfirmation = true
-                    } label: {
-                        Label("Delete Note", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .fontWeight(.medium)
-                        .frame(width: 36, height: 36)
-                }
-            }
-
-        }
+        .toolbar { toolbarContent() }
         .alert("Delete this note?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
                 didDelete = true
@@ -434,6 +356,7 @@ struct NoteDetailView: View {
                     || oldValue == "Waiting for connection…"
                     || oldValue == "Transcription failed — tap to edit"
                 if isPlaceholder && newValue != oldValue {
+                    contentFocused = false
                     revealContent(newValue)
                 } else {
                     withAnimation(.easeOut(duration: 0.4)) {
@@ -444,10 +367,36 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.title) { oldValue, newValue in
             if editedTitle == (oldValue ?? "") {
-                withAnimation(.easeOut(duration: 0.4)) {
+                guard let title = newValue, !title.isEmpty else {
                     editedTitle = newValue ?? ""
+                    return
+                }
+                titleTypewriterTask?.cancel()
+                editedTitle = ""
+                titleTypewriterTask = Task {
+                    for char in title {
+                        guard !Task.isCancelled else { break }
+                        editedTitle.append(char)
+                        try? await Task.sleep(for: .milliseconds(25))
+                    }
+                    titleTypewriterTask = nil
                 }
             }
+        }
+        .task(id: isGeneratingTitle) {
+            guard isGeneratingTitle else { return }
+            titlePhraseIndex = Int.random(in: 0..<titlePhrases.count)
+        }
+        .onAppear {
+            if isTranscribing { setupTranscribingState() }
+        }
+        .renameSpeakerAlert(
+            renamingSpeaker: $renamingSpeaker,
+            renameText: $renameText,
+            onConfirm: renameSpeaker
+        )
+        .onChange(of: isTranscribing) { _, transcribing in
+            if transcribing { setupTranscribingState() }
         }
         .onChange(of: contentFocused) { _, focused in
             if focused, typewriterTask != nil {
@@ -455,9 +404,11 @@ struct NoteDetailView: View {
                 typewriterTask = nil
                 editedContent = note.content
             }
+            if !focused { isCursorReady = false }
         }
         .onDisappear {
             typewriterTask?.cancel()
+            titleTypewriterTask?.cancel()
         }
         .onChange(of: editedTitle) {
             scheduleAutosave()
@@ -466,8 +417,9 @@ struct NoteDetailView: View {
             scheduleAutosave()
         }
         .onChange(of: cursorPosition) { _, newPos in
-            if contentFocused && newPos > 0 {
+            if contentFocused {
                 lastKnownCursorPosition = newPos
+                isCursorReady = true
             }
         }
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
@@ -476,6 +428,7 @@ struct NoteDetailView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            guard contentFocused || titleFocused else { return }
             if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                 withAnimation(.easeOut(duration: 0.25)) {
                     keyboardHeight = frame.height
@@ -608,30 +561,324 @@ struct NoteDetailView: View {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
+    // MARK: - Shimmer Label
+
+    private func shimmerLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .hidden()
+            .overlay {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Color.primary.opacity(0.35)
+                        LinearGradient(
+                            colors: [.clear, Color.primary.opacity(0.95), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: geo.size.width * 0.55)
+                        .offset(
+                            x: rewriteSweep * (geo.size.width + geo.size.width * 0.55)
+                                - geo.size.width * 0.55
+                        )
+                    }
+                }
+                .mask(
+                    Text(text)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                )
+            }
+            .onAppear {
+                rewriteSweep = 0
+                withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
+                    rewriteSweep = 1
+                }
+            }
+            .onDisappear { rewriteSweep = 0 }
+    }
+
     // MARK: - Title
 
+    private var bottomFade: some View {
+        let bg = colorScheme == .dark ? Color.darkBackground : Color.warmBackground
+        return VStack {
+            Spacer()
+            LinearGradient(colors: [.clear, bg], startPoint: .top, endPoint: .bottom)
+                .frame(height: 160)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    private var bottomBarContainer: some View {
+        let bg = colorScheme == .dark ? Color.darkBackground : Color.warmBackground
+        return VStack(spacing: 0) {
+            LinearGradient(
+                colors: [.clear, bg.opacity(0.5)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 50)
+
+            bottomBar
+                .padding(.vertical, keyboardVisible ? 4 : 0)
+                .padding(.bottom, keyboardVisible ? 0 : 12)
+                .frame(maxWidth: .infinity)
+                .background(bg.opacity(0.5))
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            let activeRewrite = rewrites.first { $0.id == activeRewriteId }
+            let label = activeRewriteId == nil ? "Original" : (activeRewrite?.displayLabel ?? "Rewrite")
+            ZStack {
+                if isRewriting {
+                    shimmerLabel(rewritingLabel.isEmpty ? label : rewritingLabel)
+                } else {
+                    Menu {
+                        Section {
+                            Button {
+                                switchToOriginal()
+                            } label: {
+                                if activeRewriteId == nil {
+                                    Label("Original", systemImage: "checkmark")
+                                } else {
+                                    Text("Original")
+                                }
+                            }
+                        }
+                        Section {
+                            ForEach(rewrites) { rewrite in
+                                Button {
+                                    switchToRewrite(rewrite)
+                                } label: {
+                                    if rewrite.id == activeRewriteId {
+                                        Label(rewrite.displayLabel, systemImage: "checkmark")
+                                    } else {
+                                        Text(rewrite.displayLabel)
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(label)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            if !rewrites.isEmpty {
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 9))
+                                    .fontWeight(.regular)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
+                        .foregroundStyle(Color.primary)
+                    }
+                    .disabled(rewrites.isEmpty)
+                }
+            }
+            .opacity(rewriteLabelOpacity)
+            .animation(.easeIn(duration: 0.25), value: rewriteLabelOpacity)
+        }
+
+        if !isTranscribing {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        startAppendRecording(scrollToBottom: true)
+                    } label: {
+                        Label("Record More", systemImage: "mic")
+                    }
+                    .disabled(isAppendRecording || isAppendTranscribing || isRewriting)
+
+                    if note.audioUrl != nil {
+                        Button {
+                            downloadAudio()
+                        } label: {
+                            if isDownloadingAudio {
+                                Label { Text("Downloading…") } icon: { ProgressView() }
+                            } else {
+                                Label("Download Audio", systemImage: "arrow.down.circle")
+                            }
+                        }
+                        .disabled(isDownloadingAudio)
+                    }
+
+                    if let rewriteId = activeRewriteId,
+                       let rewrite = rewrites.first(where: { $0.id == rewriteId }) {
+                        Button(role: .destructive) {
+                            pendingDeleteRewrite = rewrite
+                        } label: {
+                            Label("Delete This Rewrite", systemImage: "wand.and.sparkles")
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Note", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .fontWeight(.medium)
+                        .frame(width: 36, height: 36)
+                }
+            }
+        }
+    }
+
+    private var scrollContent: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 0).id("scrollTop")
+
+            if !isTranscribing {
+                metadataRow
+                    .padding(.top, 12)
+
+                if audioExpanded, audioURL != nil {
+                    audioPlayerView
+                        .padding(.top, 12)
+                        .padding(.horizontal, 24)
+                }
+
+                titleField
+                    .padding(.top, 20)
+                    .padding(.horizontal, 24)
+            }
+
+            if isTranscribing {
+                transcribingIndicator
+            } else if isWaitingForConnection {
+                waitingForConnectionView
+                    .padding(.top, 40)
+            } else if isTranscriptionFailed {
+                transcriptionFailedView
+                    .padding(.top, 40)
+            } else {
+                if !detectedSpeakers.isEmpty {
+                    speakerChipsRow
+                        .padding(.top, 28)
+                        .padding(.horizontal, 24)
+                }
+                contentField
+                    .padding(.top, detectedSpeakers.isEmpty ? 28 : 28)
+                    .padding(.horizontal, 24)
+            }
+        }
+    }
+
     private var titleField: some View {
-        TextField("Untitled", text: $editedTitle, axis: .vertical)
-            .font(.brandTitle)
-            .multilineTextAlignment(.center)
-            .autocorrectionDisabled()
-            .contentTransition(.opacity)
+        Group {
+            if isGeneratingTitle {
+                Text(titlePhrases[titlePhraseIndex])
+                    .font(.brandTitle)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .animation(.easeInOut(duration: 0.35), value: titlePhraseIndex)
+            } else {
+                TextField("Untitled", text: $editedTitle, axis: .vertical)
+                    .font(.brandTitle)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+                    .focused($titleFocused)
+            }
+        }
     }
 
     // MARK: - Transcribing Indicator
 
     private var transcribingIndicator: some View {
-        Text("Transcribing…")
-            .font(.body)
-            .italic()
-            .foregroundStyle(Color.brand)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .phaseAnimator([false, true]) { content, pulse in
-                content.opacity(pulse ? 0.3 : 1.0)
-            } animation: { _ in
-                .easeInOut(duration: 1.2)
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(Color.brand.opacity(0.12))
+                    .frame(width: 220, height: 220)
+
+                if let player = transcribingVideoPlayer {
+                    LoopingVideoView(player: player)
+                        .frame(width: 180, height: 180)
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 36))
+                        .foregroundStyle(Color.brand)
+                }
             }
+            .onAppear {
+                setupTranscribingVideo()
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+                    transcribingPulse = true
+                }
+            }
+            .onDisappear {
+                transcribingVideoPlayer?.pause()
+                transcribingPulse = false
+            }
+
+            VStack(spacing: 8) {
+                if transcribingIsLong {
+                    Text("Transcribing your note…")
+                        .font(.brandTitle2)
+                        .multilineTextAlignment(.center)
+                        .opacity(transcribingPulse ? 0.4 : 1.0)
+
+                    Text(whilePhrases[whileIndex].subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Transcribing your note…")
+                        .font(.brandTitle2)
+                        .multilineTextAlignment(.center)
+                        .opacity(transcribingPulse ? 0.4 : 1.0)
+
+                    Text(transcribingPhrases[transcribingPhraseIndex])
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.top, 40)
+    }
+
+    private func setupTranscribingState() {
+        let duration = note.durationSeconds ?? 0
+        transcribingIsLong = duration >= 300
+        // Derive index from note ID — deterministic per note, no runtime randomness,
+        // prevents ghosting from multiple onAppear calls while still rotating across notes.
+        let hash = abs(noteId.hashValue)
+        if transcribingIsLong {
+            whileIndex = hash % whilePhrases.count
+        } else {
+            transcribingPhraseIndex = hash % transcribingPhrases.count
+        }
+    }
+
+    private func setupTranscribingVideo() {
+        guard transcribingVideoPlayer == nil else { return }
+        let name: String
+        if transcribingIsLong {
+            name = whilePhrases[whileIndex].video
+        } else {
+            let shortVideos = ["transcribing-1", "transcribing-2"]
+            name = shortVideos[abs(noteId.hashValue) % shortVideos.count]
+        }
+        guard let url = Bundle.main.url(forResource: name, withExtension: "mp4") else { return }
+        let item = AVPlayerItem(url: url)
+        let player = AVQueuePlayer(playerItem: item)
+        transcribingPlayerLooper = AVPlayerLooper(player: player, templateItem: item)
+        player.isMuted = true
+        player.play()
+        transcribingVideoPlayer = player
     }
 
     // MARK: - Waiting for Connection
@@ -711,6 +958,44 @@ struct NoteDetailView: View {
         )
     }
 
+    // MARK: - Speaker Chips
+
+    private var speakerChipsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(detectedSpeakers, id: \.self) { key in
+                    let color = speakerColor(for: key)
+
+                    Button {
+                        renamingSpeaker = key
+                        renameText = ""
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(color)
+                                .frame(width: 8, height: 8)
+                            Text(key)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(color)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(color.opacity(colorScheme == .dark ? 0.15 : 0.1))
+                        )
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(color.opacity(0.25), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     // MARK: - Content
 
     private var contentField: some View {
@@ -723,7 +1008,8 @@ struct NoteDetailView: View {
             isEditable: !isAppendRecording && !isAppendTranscribing,
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
-            placeholder: "Start typing..."
+            placeholder: "Start typing...",
+            speakerColors: speakerColorMap
         )
         .opacity(contentOpacity)
     }
@@ -746,7 +1032,10 @@ struct NoteDetailView: View {
         HStack(spacing: keyboardVisible ? 12 : 40) {
             // Tag
             Button {
-                showCategoryPicker = true
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    showCategoryPicker = true
+                }
             } label: {
                 Image(systemName: "tag")
                     .font(keyboardVisible ? .callout : .title3)
@@ -762,7 +1051,10 @@ struct NoteDetailView: View {
             // Rewrite
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showRewriteSheet = true
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    showRewriteSheet = true
+                }
             } label: {
                 if keyboardVisible {
                     Image(systemName: "wand.and.stars")
@@ -783,7 +1075,10 @@ struct NoteDetailView: View {
 
             // Share
             Button {
-                textShareItem = buildShareText()
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    textShareItem = buildShareText()
+                }
             } label: {
                 Image(systemName: "arrowshape.turn.up.right")
                     .font(keyboardVisible ? .callout : .title3)
@@ -803,7 +1098,7 @@ struct NoteDetailView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "mic")
                             .font(.callout)
-                        Text("Append")
+                        Text("Record")
                             .font(.callout)
                             .fontWeight(.semibold)
                     }
@@ -900,12 +1195,10 @@ struct NoteDetailView: View {
         HStack(spacing: 8) {
             if isAppendTranscribing {
                 ProgressView()
-                    .tint(.white)
                     .controlSize(.small)
                 Text("Transcribing…")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(.white)
             } else {
                 Circle()
                     .fill(.red)
@@ -914,12 +1207,11 @@ struct NoteDetailView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .monospacedDigit()
-                    .foregroundStyle(.white)
             }
         }
         .padding(.horizontal, 14)
         .frame(height: 36)
-        .background(Capsule().fill(Color(white: 0.1)))
+        .glassEffect(.regular, in: .capsule)
     }
 
     // MARK: - Typewriter
@@ -941,6 +1233,46 @@ struct NoteDetailView: View {
         withAnimation(.easeIn(duration: 0.5)) {
             contentOpacity = 1
         }
+    }
+
+    // MARK: - Speaker Names
+
+    private func renameSpeaker(key: String, newName: String) {
+        guard !newName.isEmpty else { return }
+
+        func applyRename(to text: String) -> String {
+            text
+                .components(separatedBy: "\n")
+                .map { $0 == key ? newName : $0 }
+                .joined(separator: "\n")
+                .replacingOccurrences(of: "[\(key)]:", with: "[\(newName)]:")
+        }
+
+        // Update current displayed content
+        editedContent = applyRename(to: editedContent)
+
+        // Update speakerNames: find the original key whose current value is `key`
+        var names = note.speakerNames ?? [:]
+        if let originalKey = names.first(where: { $0.value == key })?.key {
+            names[originalKey] = newName
+        } else {
+            names[key] = newName
+        }
+
+        var updated = note
+        updated.speakerNames = names
+        // Also rename in originalContent so switching to Original stays consistent
+        if let original = updated.originalContent {
+            updated.originalContent = applyRename(to: original)
+        }
+        updated.updatedAt = Date()
+        noteStore.updateNote(updated)
+
+        // Rename in all cached rewrites so switching between prompts stays consistent
+        noteStore.renameSpeakerInRewrites(noteId: noteId, oldName: key, newName: newName)
+        rewrites = noteStore.rewritesCache[noteId] ?? []
+
+        saveChanges()
     }
 
     // MARK: - Helpers
@@ -965,7 +1297,12 @@ struct NoteDetailView: View {
     }
 
     private func performRewrite(tone: String?, instructions: String?, toneLabel: String? = nil, toneEmoji: String? = nil) {
+        if let emoji = toneEmoji, let name = toneLabel { rewritingLabel = "\(emoji) \(name)" }
+        else if let name = toneLabel { rewritingLabel = name }
+        else if let instructions { rewritingLabel = String(instructions.prefix(30)) + (instructions.count > 30 ? "…" : "") }
+        else { rewritingLabel = "Rewriting…" }
         isRewriting = true
+        rewriteLabelOpacity = 1
         Task {
             do {
                 let sourceContent = note.originalContent ?? editedContent
@@ -984,7 +1321,8 @@ struct NoteDetailView: View {
                     content: sourceContent,
                     tone: tone,
                     customInstructions: instructions,
-                    language: note.language
+                    language: note.language,
+                    multiSpeaker: !(note.speakerNames ?? [:]).isEmpty
                 )
 
                 // Buffer streamed chunks, reveal progressively by character index
@@ -1153,19 +1491,20 @@ struct NoteDetailView: View {
 
     // MARK: - Append Recording Actions
 
-    private func startAppendRecording() {
+    private func startAppendRecording(scrollToBottom: Bool = false) {
         // Use last known cursor position, or end of content if cursor was never placed
-        let position = lastKnownCursorPosition > 0 ? lastKnownCursorPosition : editedContent.count
+        let position = scrollToBottom ? editedContent.count : (contentFocused && isCursorReady ? cursorPosition : (lastKnownCursorPosition > 0 ? lastKnownCursorPosition : editedContent.count))
         appendInsertPosition = min(position, editedContent.count)
         contentFocused = false
         insertPlaceholder(Self.recordingPlaceholder)
         do {
             try appendRecorder.startRecording()
             isAppendRecording = true
-            // Scroll to bottom so the Recording… placeholder is visible
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
+            if scrollToBottom {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
+                    }
                 }
             }
         } catch {
@@ -1515,6 +1854,24 @@ private let rewriteFormats: [RewriteFormat] = [
         RewriteTone(id: "edit-list", label: "List", emoji: "📋", description: "Convert into bullet points"),
         RewriteTone(id: "extract-actions", label: "Action Items", emoji: "✅", description: "Pull out tasks as checkboxes"),
     ]),
+    RewriteFormat(id: "work", label: "Work", emoji: "💼", color: .orange, tones: [
+        RewriteTone(id: "work-brainstorm", label: "Brainstorming", emoji: "💡", description: "Group and organize ideas"),
+        RewriteTone(id: "work-progress", label: "Progress Report", emoji: "📊", description: "Done, status, and next steps"),
+        RewriteTone(id: "work-slides", label: "Presentation Slides", emoji: "🖥️", description: "Slide titles with bullet points"),
+        RewriteTone(id: "work-speech", label: "Speech Outline", emoji: "🎤", description: "Hook, key points, and closing"),
+        RewriteTone(id: "work-linkedin-msg", label: "LinkedIn Message", emoji: "💬", description: "Brief connection message"),
+    ]),
+    RewriteFormat(id: "summary", label: "Summary", emoji: "📄", color: .yellow, tones: [
+        RewriteTone(id: "summary-detailed", label: "Detailed Summary", emoji: "📖", description: "All key points and context"),
+        RewriteTone(id: "summary-short", label: "Short Summary", emoji: "⚡", description: "Essential points in 2-3 sentences"),
+        RewriteTone(id: "summary-meeting", label: "Meeting Takeaways", emoji: "🤝", description: "Decisions, actions, follow-ups"),
+    ]),
+    RewriteFormat(id: "style", label: "Writing Style", emoji: "🎨", color: .pink, tones: [
+        RewriteTone(id: "style-casual", label: "Casual", emoji: "😎", description: "Relaxed, like texting a friend"),
+        RewriteTone(id: "style-friendly", label: "Friendly", emoji: "😊", description: "Warm and approachable"),
+        RewriteTone(id: "style-confident", label: "Confident", emoji: "💪", description: "Bold and assertive"),
+        RewriteTone(id: "style-professional", label: "Professional", emoji: "💼", description: "Polished and work-ready"),
+    ]),
     RewriteFormat(id: "emails", label: "Emails", emoji: "📧", color: .cyan, tones: [
         RewriteTone(id: "email-casual", label: "Casual Email", emoji: "😎", description: "Compose an informal email"),
         RewriteTone(id: "email-formal", label: "Formal Email", emoji: "👔", description: "Compose a professional email"),
@@ -1529,33 +1886,15 @@ private let rewriteFormats: [RewriteFormat] = [
         RewriteTone(id: "content-video-script", label: "Video Script", emoji: "🎬", description: "Hook, sections, and CTA"),
         RewriteTone(id: "content-newsletter", label: "Newsletter", emoji: "📰", description: "Engaging intro and sign-off"),
     ]),
-    RewriteFormat(id: "journaling", label: "Journaling", emoji: "📓", color: .indigo, tones: [
-        RewriteTone(id: "journal-entry", label: "Journal Entry", emoji: "✍️", description: "Reflective and introspective"),
-        RewriteTone(id: "journal-gratitude", label: "Gratitude", emoji: "🙏", description: "Focus on what to be thankful for"),
-        RewriteTone(id: "journal-therapy", label: "Therapy Notes", emoji: "🧠", description: "Polish session notes, preserve raw thoughts"),
-    ]),
     RewriteFormat(id: "personal", label: "Personal", emoji: "🏠", color: .green, tones: [
         RewriteTone(id: "personal-grocery", label: "Grocery List", emoji: "🛒", description: "Extract items, group by category"),
         RewriteTone(id: "personal-meal", label: "Meal Planner", emoji: "🍽️", description: "Organize meals with ingredients"),
         RewriteTone(id: "personal-study", label: "Study Notes", emoji: "📚", description: "Headings, bullets, key concepts"),
     ]),
-    RewriteFormat(id: "work", label: "Work", emoji: "💼", color: .orange, tones: [
-        RewriteTone(id: "work-brainstorm", label: "Brainstorming", emoji: "💡", description: "Group and organize ideas"),
-        RewriteTone(id: "work-progress", label: "Progress Report", emoji: "📊", description: "Done, status, and next steps"),
-        RewriteTone(id: "work-slides", label: "Presentation Slides", emoji: "🖥️", description: "Slide titles with bullet points"),
-        RewriteTone(id: "work-speech", label: "Speech Outline", emoji: "🎤", description: "Hook, key points, and closing"),
-        RewriteTone(id: "work-linkedin-msg", label: "LinkedIn Message", emoji: "💬", description: "Brief connection message"),
-    ]),
-    RewriteFormat(id: "style", label: "Writing Style", emoji: "🎨", color: .pink, tones: [
-        RewriteTone(id: "style-casual", label: "Casual", emoji: "😎", description: "Relaxed, like texting a friend"),
-        RewriteTone(id: "style-friendly", label: "Friendly", emoji: "😊", description: "Warm and approachable"),
-        RewriteTone(id: "style-confident", label: "Confident", emoji: "💪", description: "Bold and assertive"),
-        RewriteTone(id: "style-professional", label: "Professional", emoji: "💼", description: "Polished and work-ready"),
-    ]),
-    RewriteFormat(id: "summary", label: "Summary", emoji: "📄", color: .yellow, tones: [
-        RewriteTone(id: "summary-detailed", label: "Detailed Summary", emoji: "📖", description: "All key points and context"),
-        RewriteTone(id: "summary-short", label: "Short Summary", emoji: "⚡", description: "Essential points in 2-3 sentences"),
-        RewriteTone(id: "summary-meeting", label: "Meeting Takeaways", emoji: "🤝", description: "Decisions, actions, follow-ups"),
+    RewriteFormat(id: "journaling", label: "Journaling", emoji: "📓", color: .indigo, tones: [
+        RewriteTone(id: "journal-entry", label: "Journal Entry", emoji: "✍️", description: "Reflective and introspective"),
+        RewriteTone(id: "journal-gratitude", label: "Gratitude", emoji: "🙏", description: "Focus on what to be thankful for"),
+        RewriteTone(id: "journal-therapy", label: "Therapy Notes", emoji: "🧠", description: "Polish session notes, preserve raw thoughts"),
     ]),
 ]
 
@@ -1641,13 +1980,60 @@ private struct RewriteSheet: View {
             return rewriteFormats.map { ($0, $0.tones) }
         }
         return rewriteFormats.compactMap { format in
-            let matched = format.tones.filter {
-                $0.label.lowercased().contains(query) ||
-                $0.description.lowercased().contains(query) ||
-                format.label.lowercased().contains(query)
-            }
+            let formatScore = matchScore(format.label, query: query)
+            let matched = format.tones
+                .filter {
+                    matchScore($0.label, query: query) >= 0 ||
+                    matchScore($0.description, query: query) >= 0 ||
+                    formatScore >= 0
+                }
+                .sorted {
+                    max(matchScore($0.label, query: query), matchScore($0.description, query: query)) >
+                    max(matchScore($1.label, query: query), matchScore($1.description, query: query))
+                }
             return matched.isEmpty ? nil : (format, matched)
         }
+    }
+
+    /// Returns 2 for word-start match, 1 for mid-word match, -1 for no match.
+    private func matchScore(_ text: String, query: String) -> Int {
+        let lower = text.lowercased()
+        guard lower.contains(query) else { return -1 }
+        if lower.hasPrefix(query) { return 2 }
+        // Word-boundary: appears after a space or punctuation
+        let pattern = "[^a-z]" + NSRegularExpression.escapedPattern(for: query)
+        if (try? NSRegularExpression(pattern: pattern))?.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)) != nil {
+            return 2
+        }
+        return 1
+    }
+
+    private func highlighted(_ text: String) -> AttributedString {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        var attributed = AttributedString(text)
+        guard !query.isEmpty else { return attributed }
+        var searchStart = attributed.startIndex
+        while searchStart < attributed.endIndex {
+            guard let range = attributed[searchStart...].range(of: query, options: .caseInsensitive) else { break }
+            attributed[range].backgroundColor = Color.yellow.opacity(0.4)
+            searchStart = range.upperBound
+        }
+        return attributed
+    }
+
+    private var filteredFavoriteTones: [(tone: RewriteTone, color: Color)] {
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return favoriteTones }
+        return favoriteTones.filter {
+            matchScore($0.tone.label, query: query) >= 0 ||
+            matchScore($0.tone.description, query: query) >= 0
+        }
+    }
+
+    private var filteredRecentPresets: [RecentPreset] {
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return recentPresets }
+        return recentPresets.filter { $0.instructions.lowercased().contains(query) }
     }
 
     private var favoriteTones: [(tone: RewriteTone, color: Color)] {
@@ -1662,11 +2048,34 @@ private struct RewriteSheet: View {
         return result
     }
 
+    private var isPresetsEmpty: Bool {
+        filteredRecentPresets.isEmpty && filteredFavoriteTones.isEmpty && filteredFormats.isEmpty
+    }
+
     private var presetsView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                if isPresetsEmpty {
+                    VStack(spacing: 12) {
+                        Image("search-empty")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 60)
+                            .foregroundStyle(.secondary)
+                        Text("No results")
+                            .font(.headline)
+                        Text("No presets matching \"\(searchText.trimmingCharacters(in: .whitespaces))\".")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 60)
+                    .padding(.horizontal, 24)
+                }
+
                 // Recent custom presets
-                if searchText.isEmpty, !recentPresets.isEmpty {
+                if !filteredRecentPresets.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 6) {
                             Text("🕐")
@@ -1683,7 +2092,7 @@ private struct RewriteSheet: View {
                 }
 
                 // Favorites section
-                if searchText.isEmpty, !favoriteTones.isEmpty {
+                if !filteredFavoriteTones.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 6) {
                             Text("⭐")
@@ -1718,12 +2127,12 @@ private struct RewriteSheet: View {
             .padding(.top, 16)
             .padding(.bottom, 40)
         }
-        .scrollDismissesKeyboard(.immediately)
+        .scrollDismissesKeyboard(.interactively)
         .searchable(text: $searchText, prompt: "Search presets")
     }
 
     private var recentPresetsGrid: some View {
-        let items = recentPresets
+        let items = filteredRecentPresets
         let rowCount = (items.count + 1) / 2
         return VStack(spacing: 12) {
             ForEach(0..<rowCount, id: \.self) { row in
@@ -1744,7 +2153,7 @@ private struct RewriteSheet: View {
             Text("🕐")
                 .font(.title2)
 
-            Text(preset.instructions)
+            Text(highlighted(preset.instructions))
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundStyle(.primary)
@@ -1788,7 +2197,7 @@ private struct RewriteSheet: View {
     }
 
     private var favoritesGrid: some View {
-        let items = favoriteTones
+        let items = filteredFavoriteTones
         let rowCount = (items.count + 1) / 2
         return VStack(spacing: 12) {
             ForEach(0..<rowCount, id: \.self) { row in
@@ -1826,12 +2235,12 @@ private struct RewriteSheet: View {
             Text(tone.emoji)
                 .font(.title2)
 
-            Text(tone.label)
+            Text(highlighted(tone.label))
                 .font(.callout)
                 .fontWeight(.semibold)
                 .foregroundStyle(.primary)
 
-            Text(tone.description)
+            Text(highlighted(tone.description))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -1912,5 +2321,34 @@ struct SheetBackground: View {
                 .opacity(colorScheme == .dark ? 0.85 : 0.55)
         }
         .ignoresSafeArea()
+    }
+}
+
+// MARK: - Rename Speaker Alert
+
+private extension View {
+    func renameSpeakerAlert(
+        renamingSpeaker: Binding<String?>,
+        renameText: Binding<String>,
+        onConfirm: @escaping (String, String) -> Void
+    ) -> some View {
+        alert("Rename Speaker", isPresented: Binding(
+            get: { renamingSpeaker.wrappedValue != nil },
+            set: { if !$0 { renamingSpeaker.wrappedValue = nil } }
+        )) {
+            TextField("New name", text: renameText)
+            Button("Rename") {
+                if let key = renamingSpeaker.wrappedValue {
+                    let trimmed = renameText.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    onConfirm(key, trimmed)
+                }
+                renamingSpeaker.wrappedValue = nil
+            }
+            Button("Cancel", role: .cancel) {
+                renamingSpeaker.wrappedValue = nil
+            }
+        } message: {
+            Text("This will update all instances in the transcript")
+        }
     }
 }

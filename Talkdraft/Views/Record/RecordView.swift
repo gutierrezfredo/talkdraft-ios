@@ -11,6 +11,7 @@ struct RecordView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showCancelConfirmation = false
+    @State private var multiSpeaker = false
     let categoryId: UUID?
     var onNoteSaved: ((Note) -> Void)?
 
@@ -18,8 +19,18 @@ struct RecordView: View {
 
     var body: some View {
         ZStack {
-            (colorScheme == .dark ? Color.darkBackground : Color.brand)
-                .ignoresSafeArea()
+            Group {
+                if colorScheme == .dark {
+                    Color.darkBackground
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: "#8B5CF6"), Color(hex: "#6D28D9")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+            .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Header
@@ -48,6 +59,21 @@ struct RecordView: View {
                 .padding(.horizontal, 24)
 
                 Spacer()
+
+                // Multi-speaker toggle
+                Toggle(isOn: $multiSpeaker) {
+                    Label("Multi-speaker", systemImage: "person.2.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                .toggleStyle(RecordToggleStyle(colorScheme: colorScheme))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                .fixedSize()
+                .contentShape(Capsule())
+                .onTapGesture { withAnimation(.snappy(duration: 0.2)) { multiSpeaker.toggle() } }
+                .padding(.bottom, 72)
 
                 // Controls
                 controls
@@ -116,18 +142,31 @@ struct RecordView: View {
     // MARK: - Timer
 
     private var timer: some View {
-        Text(formattedTime)
-            .font(.system(size: 72, weight: .light, design: .rounded))
-            .foregroundStyle(.white)
-            .monospacedDigit()
-            .contentTransition(.numericText())
-            .opacity(recorder.isPaused ? 0.5 : 1.0)
-            .animation(
-                recorder.isPaused
-                    ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
-                    : .default,
-                value: recorder.isPaused
-            )
+        HStack(spacing: 0) {
+            ForEach(Array(formattedTime.enumerated()), id: \.offset) { _, char in
+                if char == ":" {
+                    Text(":")
+                        .font(.custom("Fraunces-Light", size: 88))
+                } else {
+                    ZStack {
+                        Text("0").opacity(0) // widest reference
+                        Text(String(char))
+                            .transition(.opacity)
+                            .id(char)
+                    }
+                    .font(.custom("Fraunces-Light", size: 88))
+                    .animation(.easeInOut(duration: 0.25), value: char)
+                }
+            }
+        }
+        .foregroundStyle(.white)
+        .opacity(recorder.isPaused ? 0.5 : 1.0)
+        .animation(
+            recorder.isPaused
+                ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                : .default,
+            value: recorder.isPaused
+        )
     }
 
     // MARK: - Controls
@@ -233,11 +272,43 @@ struct RecordView: View {
 
         // Transcribe in background
         Task { @MainActor in
-            noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId, customDictionary: settingsStore.customDictionary)
+            noteStore.transcribeNote(id: noteId, audioFileURL: audioURL, language: language, userId: userId, customDictionary: settingsStore.customDictionary, multiSpeaker: multiSpeaker)
         }
 
         onNoteSaved?(note)
         dismiss()
+    }
+}
+
+// MARK: - Record Toggle Style
+
+private struct RecordToggleStyle: ToggleStyle {
+    let colorScheme: ColorScheme
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.label
+            Spacer()
+            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(configuration.isOn
+                        ? (colorScheme == .dark ? Color.brand : .white)
+                        : Color.white.opacity(0.25)
+                    )
+                    .frame(width: 50, height: 30)
+
+                Circle()
+                    .fill(configuration.isOn
+                        ? (colorScheme == .dark ? .white : Color.brand)
+                        : .white
+                    )
+                    .frame(width: 24, height: 24)
+                    .padding(3)
+                    .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
+            }
+            .animation(.snappy(duration: 0.2), value: configuration.isOn)
+            .onTapGesture { configuration.isOn.toggle() }
+        }
     }
 }
 
@@ -265,5 +336,24 @@ private struct AudioLevelBars: View {
                     .animation(.easeOut(duration: 0.08), value: bands[index])
             }
         }
+    }
+}
+
+// MARK: - Blur Fade Transition
+
+private struct BlurFadeModifier: ViewModifier {
+    let radius: CGFloat
+    let opacity: Double
+    func body(content: Content) -> some View {
+        content.blur(radius: radius).opacity(opacity)
+    }
+}
+
+private extension AnyTransition {
+    static var blurFade: AnyTransition {
+        .modifier(
+            active: BlurFadeModifier(radius: 6, opacity: 0),
+            identity: BlurFadeModifier(radius: 0, opacity: 1)
+        )
     }
 }

@@ -7,6 +7,7 @@ struct NoteCard: View {
     var isSelected: Bool = false
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var transcribingPulse = false
 
     private var isDark: Bool { colorScheme == .dark }
 
@@ -59,10 +60,24 @@ struct NoteCard: View {
             }
 
             // Content preview
-            Text(note.content)
+            if note.content == "Transcribing…" {
+                Text("Transcribing…")
+                    .italic()
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
+                .foregroundStyle(Color.brand)
+                .opacity(transcribingPulse ? 0.35 : 1.0)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                        transcribingPulse = true
+                    }
+                }
+                .onDisappear { transcribingPulse = false }
+            } else {
+                Text(note.content)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
 
             Spacer(minLength: 0)
 

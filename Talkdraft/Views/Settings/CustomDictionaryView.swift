@@ -34,11 +34,11 @@ struct CustomDictionaryView: View {
                         Text("No custom words yet")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.primary)
 
                         Text("Add words that transcription often misspells — names, brands, or jargon.")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
                     .padding(.top, 32)

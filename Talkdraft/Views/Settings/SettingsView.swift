@@ -402,7 +402,8 @@ struct SettingsView: View {
 
     private var supportEmailBody: String {
         let device = UIDevice.current
-        return "\n\n---\nApp: Talkdraft \(appVersion)\niOS: \(device.systemVersion)\nDevice: \(device.model)"
+        let diagnostics = ErrorLogger.shared.exportText(maxEntries: 20)
+        return "\n\n---\nApp: Talkdraft \(appVersion)\niOS: \(device.systemVersion)\nDevice: \(device.model)\n\n\(diagnostics)"
     }
 
     private func openSupportEmail() {

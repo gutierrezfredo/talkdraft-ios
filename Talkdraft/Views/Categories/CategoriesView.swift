@@ -110,12 +110,23 @@ struct CategoriesView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Categories", systemImage: "folder")
-        } description: {
+        VStack(spacing: 12) {
+            Image("category-empty")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 60)
+                .foregroundStyle(.secondary)
+
+            Text("No Categories")
+                .font(.brandTitle2)
+
             Text("Tap + to create your first category.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, minHeight: 300)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     }
 }
 

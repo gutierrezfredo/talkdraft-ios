@@ -99,7 +99,7 @@ struct HomeView: View {
                         Color.clear.frame(height: 120)
                     }
                     .contentMargins(.top, chipsBarHeight)
-                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollBounceBehavior(.always)
                     .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
                     .scrollDismissesKeyboard(.interactively)
                     .refreshable {
@@ -377,7 +377,7 @@ struct HomeView: View {
                                 .scaledToFit()
                                 .frame(height: 60)
                         } else {
-                            Image("category-empty")
+                            Image("notes-empty")
                                 .resizable()
                                 .scaledToFit()
                                 .frame(height: 60)
@@ -495,8 +495,6 @@ struct HomeView: View {
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
-            .disabled(noteStore.notes.isEmpty)
-            .opacity(noteStore.notes.isEmpty ? 0.4 : 1)
         }
         .padding(.bottom, 12)
         .padding(.horizontal, 20)
