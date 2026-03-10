@@ -1,6 +1,25 @@
 import AVFoundation
 import SwiftUI
 
+/// Walks up from a SwiftUI scroll content view to find the parent UIScrollView
+/// and configures it for native interactive keyboard dismissal.
+private struct ScrollViewKeyboardDismissSetup: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView { UIView() }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            var view: UIView? = uiView.superview
+            while let v = view {
+                if let sv = v as? UIScrollView {
+                    sv.keyboardDismissMode = .interactive
+                    sv.alwaysBounceVertical = true
+                    return
+                }
+                view = v.superview
+            }
+        }
+    }
+}
+
 struct NoteDetailView: View {
     @Environment(NoteStore.self) private var noteStore
     @Environment(AuthStore.self) private var authStore
@@ -45,7 +64,7 @@ struct NoteDetailView: View {
     @State private var highlightRange: NSRange?
     @State private var preserveScroll = false
     @State private var autosaveTask: Task<Void, Never>?
-    @State private var keyboardHeight: CGFloat = 0
+
     @State private var transcribingVideoPlayer: AVQueuePlayer?
     @State private var transcribingPlayerLooper: AVPlayerLooper?
     @State private var transcribingPhraseIndex = 0
@@ -206,10 +225,10 @@ struct NoteDetailView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 scrollContent
-                .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 60 : 120)
+                .padding(.bottom, 120)
+                .background(ScrollViewKeyboardDismissSetup())
                 Color.clear.frame(height: 0).id("scrollBottom")
             }
-            .scrollDismissesKeyboard(.interactively)
             .ignoresSafeArea(.keyboard)
             .onAppear { scrollProxy = proxy }
             .contentShape(Rectangle())
@@ -425,31 +444,6 @@ struct NoteDetailView: View {
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
             if Int(elapsed) >= 900 && appendRecorder.isRecording {
                 stopAppendRecording()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            guard contentFocused || titleFocused else { return }
-            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    keyboardHeight = frame.height
-                }
-            }
-        }
-        // QuickType suggestions bar appears after the initial keyboard animation and changes
-        // the keyboard frame via this separate notification — keep keyboardHeight in sync
-        // so the layout doesn't momentarily flash as the bar slides in.
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
-            guard keyboardHeight > 0,
-                  let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
-                  let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
-            else { return }
-            withAnimation(.easeOut(duration: duration)) {
-                keyboardHeight = frame.height
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.25)) {
-                keyboardHeight = 0
             }
         }
     }
