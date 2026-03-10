@@ -228,15 +228,18 @@ struct NoteDetailView: View {
 
             ScrollViewReader { proxy in
             ScrollView {
-                scrollContent
-                .padding(.bottom, 120)
+                VStack(spacing: 0) {
+                    scrollContent
+                    Color.clear
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                        .contentShape(Rectangle())
+                        .onTapGesture { contentFocused = true }
+                }
                 .background(ScrollViewKeyboardDismissSetup())
                 Color.clear.frame(height: 0).id("scrollBottom")
             }
-            .ignoresSafeArea(.keyboard)
+            .ignoresSafeArea(.all, edges: .bottom)
             .onAppear { scrollProxy = proxy }
-            .contentShape(Rectangle())
-            .onTapGesture { contentFocused = true }
             } // ScrollViewReader
 
             bottomFade
