@@ -240,12 +240,15 @@ struct NoteDetailView: View {
             } // ScrollViewReader
 
             bottomFade
-
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if !titleFocused && !isTranscribing && renamingSpeaker == nil {
                 bottomBarContainer
                     .transition(.opacity)
+                    .id(contentFocused)
             }
         }
+        .animation(.easeOut(duration: 0.2), value: contentFocused)
         .animation(.easeInOut(duration: 0.4), value: isRewriting)
         .animation(.easeOut(duration: 0.25), value: renamingSpeaker == nil)
         .navigationBarTitleDisplayMode(.inline)
