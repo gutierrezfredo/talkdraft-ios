@@ -191,6 +191,7 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
+
                 }
 
                 // MARK: - Legal
@@ -226,7 +227,7 @@ struct SettingsView: View {
                     )
                 }
 
-                // MARK: - Actions
+                // MARK: - Delete Account
 
                 VStack(spacing: 0) {
                     Button {
@@ -239,32 +240,27 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
-
-                    if authStore.user?.deletionScheduledAt == nil {
-                        SettingsDivider()
-
-                        Button {
-                            showDeleteConfirmation = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "trash")
-                                    .font(.body)
-                                    .foregroundStyle(.red)
-                                    .frame(width: 24)
-                                Text("Delete Account")
-                                    .font(.body)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.red)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 16)
-                            .frame(height: 56)
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
                 .background(cardColor)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
+
+                if authStore.user?.deletionScheduledAt == nil {
+                    Button {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Group {
+                            Text("To delete your data permanently, ")
+                                .foregroundStyle(.secondary)
+                            + Text("close your account")
+                                .underline()
+                                .foregroundStyle(.secondary)
+                            + Text(".")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.footnote)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)

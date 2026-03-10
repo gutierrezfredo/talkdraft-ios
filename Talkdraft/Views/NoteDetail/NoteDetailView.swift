@@ -55,6 +55,7 @@ struct NoteDetailView: View {
     @State private var moveCursorToEnd = false
     @FocusState private var titleFocused: Bool
     @State private var contentOpacity: Double = 1
+    @State private var contentBaseline: String = ""
     @State private var errorMessage: String?
     @State private var isDownloadingAudio = false
     @State private var audioShareItem: URL?
@@ -139,12 +140,24 @@ struct NoteDetailView: View {
     private static let recordingPlaceholder = "Recording…"
     private static let transcribingPlaceholder = "Transcribing…"
 
+    private let initialEditedTitle: String
+    private let initialEditedContent: String
+
     init(note: Note, initialContent: String? = nil) {
         self.noteId = note.id
         self.initialNote = note
-        self._editedTitle = State(initialValue: note.title ?? "")
-        self._editedContent = State(initialValue: initialContent ?? note.content)
+        let title = note.title ?? ""
+        let content = initialContent ?? note.content
+        // If the note has an active rewrite but no cached content yet, the task will
+        // switch content after fetching — start invisible to prevent the flash.
+        let willSwitch = note.activeRewriteId != nil && initialContent == nil
+        self._editedTitle = State(initialValue: title)
+        self._editedContent = State(initialValue: content)
         self._contentFocused = State(initialValue: false)
+        self._contentBaseline = State(initialValue: content)
+        self._contentOpacity = State(initialValue: willSwitch ? 0 : 1)
+        self.initialEditedTitle = title
+        self.initialEditedContent = content
     }
 
     private var note: Note {
@@ -159,7 +172,7 @@ struct NoteDetailView: View {
         typewriterTask == nil
             && titleTypewriterTask == nil
             && !isRewriting
-            && (editedTitle != (note.title ?? "") || editedContent != note.content)
+            && (editedTitle != initialEditedTitle || editedContent != contentBaseline)
     }
 
     private var category: Category? {
@@ -264,7 +277,11 @@ struct NoteDetailView: View {
             if let rewriteId = activeRewriteId,
                let rewrite = rewrites.first(where: { $0.id == rewriteId }),
                editedContent != rewrite.content {
+                contentBaseline = rewrite.content
                 editedContent = rewrite.content
+                withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
+            } else if contentOpacity == 0 {
+                withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
             }
             if !rewrites.isEmpty {
                 try? await Task.sleep(for: .milliseconds(32))
@@ -798,12 +815,17 @@ struct NoteDetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 24)
             } else {
                 TextField("Untitled", text: $editedTitle, axis: .vertical)
                     .font(.brandTitle)
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
                     .focused($titleFocused)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture { titleFocused = true }
             }
         }
     }
