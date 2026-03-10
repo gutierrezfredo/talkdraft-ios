@@ -294,6 +294,7 @@ struct NoteDetailView: View {
             guard initialNote.source == .text && initialNote.content.isEmpty else { return }
             try? await Task.sleep(for: .milliseconds(450))
             contentFocused = true
+            moveCursorToEnd = true
         }
         .toolbar { toolbarContent() }
         .alert("Delete this note?", isPresented: $showDeleteConfirmation) {
@@ -823,9 +824,6 @@ struct NoteDetailView: View {
                     .contentTransition(.opacity)
                     .focused($titleFocused)
                     .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                    .onTapGesture { titleFocused = true }
             }
         }
     }

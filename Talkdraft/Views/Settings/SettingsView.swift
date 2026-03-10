@@ -202,7 +202,7 @@ struct SettingsView: View {
                             UIApplication.shared.open(url)
                         }
                     } label: {
-                        SettingsRow(icon: "hand.raised", title: "Privacy Policy", showChevron: false, trailingIcon: "arrow.up.right.square")
+                        SettingsRow(icon: "hand.raised", title: "Privacy Policy", showChevron: false, trailingIcon: "arrow.up.right")
                     }
                     .buttonStyle(.plain)
 
@@ -213,7 +213,7 @@ struct SettingsView: View {
                             UIApplication.shared.open(url)
                         }
                     } label: {
-                        SettingsRow(icon: "doc.text", title: "Terms of Service", showChevron: false, trailingIcon: "arrow.up.right.square")
+                        SettingsRow(icon: "doc.text", title: "Terms of Service", showChevron: false, trailingIcon: "arrow.up.right")
                     }
                     .buttonStyle(.plain)
 

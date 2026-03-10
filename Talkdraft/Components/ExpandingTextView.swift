@@ -44,10 +44,44 @@ final class CheckboxAttachment: NSTextAttachment {
 /// UITextView subclass that can temporarily block becoming first responder
 /// during checkbox toggles, preventing cursor/keyboard flash.
 final class CheckboxTextView: UITextView {
-    var blockFirstResponder = false
+    /// Set by the coordinator so touchesBegan can intercept checkbox/speaker taps
+    /// without involving the gesture recognizer system (which interferes with UITextInteraction).
+    weak var coordinator: ExpandingTextView.Coordinator?
 
-    override var canBecomeFirstResponder: Bool {
-        blockFirstResponder ? false : super.canBecomeFirstResponder
+    private var interceptedTouch = false
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first, let coord = coordinator else {
+            super.touchesBegan(touches, with: event)
+            return
+        }
+        let point = touch.location(in: self)
+        let isCheckbox = coord.checkboxIndex(near: point, in: self) != nil
+        let isSpeaker = !coord.parent.speakerColors.isEmpty && coord.speakerNameLine(at: point, in: self) != nil
+        if isCheckbox || isSpeaker {
+            interceptedTouch = true
+            // Don't call super — keeps UITextInteraction completely unaware of this touch,
+            // which means it won't affect cursor placement on subsequent normal taps.
+        } else {
+            interceptedTouch = false
+            super.touchesBegan(touches, with: event)
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if interceptedTouch {
+            if let touch = touches.first, let coord = coordinator {
+                coord.handleInterceptedTap(at: touch.location(in: self), in: self)
+            }
+            interceptedTouch = false
+        } else {
+            super.touchesEnded(touches, with: event)
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        interceptedTouch = false
+        super.touchesCancelled(touches, with: event)
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -113,12 +147,13 @@ struct ExpandingTextView: UIViewRepresentable {
             label.leadingAnchor.constraint(equalTo: tv.leadingAnchor, constant: horizontalPadding),
         ])
 
+        tv.coordinator = context.coordinator
         applyTextAttributes(tv)
-        context.coordinator.setupCheckboxTap(for: tv)
         return tv
     }
 
     func updateUIView(_ tv: CheckboxTextView, context: Context) {
+        context.coordinator.parent = self
         // Re-apply attributes if the speaker color map changed
         let newSpeakerKeys = speakerColors.keys.sorted().joined(separator: ",")
         if newSpeakerKeys != context.coordinator.lastSpeakerColorKeys {
@@ -203,8 +238,8 @@ struct ExpandingTextView: UIViewRepresentable {
                 // SwiftUI colorScheme captured earlier, preventing a keyboard color flash.
                 tv.keyboardAppearance = tv.traitCollection.userInterfaceStyle == .dark ? .dark : .light
                 tv.becomeFirstResponder()
-                let end = tv.attributedText?.length ?? 0
-                tv.selectedRange = NSRange(location: end, length: 0)
+                // Do NOT set selectedRange here — let moveCursorToEnd handle it when needed,
+                // and let UITextView's own touch handling place the cursor for user taps.
             }
         } else if !isFocused && tv.isFirstResponder {
             DispatchQueue.main.async { tv.resignFirstResponder() }
@@ -213,11 +248,13 @@ struct ExpandingTextView: UIViewRepresentable {
         // Move cursor to end (e.g. tapping empty space below content while already focused)
         if moveCursorToEnd.wrappedValue {
             DispatchQueue.main.async {
-                if tv.isFirstResponder {
-                    let end = tv.attributedText?.length ?? 0
-                    tv.selectedRange = NSRange(location: end, length: 0)
-                }
+                // Re-check: if user tapped on text in the meantime, textViewDidChangeSelection
+                // will have already cancelled this (set to false). Don't override their cursor.
+                guard moveCursorToEnd.wrappedValue else { return }
                 moveCursorToEnd.wrappedValue = false
+                guard tv.isFirstResponder else { return }
+                let end = tv.attributedText?.length ?? 0
+                tv.selectedRange = NSRange(location: end, length: 0)
             }
         }
 
@@ -414,7 +451,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
+    class Coordinator: NSObject, UITextViewDelegate {
         var parent: ExpandingTextView
         private weak var textView: UITextView?
         private var displayLink: CADisplayLink?
@@ -559,45 +596,11 @@ struct ExpandingTextView: UIViewRepresentable {
         private static let bulletPrefix = "• "
         private static let uncheckedPrefix = "☐ "
 
-        // MARK: - Checkbox Tap-to-Toggle
+        // MARK: - Checkbox / Speaker Tap Handling
+        // Invoked from CheckboxTextView.touchesEnded for intercepted taps.
 
-        func setupCheckboxTap(for tv: UITextView) {
-            let tap = UITapGestureRecognizer(target: self, action: #selector(handleCheckboxTap(_:)))
-            tap.delegate = self
-            tv.addGestureRecognizer(tap)
-        }
-
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            true
-        }
-
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            let hasCheckboxes = parent.text.contains("☐") || parent.text.contains("☑")
-            let hasSpeakers = !parent.speakerColors.isEmpty
-            guard hasCheckboxes || hasSpeakers else { return false }
-
-            // Block first responder BEFORE any tap action fires
-            if let tv = gestureRecognizer.view as? CheckboxTextView {
-                let point = gestureRecognizer.location(in: tv)
-                if checkboxIndex(near: point, in: tv) != nil {
-                    tv.blockFirstResponder = true
-                } else if hasSpeakers && speakerNameLine(at: point, in: tv) != nil {
-                    tv.blockFirstResponder = true
-                }
-            }
-            return true
-        }
-
-        @objc private func handleCheckboxTap(_ gesture: UITapGestureRecognizer) {
-            guard let tv = gesture.view as? CheckboxTextView else { return }
-            let point = gesture.location(in: tv)
-
-            // Always unblock first responder
-            defer {
-                DispatchQueue.main.async { tv.blockFirstResponder = false }
-            }
-
-            // Tapping a speaker name line — block and return silently
+        func handleInterceptedTap(at point: CGPoint, in tv: CheckboxTextView) {
+            // Speaker name line — silently ignore (don't place cursor there)
             if !parent.speakerColors.isEmpty && speakerNameLine(at: point, in: tv) != nil { return }
 
             guard let idx = checkboxIndex(near: point, in: tv) else { return }
@@ -620,7 +623,7 @@ struct ExpandingTextView: UIViewRepresentable {
             isAnimatingAttributes = false
         }
 
-        private func checkboxIndex(near point: CGPoint, in tv: UITextView) -> Int? {
+        func checkboxIndex(near point: CGPoint, in tv: UITextView) -> Int? {
             guard let tapPosition = tv.closestPosition(to: point) else { return nil }
             let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
 
@@ -675,7 +678,7 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         /// Returns the speaker name if the tap point lands on a speaker name line, else nil.
-        private func speakerNameLine(at point: CGPoint, in tv: UITextView) -> String? {
+        func speakerNameLine(at point: CGPoint, in tv: UITextView) -> String? {
             guard let tapPosition = tv.closestPosition(to: point) else { return nil }
             let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
             let nsText = parent.text as NSString
@@ -875,6 +878,10 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
+            // If the user manually placed the cursor, cancel any pending moveCursorToEnd.
+            if parent.moveCursorToEnd.wrappedValue {
+                parent.moveCursorToEnd.wrappedValue = false
+            }
             parent.cursorPosition = tv.selectedRange.location
             syncTypingAttributesToCurrentLine(tv)
             nudgeCursorOffCheckbox(tv)
