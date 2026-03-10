@@ -126,7 +126,7 @@ struct NoteDetailView: View {
     private let titlePhrases = [
         "Naming this masterpiece…",
         "Cooking up a title…",
-        "Thinking really hard…",
+
         "Consulting the title gods…",
         "Squeezing out a title…",
     ]
@@ -409,8 +409,8 @@ struct NoteDetailView: View {
                 }
             }
         }
-        .task(id: isGeneratingTitle) {
-            guard isGeneratingTitle else { return }
+        .onChange(of: isGeneratingTitle) { _, generating in
+            guard generating else { return }
             titlePhraseIndex = Int.random(in: 0..<titlePhrases.count)
         }
         .onAppear {
@@ -794,7 +794,6 @@ struct NoteDetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .animation(.easeInOut(duration: 0.35), value: titlePhraseIndex)
             } else {
                 TextField("Untitled", text: $editedTitle, axis: .vertical)
                     .font(.brandTitle)
