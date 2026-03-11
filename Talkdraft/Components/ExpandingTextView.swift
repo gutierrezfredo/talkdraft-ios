@@ -44,52 +44,19 @@ final class CheckboxAttachment: NSTextAttachment {
 /// UITextView subclass for the note body. Handles checkbox tap detection and toggling.
 final class CheckboxTextView: UITextView {
     weak var coordinator: ExpandingTextView.Coordinator?
+    /// Set to true during a checkbox tap to prevent UITextView's tap recognizer from
+    /// making this view first responder (which would show the keyboard).
+    var suppressBecomeFirstResponder = false
 
-    private var pendingCheckboxIndex: Int?
-    private var touchBeganPoint: CGPoint = .zero
+    override func becomeFirstResponder() -> Bool {
+        guard !suppressBecomeFirstResponder else { return false }
+        return super.becomeFirstResponder()
+    }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         keyboardAppearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
         if isFirstResponder { reloadInputViews() }
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { super.touchesBegan(touches, with: event); return }
-        let point = touch.location(in: self)
-        touchBeganPoint = point
-        super.touchesBegan(touches, with: event)
-        pendingCheckboxIndex = coordinator?.checkboxIndex(near: point, in: self)
-    }
-
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesMoved(touches, with: event)
-        guard let touch = touches.first else { return }
-        let point = touch.location(in: self)
-        if hypot(point.x - touchBeganPoint.x, point.y - touchBeganPoint.y) > 10 {
-            pendingCheckboxIndex = nil
-        }
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        defer { pendingCheckboxIndex = nil }
-        guard let touch = touches.first else {
-            super.touchesEnded(touches, with: event)
-            return
-        }
-        let endPoint = touch.location(in: self)
-        let isTap = hypot(endPoint.x - touchBeganPoint.x, endPoint.y - touchBeganPoint.y) < 10
-
-        super.touchesEnded(touches, with: event)
-
-        if isTap, let cbIdx = pendingCheckboxIndex {
-            coordinator?.toggleCheckbox(at: cbIdx, in: self)
-        }
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesCancelled(touches, with: event)
-        pendingCheckboxIndex = nil
     }
 }
 
@@ -110,6 +77,7 @@ struct ExpandingTextView: UIViewRepresentable {
     var speakerColors: [String: UIColor] = [:]
     var horizontalPadding: CGFloat = 0
     var moveCursorToEnd: Binding<Bool> = .constant(false)
+    var onCheckboxToggle: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
@@ -145,6 +113,18 @@ struct ExpandingTextView: UIViewRepresentable {
         tv.spellCheckingType = .no
         tv.delegate = context.coordinator
         tv.coordinator = context.coordinator
+
+        // Checkbox tap recognizer — delegate (Coordinator) gates it via gestureRecognizerShouldBegin:
+        // returns false outside the checkbox icon zone so UIKit handles those taps normally
+        // (cursor placement, focus). Returns true only for taps on a checkbox attachment.
+        // shouldRecognizeSimultaneously allows UITextView's own recognizers to also fire.
+        let checkboxTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleCheckboxTap(_:))
+        )
+        checkboxTap.cancelsTouchesInView = false
+        checkboxTap.delegate = context.coordinator
+        tv.addGestureRecognizer(checkboxTap)
 
         // Placeholder label
         let label = UILabel()
@@ -219,6 +199,10 @@ struct ExpandingTextView: UIViewRepresentable {
             let len = tv.attributedText?.length ?? 0
             let adjustedLoc = max(0, selected.location - literalCheckboxesBefore)
             tv.selectedRange = NSRange(location: min(adjustedLoc, len), length: 0)
+            // Re-sync typingAttributes after programmatic cursor placement — setting
+            // tv.selectedRange causes UIKit to reset typingAttributes to the adjacent
+            // character's attributes, which for checkbox attachments lacks .foregroundColor.
+            context.coordinator.syncTypingAttributesToCurrentLine(tv)
 
             // Restore scroll position
             if let offset = savedOffset, let sv = enclosingScroll {
@@ -465,7 +449,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    class Coordinator: NSObject, UITextViewDelegate {
+    class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: ExpandingTextView
         private weak var textView: UITextView?
         private var displayLink: CADisplayLink?
@@ -612,7 +596,46 @@ struct ExpandingTextView: UIViewRepresentable {
 
         // MARK: - Checkbox Tap Handling
 
-        /// Toggles the checkbox at the given plain-text index. Called from CheckboxTextView.touchesEnded.
+        @objc func handleCheckboxTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let tv = recognizer.view as? CheckboxTextView else { return }
+            let point = recognizer.location(in: tv)
+            guard let cbIdx = checkboxIndex(near: point, in: tv) else { return }
+            toggleCheckbox(at: cbIdx, in: tv)
+            // Reset suppression after all gesture recognizer actions on this run loop
+            // cycle have fired (UITextView's simultaneous tap recognizer included).
+            DispatchQueue.main.async { tv.suppressBecomeFirstResponder = false }
+        }
+
+        // MARK: - UIGestureRecognizerDelegate
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            // Only begin for taps that land on a checkbox attachment. Returning false
+            // immediately for all other taps lets UIKit process them normally (cursor
+            // placement, focus) without any interference from our recognizer.
+            guard let tv = gestureRecognizer.view as? CheckboxTextView else { return true }
+            let point = gestureRecognizer.location(in: tv)
+            let maxTapX: CGFloat = tv.textContainerInset.left + 44
+            guard point.x <= maxTapX,
+                  checkboxIndex(near: point, in: tv) != nil else { return false }
+            // Suppress becomeFirstResponder for the duration of the gesture so UITextView's
+            // built-in tap recognizer (which fires simultaneously) can't show the keyboard.
+            // Only suppress if the view isn't already editing — if it is, keep the keyboard open.
+            if !tv.isFirstResponder {
+                tv.suppressBecomeFirstResponder = true
+            }
+            return true
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool {
+            // Allow UITextView's built-in recognizers (cursor, selection) to fire alongside ours.
+            return true
+        }
+
+        /// Toggles the checkbox at the given plain-text index. Called from handleCheckboxTap.
         func toggleCheckbox(at plainIndex: Int, in tv: CheckboxTextView) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             var chars = Array(parent.text)
@@ -628,6 +651,7 @@ struct ExpandingTextView: UIViewRepresentable {
                 tv.selectedRange = savedSelection
             }
             isAnimatingAttributes = false
+            parent.onCheckboxToggle?(String(chars))
         }
 
         /// Returns the plain-text index of the checkbox character if the touch point is within
@@ -859,7 +883,12 @@ struct ExpandingTextView: UIViewRepresentable {
             // textViewDidChangeSelection prevents iOS 26 from snapping the cursor to a
             // word boundary when typingAttributes is mutated during a selection change.
             syncTypingAttributesToCurrentLine(tv)
-            scrollCursorVisible(in: tv, animated: false)
+            // Defer 50 ms so SwiftUI has finished laying out the expanded text view
+            // and the outer UIScrollView's contentSize is up to date before we scroll.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak tv] in
+                guard let self, let tv else { return }
+                self.scrollCursorVisible(in: tv, animated: false)
+            }
         }
 
         func scrollCursorVisible(in tv: UITextView, animated: Bool = true) {
@@ -880,29 +909,23 @@ struct ExpandingTextView: UIViewRepresentable {
                 }
                 current = view.superview
             }
-            guard let scrollView else { return }
+            guard let scrollView, let window = tv.window else { return }
 
-            // Get caret position in screen coordinates
-            guard let window = tv.window else { return }
+            // Work in window coordinates so the result is correct regardless of
+            // whether SwiftUI has updated UITextView's frame height yet.
             let caretInWindow = tv.convert(caretRect, to: window)
-
-            // Calculate the bottom edge of visible area:
-            // screen height - keyboard height - toolbar height (~88pt)
             let screenHeight = window.bounds.height
             let keyboardHeight = max(scrollView.adjustedContentInset.bottom, lastKnownKeyboardHeight)
             let toolbarHeight: CGFloat = 88
             let visibleBottom = screenHeight - keyboardHeight - toolbarHeight
 
-            // If caret is below the visible area, scroll up
             let caretBottom = caretInWindow.maxY
-            if caretBottom > visibleBottom {
-                let scrollAmount = caretBottom - visibleBottom + 20 // 20pt extra breathing room
-                let newOffset = CGPoint(
-                    x: scrollView.contentOffset.x,
-                    y: scrollView.contentOffset.y + scrollAmount
-                )
-                scrollView.setContentOffset(newOffset, animated: animated)
-            }
+            guard caretBottom > visibleBottom else { return }
+
+            let scrollAmount = caretBottom - visibleBottom + 20 // 20 pt breathing room
+            let newOffset = CGPoint(x: scrollView.contentOffset.x,
+                                    y: scrollView.contentOffset.y + scrollAmount)
+            scrollView.setContentOffset(newOffset, animated: animated)
         }
 
         func textViewDidChangeSelection(_ tv: UITextView) {
@@ -950,7 +973,7 @@ struct ExpandingTextView: UIViewRepresentable {
             isAnimatingAttributes = false
         }
 
-        private func syncTypingAttributesToCurrentLine(_ tv: UITextView) {
+        func syncTypingAttributesToCurrentLine(_ tv: UITextView) {
             let nsText = parent.text as NSString
             let baseStyle = NSMutableParagraphStyle()
             baseStyle.lineSpacing = parent.lineSpacing

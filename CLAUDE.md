@@ -60,6 +60,25 @@ xcodebuild -project Talkdraft.xcodeproj -scheme Talkdraft \
   -destination 'platform=iOS,id=DEVICE_ID' -allowProvisioningUpdates build
 ```
 
+## PPQ Trust Fix (renew every 7 days)
+
+If app shows "Unable to Verify App" / `Profile Needs Network Validation` in Console:
+- Cause: Xcode auto profiles have `PPQCheck: true`, requiring `ppq.apple.com` on first launch
+- Fix: create a **Development - Offline** profile on developer.apple.com (Offline support: Yes), then re-sign:
+
+```bash
+# 1. Download new offline profile, then:
+cp ~/Downloads/Talkdraft_Dev_Offline.mobileprovision /tmp/clean.mobileprovision
+xattr -c /tmp/clean.mobileprovision
+ditto --norsrc <built.app> /tmp/Talkdraft-resigned.app
+find /tmp/Talkdraft-resigned.app -exec xattr -c {} \; && xattr -cr /tmp/Talkdraft-resigned.app
+cp /tmp/clean.mobileprovision /tmp/Talkdraft-resigned.app/embedded.mobileprovision
+codesign -d --entitlements :- <built.app> > /tmp/entitlements.plist
+codesign --force --deep --sign "Apple Development: Alfredo Gutierrez (GZDD4Q4Q2C)" \
+  --entitlements /tmp/entitlements.plist /tmp/Talkdraft-resigned.app
+xcrun devicectl device install app --device 00008110-001E156C3C89A01E /tmp/Talkdraft-resigned.app
+```
+
 ## Key Config
 
 - Bundle ID: `com.pleymob.talkdraft`

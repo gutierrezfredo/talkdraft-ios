@@ -263,7 +263,7 @@ private struct EmailSignInSheet: View {
             // Title
             Text("Check your email")
                 .font(.brandTitle2)
-                .padding(.bottom, 12)
+                .padding(.bottom, 20)
 
             // Description
             Text("We sent a sign-in link to **\(email)**. Tap the link inside that email to continue.")
