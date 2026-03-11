@@ -1,5 +1,6 @@
 import Testing
 @testable import Talkdraft
+import UIKit
 
 @Test func appLaunches() async throws {
     #expect(true)
@@ -162,6 +163,38 @@ import Testing
     #expect(mutation == .allowSystem)
 }
 
+@MainActor
+@Test func noteTextMapperExtractsCheckboxPlainText() {
+    let attributed = makeAttributedCheckboxLine()
+    let mapper = NoteTextMapper(attributedText: attributed)
+
+    #expect(mapper.plainText == "☐ Task")
+}
+
+@MainActor
+@Test func noteTextMapperTranslatesOffsetsAcrossCheckboxAttachment() {
+    let attributed = makeAttributedCheckboxLine()
+    let mapper = NoteTextMapper(attributedText: attributed)
+
+    #expect(mapper.plainOffset(forAttributedOffset: 0) == 0)
+    #expect(mapper.plainOffset(forAttributedOffset: 1) == 2)
+    #expect(mapper.plainOffset(forAttributedOffset: 2) == 3)
+
+    #expect(mapper.attributedOffset(forPlainOffset: 0) == 0)
+    #expect(mapper.attributedOffset(forPlainOffset: 1) == 1)
+    #expect(mapper.attributedOffset(forPlainOffset: 2) == 1)
+    #expect(mapper.attributedOffset(forPlainOffset: 3) == 2)
+}
+
+@MainActor
+@Test func noteTextMapperTranslatesRangesAcrossCheckboxAttachment() {
+    let attributed = makeAttributedCheckboxLine()
+    let mapper = NoteTextMapper(attributedText: attributed)
+
+    #expect(mapper.plainRange(forAttributedRange: NSRange(location: 1, length: 2)) == NSRange(location: 2, length: 2))
+    #expect(mapper.attributedRange(forPlainRange: NSRange(location: 0, length: 2)) == NSRange(location: 0, length: 1))
+}
+
 private func makeNote(
     id: UUID = UUID(),
     content: String,
@@ -185,4 +218,16 @@ private func makeNote(
         updatedAt: .now,
         deletedAt: nil
     )
+}
+
+@MainActor
+private func makeAttributedCheckboxLine() -> NSAttributedString {
+    let attributed = NSMutableAttributedString(string: "☐ Task")
+    let attachment = CheckboxAttachment(
+        checked: false,
+        font: .preferredFont(forTextStyle: .body),
+        color: .secondaryLabel
+    )
+    attributed.replaceCharacters(in: NSRange(location: 0, length: 2), with: NSAttributedString(attachment: attachment))
+    return attributed
 }

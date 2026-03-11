@@ -225,6 +225,126 @@ struct NoteEditorRules {
     }
 }
 
+struct NoteTextMapper {
+    private struct Segment {
+        let attributedRange: NSRange
+        let plainRange: NSRange
+        let isCheckboxAttachment: Bool
+    }
+
+    let plainText: String
+
+    private let attributedLength: Int
+    private let segments: [Segment]
+
+    init(attributedText: NSAttributedString?) {
+        guard let attributedText, attributedText.length > 0 else {
+            self.plainText = ""
+            self.attributedLength = 0
+            self.segments = []
+            return
+        }
+
+        let fullRange = NSRange(location: 0, length: attributedText.length)
+        let nsString = attributedText.string as NSString
+        var plainText = ""
+        var plainLocation = 0
+        var segments: [Segment] = []
+
+        attributedText.enumerateAttributes(in: fullRange) { attrs, range, _ in
+            let plainFragment: String
+            let isCheckboxAttachment: Bool
+
+            if let attachment = attrs[.attachment] as? CheckboxAttachment {
+                plainFragment = attachment.isChecked ? NoteEditorRules.checkedPrefix : NoteEditorRules.uncheckedPrefix
+                isCheckboxAttachment = true
+            } else {
+                plainFragment = nsString.substring(with: range)
+                isCheckboxAttachment = false
+            }
+
+            let plainLength = (plainFragment as NSString).length
+            segments.append(
+                Segment(
+                    attributedRange: range,
+                    plainRange: NSRange(location: plainLocation, length: plainLength),
+                    isCheckboxAttachment: isCheckboxAttachment
+                )
+            )
+            plainText += plainFragment
+            plainLocation += plainLength
+        }
+
+        self.plainText = plainText
+        self.attributedLength = attributedText.length
+        self.segments = segments
+    }
+
+    func plainOffset(forAttributedOffset attributedOffset: Int) -> Int {
+        let boundedOffset = min(max(0, attributedOffset), attributedLength)
+        guard boundedOffset > 0 else { return 0 }
+
+        for segment in segments {
+            let segmentStart = segment.attributedRange.location
+            let segmentEnd = segmentStart + segment.attributedRange.length
+
+            if boundedOffset >= segmentEnd {
+                continue
+            }
+
+            if boundedOffset <= segmentStart {
+                return segment.plainRange.location
+            }
+
+            if segment.isCheckboxAttachment {
+                return segment.plainRange.location + segment.plainRange.length
+            }
+
+            let delta = boundedOffset - segmentStart
+            return segment.plainRange.location + min(segment.plainRange.length, delta)
+        }
+
+        return segments.last.map { $0.plainRange.location + $0.plainRange.length } ?? 0
+    }
+
+    func plainRange(forAttributedRange range: NSRange) -> NSRange {
+        let start = plainOffset(forAttributedOffset: range.location)
+        let end = plainOffset(forAttributedOffset: range.location + range.length)
+        return NSRange(location: start, length: max(0, end - start))
+    }
+
+    func attributedOffset(forPlainOffset plainOffset: Int) -> Int {
+        let target = max(0, plainOffset)
+        guard attributedLength > 0, target > 0 else { return 0 }
+
+        for segment in segments {
+            let segmentStart = segment.plainRange.location
+            let segmentEnd = segmentStart + segment.plainRange.length
+
+            guard target <= segmentEnd else { continue }
+
+            if target <= segmentStart {
+                return segment.attributedRange.location
+            }
+
+            if segment.isCheckboxAttachment {
+                return segment.attributedRange.location + segment.attributedRange.length
+            }
+
+            let delta = target - segmentStart
+            return segment.attributedRange.location + min(segment.attributedRange.length, delta)
+        }
+
+        return attributedLength
+    }
+
+    func attributedRange(forPlainRange range: NSRange) -> NSRange {
+        let start = attributedOffset(forPlainOffset: range.location)
+        let end = attributedOffset(forPlainOffset: range.location + range.length)
+        return NSRange(location: start, length: max(0, end - start))
+    }
+}
+
 // MARK: - ExpandingTextView
 
 /// A UITextView wrapper that expands to fit content (like TextField(axis: .vertical))
@@ -322,9 +442,10 @@ struct ExpandingTextView: UIViewRepresentable {
 
         let needsRefresh = context.coordinator.needsAttributeRefresh
         context.coordinator.needsAttributeRefresh = false
-        let currentPlain = Self.extractPlainText(from: tv)
+        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let currentPlain = mapper.plainText
         if currentPlain != text || needsRefresh {
-            let selectedPlainRange = Self.selectedPlainRange(in: tv)
+            let selectedPlainRange = mapper.plainRange(forAttributedRange: tv.selectedRange)
             let shouldPreserveScroll = context.coordinator.preserveScrollOnNextUpdate || preserveScroll
             context.coordinator.preserveScrollOnNextUpdate = false
             if preserveScroll {
@@ -429,78 +550,36 @@ struct ExpandingTextView: UIViewRepresentable {
     // MARK: - Extract plain text (attachments → ☐/☑)
 
     static func extractPlainText(from tv: UITextView) -> String {
-        guard let attributed = tv.attributedText, attributed.length > 0 else { return "" }
-        var result = ""
-        attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, range, _ in
-            if let attachment = attrs[.attachment] as? CheckboxAttachment {
-                result += attachment.isChecked ? "☑ " : "☐ "
-            } else {
-                result += (attributed.string as NSString).substring(with: range)
-            }
-        }
-        return result
+        NoteTextMapper(attributedText: tv.attributedText).plainText
     }
 
     fileprivate static func selectedPlainRange(in tv: UITextView) -> NSRange {
-        plainRange(forAttributedRange: tv.selectedRange, in: tv.attributedText)
+        NoteTextMapper(attributedText: tv.attributedText).plainRange(forAttributedRange: tv.selectedRange)
     }
 
     fileprivate static func setSelectedPlainRange(_ range: NSRange, in tv: UITextView) {
-        tv.selectedRange = attributedRange(forPlainRange: range, in: tv.attributedText)
+        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        tv.selectedRange = mapper.attributedRange(forPlainRange: range)
     }
 
     fileprivate static func plainCursorLocation(in tv: UITextView) -> Int {
-        plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
+        NoteTextMapper(attributedText: tv.attributedText).plainOffset(forAttributedOffset: tv.selectedRange.location)
     }
 
     fileprivate static func plainOffset(forAttributedOffset attributedOffset: Int, in attributed: NSAttributedString?) -> Int {
-        guard let attributed else { return max(0, attributedOffset) }
-        let boundedOffset = min(max(0, attributedOffset), attributed.length)
-        guard boundedOffset > 0 else { return 0 }
-
-        var plainOffset = 0
-        attributed.enumerateAttributes(in: NSRange(location: 0, length: boundedOffset)) { attrs, range, _ in
-            plainOffset += (attrs[.attachment] is CheckboxAttachment) ? 2 : range.length
-        }
-        return plainOffset
+        NoteTextMapper(attributedText: attributed).plainOffset(forAttributedOffset: attributedOffset)
     }
 
     fileprivate static func plainRange(forAttributedRange range: NSRange, in attributed: NSAttributedString?) -> NSRange {
-        let start = plainOffset(forAttributedOffset: range.location, in: attributed)
-        let end = plainOffset(forAttributedOffset: range.location + range.length, in: attributed)
-        return NSRange(location: start, length: max(0, end - start))
+        NoteTextMapper(attributedText: attributed).plainRange(forAttributedRange: range)
     }
 
     fileprivate static func attributedOffset(forPlainOffset plainOffset: Int, in attributed: NSAttributedString?) -> Int {
-        guard let attributed else { return max(0, plainOffset) }
-        let target = max(0, plainOffset)
-        guard attributed.length > 0, target > 0 else { return 0 }
-
-        var runningPlainOffset = 0
-        var resolvedOffset = attributed.length
-        attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, range, stop in
-            let plainLength = (attrs[.attachment] is CheckboxAttachment) ? 2 : range.length
-            let nextPlainOffset = runningPlainOffset + plainLength
-            guard target <= nextPlainOffset else {
-                runningPlainOffset = nextPlainOffset
-                return
-            }
-
-            if attrs[.attachment] is CheckboxAttachment {
-                resolvedOffset = range.location + (target <= runningPlainOffset ? 0 : range.length)
-            } else {
-                resolvedOffset = range.location + min(range.length, target - runningPlainOffset)
-            }
-            stop.pointee = true
-        }
-
-        return min(max(0, resolvedOffset), attributed.length)
+        NoteTextMapper(attributedText: attributed).attributedOffset(forPlainOffset: plainOffset)
     }
 
     fileprivate static func attributedRange(forPlainRange range: NSRange, in attributed: NSAttributedString?) -> NSRange {
-        let start = attributedOffset(forPlainOffset: range.location, in: attributed)
-        let end = attributedOffset(forPlainOffset: range.location + range.length, in: attributed)
-        return NSRange(location: start, length: max(0, end - start))
+        NoteTextMapper(attributedText: attributed).attributedRange(forPlainRange: range)
     }
 
     fileprivate static func checkboxParagraphStyle(lineSpacing: CGFloat) -> NSMutableParagraphStyle {
@@ -665,13 +744,33 @@ struct ExpandingTextView: UIViewRepresentable {
         let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
         guard lineRange.location < nsText.length else { return baseAttributes }
         let lineStart = nsText.character(at: lineRange.location)
+        return typingAttributes(
+            forLineStart: lineStart,
+            baseAttributes: baseAttributes,
+            bulletParaStyle: bulletParaStyle,
+            checkboxParaStyle: checkboxParaStyle
+        )
+    }
+
+    private func typingAttributes(
+        forLineStart lineStart: unichar,
+        baseAttributes: [NSAttributedString.Key: Any],
+        bulletParaStyle: NSParagraphStyle,
+        checkboxParaStyle: NSParagraphStyle
+    ) -> [NSAttributedString.Key: Any] {
         var attrs = baseAttributes
         if lineStart == 0x2022 {
             attrs[.paragraphStyle] = bulletParaStyle
             return attrs
         }
-        if lineStart == 0x2610 || lineStart == 0x2611 {
+        if lineStart == 0x2610 {
             attrs[.paragraphStyle] = checkboxParaStyle
+            return attrs
+        }
+        if lineStart == 0x2611 {
+            attrs[.paragraphStyle] = checkboxParaStyle
+            attrs[.foregroundColor] = UIColor.tertiaryLabel
+            attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             return attrs
         }
         return attrs
@@ -683,6 +782,8 @@ struct ExpandingTextView: UIViewRepresentable {
         var parent: ExpandingTextView
         private weak var textView: UITextView?
         private var displayLink: CADisplayLink?
+        private var pendingTypingAttributesSync: DispatchWorkItem?
+        private var pendingCheckboxTapSelection: NSRange?
         private var pulseStart: CFTimeInterval = 0
         private var isAnimatingAttributes = false
         var preserveScrollOnNextUpdate = false
@@ -787,7 +888,8 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func showHighlightOverlay(range: NSRange, in tv: UITextView) {
             DispatchQueue.main.async { [weak self] in
-                let attributedRange = ExpandingTextView.attributedRange(forPlainRange: range, in: tv.attributedText)
+                let mapper = NoteTextMapper(attributedText: tv.attributedText)
+                let attributedRange = mapper.attributedRange(forPlainRange: range)
                 self?.addHighlightViews(range: attributedRange, in: tv)
             }
         }
@@ -847,7 +949,16 @@ struct ExpandingTextView: UIViewRepresentable {
             let point = gestureRecognizer.location(in: tv)
             let maxTapX: CGFloat = tv.textContainerInset.left + 44
             guard point.x <= maxTapX,
-                  checkboxIndex(near: point, in: tv) != nil else { return false }
+                  checkboxIndex(near: point, in: tv) != nil else {
+                pendingCheckboxTapSelection = nil
+                return false
+            }
+            if tv.isFirstResponder {
+                let mapper = NoteTextMapper(attributedText: tv.attributedText)
+                pendingCheckboxTapSelection = mapper.plainRange(forAttributedRange: tv.selectedRange)
+            } else {
+                pendingCheckboxTapSelection = nil
+            }
             // Suppress becomeFirstResponder for the duration of the gesture so UITextView's
             // built-in tap recognizer (which fires simultaneously) can't show the keyboard.
             // Only suppress if the view isn't already editing — if it is, keep the keyboard open.
@@ -868,7 +979,9 @@ struct ExpandingTextView: UIViewRepresentable {
         /// Toggles the checkbox at the given plain-text index. Called from handleCheckboxTap.
         func toggleCheckbox(at plainIndex: Int, in tv: CheckboxTextView) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            let savedSelection = ExpandingTextView.selectedPlainRange(in: tv)
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let savedSelection = pendingCheckboxTapSelection ?? mapper.plainRange(forAttributedRange: tv.selectedRange)
+            pendingCheckboxTapSelection = nil
             guard let updatedText = NoteEditorRules.toggleCheckbox(in: parent.text, at: plainIndex) else { return }
             applyPlainTextEdit(
                 updatedText: updatedText,
@@ -900,7 +1013,8 @@ struct ExpandingTextView: UIViewRepresentable {
             var fraction: CGFloat = 0
             let charIdx = lm.characterIndex(for: layoutPoint, in: tc, fractionOfDistanceBetweenInsertionPoints: &fraction)
 
-            let plainOffset = ExpandingTextView.plainOffset(forAttributedOffset: charIdx, in: tv.attributedText)
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let plainOffset = mapper.plainOffset(forAttributedOffset: charIdx)
 
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
@@ -913,7 +1027,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
             // Restrict to the first visual line of the checkbox item so tapping a wrapped
             // continuation line doesn't toggle. Get the line fragment rect via NSLayoutManager.
-            let attrCheckboxOffset = ExpandingTextView.attributedOffset(forPlainOffset: lineRange.location, in: tv.attributedText)
+            let attrCheckboxOffset = mapper.attributedOffset(forPlainOffset: lineRange.location)
             guard attrCheckboxOffset < (tv.attributedText?.length ?? 0) else { return nil }
 
             let glyphAtCheckbox = lm.glyphIndexForCharacter(at: attrCheckboxOffset)
@@ -941,7 +1055,8 @@ struct ExpandingTextView: UIViewRepresentable {
 
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
-            let plainOffset = ExpandingTextView.plainOffset(forAttributedOffset: charIdx, in: tv.attributedText)
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let plainOffset = mapper.plainOffset(forAttributedOffset: charIdx)
             let safeOffset = min(plainOffset, nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
@@ -953,8 +1068,9 @@ struct ExpandingTextView: UIViewRepresentable {
         func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
             guard !isAnimatingAttributes else { return true }
 
-            let plainText = ExpandingTextView.extractPlainText(from: tv)
-            let plainRange = ExpandingTextView.plainRange(forAttributedRange: range, in: tv.attributedText)
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let plainText = mapper.plainText
+            let plainRange = mapper.plainRange(forAttributedRange: range)
             let mutation = NoteEditorRules.mutation(
                 for: plainText,
                 range: plainRange,
@@ -994,8 +1110,9 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func textViewDidChange(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
-            parent.text = ExpandingTextView.extractPlainText(from: tv)
-            parent.cursorPosition = ExpandingTextView.plainCursorLocation(in: tv)
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            parent.text = mapper.plainText
+            parent.cursorPosition = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
             if let label = tv.viewWithTag(999) as? UILabel {
                 label.isHidden = !parent.text.isEmpty
             }
@@ -1055,12 +1172,15 @@ struct ExpandingTextView: UIViewRepresentable {
             if parent.moveCursorToEnd.wrappedValue {
                 parent.moveCursorToEnd.wrappedValue = false
             }
-            parent.cursorPosition = ExpandingTextView.plainCursorLocation(in: tv)
 
             nudgeCursorOffCheckbox(tv)
             if !parent.speakerColors.isEmpty {
                 nudgeCursorOffSpeakerLine(tv)
             }
+
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            parent.cursorPosition = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
+            scheduleTypingAttributesSync(for: tv)
         }
 
         private func nudgeCursorOffCheckbox(_ tv: UITextView) {
@@ -1079,7 +1199,8 @@ struct ExpandingTextView: UIViewRepresentable {
         private func nudgeCursorOffSpeakerLine(_ tv: UITextView) {
             let nsText = parent.text as NSString
             guard nsText.length > 0, tv.selectedRange.length == 0 else { return }
-            let cursor = ExpandingTextView.plainCursorLocation(in: tv)
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let cursor = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
             let safeOffset = min(cursor, nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
@@ -1095,8 +1216,8 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         func syncTypingAttributesToCurrentLine(_ tv: UITextView) {
-            let plainText = ExpandingTextView.extractPlainText(from: tv)
-            let nsText = plainText as NSString
+            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let nsText = mapper.plainText as NSString
             let baseStyle = NSMutableParagraphStyle()
             baseStyle.lineSpacing = parent.lineSpacing
             var attrs: [NSAttributedString.Key: Any] = [
@@ -1105,24 +1226,38 @@ struct ExpandingTextView: UIViewRepresentable {
                 .paragraphStyle: baseStyle,
             ]
             if nsText.length > 0 {
-                let cursorLoc = ExpandingTextView.plainCursorLocation(in: tv)
+                let cursorLoc = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
                 let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
                 let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
                 if lineRange.location < nsText.length {
+                    let bulletIndent = ("• " as NSString).size(withAttributes: [.font: parent.font]).width
+                    let bulletStyle = NSMutableParagraphStyle()
+                    bulletStyle.lineSpacing = parent.lineSpacing
+                    bulletStyle.firstLineHeadIndent = 0
+                    bulletStyle.headIndent = bulletIndent
+                    let checkboxStyle = ExpandingTextView.checkboxParagraphStyle(lineSpacing: parent.lineSpacing)
                     let lineStart = nsText.character(at: lineRange.location)
-                    if lineStart == 0x2022 {
-                        let bulletIndent = ("• " as NSString).size(withAttributes: [.font: parent.font]).width
-                        let bulletStyle = NSMutableParagraphStyle()
-                        bulletStyle.lineSpacing = parent.lineSpacing
-                        bulletStyle.firstLineHeadIndent = 0
-                        bulletStyle.headIndent = bulletIndent
-                        attrs[.paragraphStyle] = bulletStyle
-                    } else if lineStart == 0x2610 || lineStart == 0x2611 {
-                        attrs[.paragraphStyle] = ExpandingTextView.checkboxParagraphStyle(lineSpacing: parent.lineSpacing)
-                    }
+                    attrs = parent.typingAttributes(
+                        forLineStart: lineStart,
+                        baseAttributes: attrs,
+                        bulletParaStyle: bulletStyle,
+                        checkboxParaStyle: checkboxStyle
+                    )
                 }
             }
             tv.typingAttributes = attrs
+        }
+
+        private func scheduleTypingAttributesSync(for tv: UITextView) {
+            pendingTypingAttributesSync?.cancel()
+            let expectedSelection = tv.selectedRange
+            let workItem = DispatchWorkItem { [weak self, weak tv] in
+                guard let self, let tv, !self.isAnimatingAttributes else { return }
+                guard tv.selectedRange == expectedSelection else { return }
+                self.syncTypingAttributesToCurrentLine(tv)
+            }
+            pendingTypingAttributesSync = workItem
+            DispatchQueue.main.async(execute: workItem)
         }
 
         func textViewDidBeginEditing(_ tv: UITextView) {
