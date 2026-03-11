@@ -74,8 +74,6 @@ struct NoteDetailView: View {
     @State private var transcribingVideoPlayer: AVQueuePlayer?
     @State private var transcribingPlayerLooper: AVPlayerLooper?
     @State private var transcribingPhraseIndex = 0
-    @State private var transcribingIsLong = false
-    @State private var whileIndex = 0
     @State private var transcribingPulse = false
     @State private var renamingSpeaker: String? = nil
     @State private var renameText: String = ""
@@ -113,15 +111,6 @@ struct NoteDetailView: View {
         "You're free to go. We'll finish this in the background",
     ]
 
-    private let whilePhrases: [(video: String, subtitle: String)] = [
-        ("while-binge", "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
-        ("while-hobby", "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
-        ("while-read", "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
-        ("while-outside", "This one might take a bit — maybe step outside for some fresh air? Your note will be here when you return"),
-        ("while-snack", "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
-        ("while-work", "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
-        ("while-rest", "This one might take a bit — maybe take a little rest? Your note will be waiting when you wake up"),
-    ]
     @State private var titlePhraseIndex = 0
     @State private var titleTypewriterTask: Task<Void, Never>?
 
@@ -861,27 +850,15 @@ struct NoteDetailView: View {
             }
 
             VStack(spacing: 8) {
-                if transcribingIsLong {
-                    Text("Transcribing your note…")
-                        .font(.brandTitle2)
-                        .multilineTextAlignment(.center)
-                        .opacity(transcribingPulse ? 0.4 : 1.0)
+                Text("Transcribing your note…")
+                    .font(.brandTitle2)
+                    .multilineTextAlignment(.center)
+                    .opacity(transcribingPulse ? 0.4 : 1.0)
 
-                    Text(whilePhrases[whileIndex].subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("Transcribing your note…")
-                        .font(.brandTitle2)
-                        .multilineTextAlignment(.center)
-                        .opacity(transcribingPulse ? 0.4 : 1.0)
-
-                    Text(transcribingPhrases[transcribingPhraseIndex])
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
+                Text(transcribingPhrases[transcribingPhraseIndex])
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity)
@@ -890,27 +867,15 @@ struct NoteDetailView: View {
     }
 
     private func setupTranscribingState() {
-        let duration = note.durationSeconds ?? 0
-        transcribingIsLong = duration >= 300
         // Derive index from note ID — deterministic per note, no runtime randomness,
         // prevents ghosting from multiple onAppear calls while still rotating across notes.
-        let hash = abs(noteId.hashValue)
-        if transcribingIsLong {
-            whileIndex = hash % whilePhrases.count
-        } else {
-            transcribingPhraseIndex = hash % transcribingPhrases.count
-        }
+        transcribingPhraseIndex = abs(noteId.hashValue) % transcribingPhrases.count
     }
 
     private func setupTranscribingVideo() {
         guard transcribingVideoPlayer == nil else { return }
-        let name: String
-        if transcribingIsLong {
-            name = whilePhrases[whileIndex].video
-        } else {
-            let shortVideos = ["transcribing-1", "transcribing-2"]
-            name = shortVideos[abs(noteId.hashValue) % shortVideos.count]
-        }
+        let shortVideos = ["transcribing-1", "transcribing-2"]
+        let name = shortVideos[abs(noteId.hashValue) % shortVideos.count]
         guard let url = Bundle.main.url(forResource: name, withExtension: "mp4") else { return }
         let item = AVPlayerItem(url: url)
         let player = AVQueuePlayer(playerItem: item)
