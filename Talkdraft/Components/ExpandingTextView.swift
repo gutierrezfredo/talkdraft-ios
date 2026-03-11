@@ -41,55 +41,55 @@ final class CheckboxAttachment: NSTextAttachment {
 
 // MARK: - CheckboxTextView
 
-/// UITextView subclass that can temporarily block becoming first responder
-/// during checkbox toggles, preventing cursor/keyboard flash.
+/// UITextView subclass for the note body. Handles checkbox tap detection and toggling.
 final class CheckboxTextView: UITextView {
-    /// Set by the coordinator so touchesBegan can intercept checkbox/speaker taps
-    /// without involving the gesture recognizer system (which interferes with UITextInteraction).
     weak var coordinator: ExpandingTextView.Coordinator?
 
-    private var interceptedTouch = false
+    private var pendingCheckboxIndex: Int?
+    private var touchBeganPoint: CGPoint = .zero
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        keyboardAppearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
+        if isFirstResponder { reloadInputViews() }
+    }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, let coord = coordinator else {
-            super.touchesBegan(touches, with: event)
-            return
-        }
+        guard let touch = touches.first else { super.touchesBegan(touches, with: event); return }
         let point = touch.location(in: self)
-        let isCheckbox = coord.checkboxIndex(near: point, in: self) != nil
-        let isSpeaker = !coord.parent.speakerColors.isEmpty && coord.speakerNameLine(at: point, in: self) != nil
-        if isCheckbox || isSpeaker {
-            interceptedTouch = true
-            // Don't call super — keeps UITextInteraction completely unaware of this touch,
-            // which means it won't affect cursor placement on subsequent normal taps.
-        } else {
-            interceptedTouch = false
-            super.touchesBegan(touches, with: event)
+        touchBeganPoint = point
+        super.touchesBegan(touches, with: event)
+        pendingCheckboxIndex = coordinator?.checkboxIndex(near: point, in: self)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        guard let touch = touches.first else { return }
+        let point = touch.location(in: self)
+        if hypot(point.x - touchBeganPoint.x, point.y - touchBeganPoint.y) > 10 {
+            pendingCheckboxIndex = nil
         }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if interceptedTouch {
-            if let touch = touches.first, let coord = coordinator {
-                coord.handleInterceptedTap(at: touch.location(in: self), in: self)
-            }
-            interceptedTouch = false
-        } else {
+        defer { pendingCheckboxIndex = nil }
+        guard let touch = touches.first else {
             super.touchesEnded(touches, with: event)
+            return
+        }
+        let endPoint = touch.location(in: self)
+        let isTap = hypot(endPoint.x - touchBeganPoint.x, endPoint.y - touchBeganPoint.y) < 10
+
+        super.touchesEnded(touches, with: event)
+
+        if isTap, let cbIdx = pendingCheckboxIndex {
+            coordinator?.toggleCheckbox(at: cbIdx, in: self)
         }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        interceptedTouch = false
         super.touchesCancelled(touches, with: event)
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        // Keep keyboardAppearance in sync with UIKit traits so the keyboard
-        // never momentarily shows the wrong color scheme.
-        keyboardAppearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
-        if isFirstResponder { reloadInputViews() }
+        pendingCheckboxIndex = nil
     }
 }
 
@@ -126,13 +126,25 @@ struct ExpandingTextView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> CheckboxTextView {
-        let tv = CheckboxTextView()
+        // Force TextKit 1 via explicit NSLayoutManager stack.
+        // TextKit 2 (default on iOS 17+) has a bug where tapping a UITextView places the
+        // caret at a completely wrong position (often off-screen). TextKit 1 does not.
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = true
+        textContainer.heightTracksTextView = false
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+        let tv = CheckboxTextView(frame: .zero, textContainer: textContainer)
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
         tv.textContainerInset = UIEdgeInsets(top: 0, left: horizontalPadding, bottom: 0, right: horizontalPadding)
         tv.textContainer.lineFragmentPadding = 0
         tv.keyboardAppearance = colorScheme == .dark ? .dark : .light
+        tv.spellCheckingType = .no
         tv.delegate = context.coordinator
+        tv.coordinator = context.coordinator
 
         // Placeholder label
         let label = UILabel()
@@ -147,7 +159,6 @@ struct ExpandingTextView: UIViewRepresentable {
             label.leadingAnchor.constraint(equalTo: tv.leadingAnchor, constant: horizontalPadding),
         ])
 
-        tv.coordinator = context.coordinator
         applyTextAttributes(tv)
         return tv
     }
@@ -596,22 +607,15 @@ struct ExpandingTextView: UIViewRepresentable {
         private static let bulletPrefix = "• "
         private static let uncheckedPrefix = "☐ "
 
-        // MARK: - Checkbox / Speaker Tap Handling
-        // Invoked from CheckboxTextView.touchesEnded for intercepted taps.
+        // MARK: - Checkbox Tap Handling
 
-        func handleInterceptedTap(at point: CGPoint, in tv: CheckboxTextView) {
-            // Speaker name line — silently ignore (don't place cursor there)
-            if !parent.speakerColors.isEmpty && speakerNameLine(at: point, in: tv) != nil { return }
-
-            guard let idx = checkboxIndex(near: point, in: tv) else { return }
-
+        /// Toggles the checkbox at the given plain-text index. Called from CheckboxTextView.touchesEnded.
+        func toggleCheckbox(at plainIndex: Int, in tv: CheckboxTextView) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
             var chars = Array(parent.text)
-            guard idx < chars.count else { return }
-            chars[idx] = (chars[idx] == "☑") ? "☐" : "☑"
+            guard plainIndex < chars.count else { return }
+            chars[plainIndex] = (chars[plainIndex] == "☑") ? "☐" : "☑"
             preserveScrollOnNextUpdate = true
-
             let savedSelection = tv.selectedRange
             isAnimatingAttributes = true
             parent.text = String(chars)
@@ -623,25 +627,39 @@ struct ExpandingTextView: UIViewRepresentable {
             isAnimatingAttributes = false
         }
 
+        /// Returns the plain-text index of the checkbox character if the touch point is within
+        /// the checkbox icon tap zone on a checkbox line, else nil.
+        /// Uses NSLayoutManager exclusively — no UITextInput methods — so it is safe to call
+        /// from touchesBegan without disturbing UITextInteraction's cursor placement state.
         func checkboxIndex(near point: CGPoint, in tv: UITextView) -> Int? {
-            guard let tapPosition = tv.closestPosition(to: point) else { return nil }
-            let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
+            // Only trigger within the left tap zone (checkbox icon area)
+            let maxTapX: CGFloat = tv.textContainerInset.left + 40
+            guard point.x <= maxTapX else { return nil }
 
-            // tapOffset is in attributed text coordinates. Each CheckboxAttachment occupies
-            // 1 char in attributed text but 2 chars in parent.text (☐/☑ + space), so
-            // translate by counting attachments before the tap point.
+            // Convert view point → layout manager coordinate space
+            let lm = tv.layoutManager
+            let tc = tv.textContainer
+            let layoutPoint = CGPoint(
+                x: point.x - tv.textContainerInset.left,
+                y: point.y - tv.textContainerInset.top
+            )
+
+            // characterIndex gives the nearest character — pure geometry, no UITextInput involved
+            var fraction: CGFloat = 0
+            let charIdx = lm.characterIndex(for: layoutPoint, in: tc, fractionOfDistanceBetweenInsertionPoints: &fraction)
+
+            // charIdx is attributed-text offset. Convert to plain-text offset by counting
+            // CheckboxAttachments before it (each replaces 2 plain chars with 1 attributed char).
             var checkboxCount = 0
-            if let attributed = tv.attributedText {
-                let scanRange = NSRange(location: 0, length: min(tapOffset, attributed.length))
-                attributed.enumerateAttributes(in: scanRange) { attrs, _, _ in
+            if let attributed = tv.attributedText, charIdx <= attributed.length {
+                attributed.enumerateAttributes(in: NSRange(location: 0, length: min(charIdx, attributed.length))) { attrs, _, _ in
                     if attrs[.attachment] is CheckboxAttachment { checkboxCount += 1 }
                 }
             }
-            let plainOffset = tapOffset + checkboxCount
+            let plainOffset = charIdx + checkboxCount
 
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
-
             let safeOffset = min(max(plainOffset, 0), nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             guard lineRange.length > 0 else { return nil }
@@ -649,41 +667,44 @@ struct ExpandingTextView: UIViewRepresentable {
             let firstChar = nsText.character(at: lineRange.location)
             guard firstChar == 0x2610 || firstChar == 0x2611 else { return nil }
 
-            let maxTapX: CGFloat = tv.textContainerInset.left + 40
-            guard point.x <= maxTapX else { return nil }
-
-            // Also restrict to the first visual line of the checkbox item.
-            // Wrapped lines fall below the checkbox icon — tapping them should not toggle.
-            // Convert the checkbox's plain-text position back to attributed-text offset
-            // by subtracting the number of checkbox chars (☐/☑) before it in plain text
-            // (each replaces 2 plain chars with 1 attributed char).
+            // Restrict to the first visual line of the checkbox item so tapping a wrapped
+            // continuation line doesn't toggle. Get the line fragment rect via NSLayoutManager.
             var checkboxesBeforeLine = 0
-            var idx = 0
-            while idx < lineRange.location && idx < nsText.length {
-                let ch = nsText.character(at: idx)
+            var scanIdx = 0
+            while scanIdx < lineRange.location && scanIdx < nsText.length {
+                let ch = nsText.character(at: scanIdx)
                 if ch == 0x2610 || ch == 0x2611 { checkboxesBeforeLine += 1 }
-                idx += 1
+                scanIdx += 1
             }
             let attrCheckboxOffset = lineRange.location - checkboxesBeforeLine
-            if let checkboxPos = tv.position(from: tv.beginningOfDocument, offset: attrCheckboxOffset),
-               let textRange = tv.textRange(from: checkboxPos, to: checkboxPos) {
-                let firstLineRect = tv.firstRect(for: textRange)
-                guard !firstLineRect.isNull, !firstLineRect.isInfinite,
-                      point.y >= firstLineRect.minY && point.y <= firstLineRect.maxY else {
-                    return nil
-                }
-            }
+            guard attrCheckboxOffset < (tv.attributedText?.length ?? 0) else { return nil }
+
+            let glyphAtCheckbox = lm.glyphIndexForCharacter(at: attrCheckboxOffset)
+            let lineFragRect = lm.lineFragmentRect(forGlyphAt: glyphAtCheckbox, effectiveRange: nil)
+            let lineRectInView = lineFragRect.offsetBy(
+                dx: tv.textContainerInset.left,
+                dy: tv.textContainerInset.top
+            )
+            guard point.y >= lineRectInView.minY && point.y <= lineRectInView.maxY else { return nil }
 
             return lineRange.location
         }
 
-        /// Returns the speaker name if the tap point lands on a speaker name line, else nil.
+        /// Returns the speaker name if the touch point lands on a speaker name line, else nil.
+        /// Uses NSLayoutManager — safe to call from touchesBegan.
         func speakerNameLine(at point: CGPoint, in tv: UITextView) -> String? {
-            guard let tapPosition = tv.closestPosition(to: point) else { return nil }
-            let tapOffset = tv.offset(from: tv.beginningOfDocument, to: tapPosition)
+            let lm = tv.layoutManager
+            let tc = tv.textContainer
+            let layoutPoint = CGPoint(
+                x: point.x - tv.textContainerInset.left,
+                y: point.y - tv.textContainerInset.top
+            )
+            var fraction: CGFloat = 0
+            let charIdx = lm.characterIndex(for: layoutPoint, in: tc, fractionOfDistanceBetweenInsertionPoints: &fraction)
+
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
-            let safeOffset = min(tapOffset, nsText.length - 1)
+            let safeOffset = min(charIdx, nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
             guard trimLen > 0 else { return nil }
@@ -830,6 +851,11 @@ struct ExpandingTextView: UIViewRepresentable {
             if let label = tv.viewWithTag(999) as? UILabel {
                 label.isHidden = !parent.text.isEmpty
             }
+            // Sync typing attributes on text change so bullet/checkbox lines get the right
+            // paragraph style for the *next* character. Moving this out of
+            // textViewDidChangeSelection prevents iOS 26 from snapping the cursor to a
+            // word boundary when typingAttributes is mutated during a selection change.
+            syncTypingAttributesToCurrentLine(tv)
             scrollCursorVisible(in: tv, animated: false)
         }
 
@@ -878,12 +904,12 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
-            // If the user manually placed the cursor, cancel any pending moveCursorToEnd.
+
             if parent.moveCursorToEnd.wrappedValue {
                 parent.moveCursorToEnd.wrappedValue = false
             }
             parent.cursorPosition = tv.selectedRange.location
-            syncTypingAttributesToCurrentLine(tv)
+
             nudgeCursorOffCheckbox(tv)
             if !parent.speakerColors.isEmpty {
                 nudgeCursorOffSpeakerLine(tv)
@@ -949,6 +975,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func textViewDidBeginEditing(_ tv: UITextView) {
             parent.isFocused = true
+            textView = tv
             startKeyboardObserver(for: tv)
         }
 
