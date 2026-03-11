@@ -25,63 +25,63 @@ private struct ScrollViewKeyboardDismissSetup: UIViewRepresentable {
 }
 
 struct NoteDetailView: View {
-    @Environment(NoteStore.self) private var noteStore
-    @Environment(AuthStore.self) private var authStore
-    @Environment(SettingsStore.self) private var settingsStore
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
+    @Environment(NoteStore.self) var noteStore
+    @Environment(AuthStore.self) var authStore
+    @Environment(SettingsStore.self) var settingsStore
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dismiss) var dismiss
 
-    private let noteId: UUID
-    private let initialNote: Note
+    let noteId: UUID
+    let initialNote: Note
 
-    @State private var editedTitle: String
-    @State private var editedContent: String
-    @State private var showDeleteConfirmation = false
-    @State private var pendingDeleteRewrite: NoteRewrite?
-    @State private var didDelete = false
-    @State private var showCategoryPicker = false
-    @State private var showRewriteSheet = false
-    @State private var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
-    @State private var isRewriting = false
-    @State private var rewritingLabel: String = ""
-    @State private var rewrites: [NoteRewrite] = []
-    @State private var activeRewriteId: UUID?
-    @State private var rewriteLabelOpacity: Double = 0
-    @State private var audioExpanded = false
-    @State private var player = AudioPlayer()
-    @State private var typewriterTask: Task<Void, Never>?
-    @State private var scrollProxy: ScrollViewProxy?
-    @State private var contentFocused = false
-    @State private var moveCursorToEnd = false
-    @FocusState private var titleFocused: Bool
-    @State private var contentOpacity: Double = 1
-    @State private var titleBaseline: String = ""
-    @State private var contentBaseline: String = ""
-    @State private var errorMessage: String?
-    @State private var isDownloadingAudio = false
-    @State private var audioShareItem: URL?
-    @State private var textShareItem: String?
-    @State private var appendRecorder = AudioRecorder()
-    @State private var isAppendRecording = false
-    @State private var isAppendTranscribing = false
-    @State private var cursorPosition: Int = 0
-    @State private var lastKnownCursorPosition: Int = 0
-    @State private var isCursorReady = false
-    @State private var appendInsertPosition: Int = 0
-    @State private var highlightRange: NSRange?
-    @State private var preserveScroll = false
-    @State private var autosaveTask: Task<Void, Never>?
+    @State var editedTitle: String
+    @State var editedContent: String
+    @State var showDeleteConfirmation = false
+    @State var pendingDeleteRewrite: NoteRewrite?
+    @State var didDelete = false
+    @State var showCategoryPicker = false
+    @State var showRewriteSheet = false
+    @State var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
+    @State var isRewriting = false
+    @State var rewritingLabel: String = ""
+    @State var rewrites: [NoteRewrite] = []
+    @State var activeRewriteId: UUID?
+    @State var rewriteLabelOpacity: Double = 0
+    @State var audioExpanded = false
+    @State var player = AudioPlayer()
+    @State var typewriterTask: Task<Void, Never>?
+    @State var scrollProxy: ScrollViewProxy?
+    @State var contentFocused = false
+    @State var moveCursorToEnd = false
+    @FocusState var titleFocused: Bool
+    @State var contentOpacity: Double = 1
+    @State var titleBaseline: String = ""
+    @State var contentBaseline: String = ""
+    @State var errorMessage: String?
+    @State var isDownloadingAudio = false
+    @State var audioShareItem: URL?
+    @State var textShareItem: String?
+    @State var appendRecorder = AudioRecorder()
+    @State var isAppendRecording = false
+    @State var isAppendTranscribing = false
+    @State var cursorPosition: Int = 0
+    @State var lastKnownCursorPosition: Int = 0
+    @State var isCursorReady = false
+    @State var appendInsertPosition: Int = 0
+    @State var highlightRange: NSRange?
+    @State var preserveScroll = false
+    @State var autosaveTask: Task<Void, Never>?
 
-    @State private var transcribingVideoPlayer: AVQueuePlayer?
-    @State private var transcribingPlayerLooper: AVPlayerLooper?
-    @State private var transcribingPhraseIndex = 0
-    @State private var transcribingIsLong = false
-    @State private var whileIndex = 0
-    @State private var renamingSpeaker: String? = nil
-    @State private var renameText: String = ""
-    @State private var rewriteSweep: CGFloat = 0
+    @State var transcribingVideoPlayer: AVQueuePlayer?
+    @State var transcribingPlayerLooper: AVPlayerLooper?
+    @State var transcribingPhraseIndex = 0
+    @State var transcribingIsLong = false
+    @State var whileIndex = 0
+    @State var renamingSpeaker: String? = nil
+    @State var renameText: String = ""
+    @State var rewriteSweep: CGFloat = 0
 
-    private static let speakerColors: [Color] = [
+    static let speakerColors: [Color] = [
         Color(hex: "#7C3AED"), // violet (brand)
         Color(hex: "#0284C7"), // sky blue
         Color(hex: "#D97706"), // amber
@@ -91,7 +91,7 @@ struct NoteDetailView: View {
         Color(hex: "#7C3AED"), // wrap
     ]
 
-    private static let speakerUIColors: [UIColor] = [
+    static let speakerUIColors: [UIColor] = [
         UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1),
         UIColor(red: 0x02/255, green: 0x84/255, blue: 0xC7/255, alpha: 1),
         UIColor(red: 0xD9/255, green: 0x77/255, blue: 0x06/255, alpha: 1),
@@ -100,20 +100,20 @@ struct NoteDetailView: View {
         UIColor(red: 0xDB/255, green: 0x27/255, blue: 0x77/255, alpha: 1),
     ]
 
-    private var speakerColorMap: [String: UIColor] {
+    var speakerColorMap: [String: UIColor] {
         Dictionary(uniqueKeysWithValues: detectedSpeakers.enumerated().map { index, key in
             (key, Self.speakerUIColors[index % Self.speakerUIColors.count])
         })
     }
 
-    private let transcribingPhrases: [String] = [
+    let transcribingPhrases: [String] = [
         "Feel free to leave — your note will be waiting for you",
         "Safe to navigate away — we'll finish in the background",
         "Nothing will be lost if you leave — come back when you're ready",
         "You're free to go. We'll finish this in the background",
     ]
 
-    private let whilePhrases: [(video: String, subtitle: String)] = [
+    let whilePhrases: [(video: String, subtitle: String)] = [
         ("while-binge", "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
         ("while-hobby", "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
         ("while-read", "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
@@ -121,10 +121,10 @@ struct NoteDetailView: View {
         ("while-work", "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
         ("while-rest", "This one might take a bit — maybe take a little rest? Your note will be waiting when you wake up"),
     ]
-    @State private var titlePhraseIndex = 0
-    @State private var titleTypewriterTask: Task<Void, Never>?
+    @State var titlePhraseIndex = 0
+    @State var titleTypewriterTask: Task<Void, Never>?
 
-    private let titlePhrases = [
+    let titlePhrases = [
         "Naming this masterpiece…",
         "Cooking up a title…",
 
@@ -132,7 +132,7 @@ struct NoteDetailView: View {
         "Squeezing out a title…",
     ]
 
-    private var isGeneratingTitle: Bool {
+    var isGeneratingTitle: Bool {
         noteStore.generatingTitleIds.contains(noteId)
     }
 
@@ -152,42 +152,42 @@ struct NoteDetailView: View {
         self._contentOpacity = State(initialValue: willSwitch ? 0 : 1)
     }
 
-    private var note: Note {
+    var note: Note {
         noteStore.notes.first { $0.id == noteId } ?? initialNote
     }
 
-    private var isInStore: Bool {
+    var isInStore: Bool {
         noteStore.notes.contains { $0.id == noteId }
     }
 
-    private var hasChanges: Bool {
+    var hasChanges: Bool {
         typewriterTask == nil
             && titleTypewriterTask == nil
             && !isRewriting
             && (editedTitle != titleBaseline || editedContent != contentBaseline)
     }
 
-    private var category: Category? {
+    var category: Category? {
         noteStore.categories.first { $0.id == note.categoryId }
     }
 
-    private var audioURL: URL? {
+    var audioURL: URL? {
         guard let urlString = note.audioUrl else { return nil }
         return URL(string: urlString)
     }
 
-    private var bodyState: NoteBodyState {
+    var bodyState: NoteBodyState {
         NoteBodyState(content: editedContent)
     }
 
-    private var isTranscribing: Bool {
+    var isTranscribing: Bool {
         bodyState == .transcribing
     }
 
     /// Unique speaker display names in order of first appearance.
     /// Uses note.speakerNames as the authoritative source (survives renames),
     /// falling back to content parsing for notes without it.
-    private var detectedSpeakers: [String] {
+    var detectedSpeakers: [String] {
         // Authoritative: use speakerNames dict (keys sorted to preserve original order)
         if let names = note.speakerNames, !names.isEmpty {
             return names.keys.sorted().map { names[$0] ?? $0 }
@@ -212,22 +212,22 @@ struct NoteDetailView: View {
         return seen
     }
 
-    private func speakerColor(for key: String) -> Color {
+    func speakerColor(for key: String) -> Color {
         let index = detectedSpeakers.firstIndex(of: key) ?? 0
         return Self.speakerColors[index % Self.speakerColors.count]
     }
 
-    private var isTranscriptionFailed: Bool {
+    var isTranscriptionFailed: Bool {
         bodyState == .transcriptionFailed
     }
 
-    private var isWaitingForConnection: Bool {
+    var isWaitingForConnection: Bool {
         bodyState == .waitingForConnection
     }
 
     /// Returns the local audio file URL if it still exists on disk,
     /// falling back to the persisted index in case the app was restarted after a failed transcription.
-    private var localAudioFileURL: URL? {
+    var localAudioFileURL: URL? {
         noteStore.localAudioFileURL(for: noteId, audioUrl: note.audioUrl)
     }
 
@@ -1005,514 +1005,5 @@ struct NoteDetailView: View {
         }
     }
 
-    // MARK: - Typewriter
 
-    private func scrollToTop() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeOut(duration: 0.3)) {
-                scrollProxy?.scrollTo("scrollTop", anchor: .top)
-            }
-        }
-    }
-
-    private func revealContent(_ text: String) {
-        typewriterTask?.cancel()
-        typewriterTask = nil
-        contentOpacity = 0
-        editedContent = text
-        scrollToTop()
-        withAnimation(.easeIn(duration: 0.5)) {
-            contentOpacity = 1
-        }
-    }
-
-    private func syncSavedBaselines(title: String? = nil, content: String? = nil) {
-        if let title {
-            titleBaseline = title
-        }
-        if let content {
-            contentBaseline = content
-        }
-    }
-
-    private func markCurrentStateAsSaved() {
-        syncSavedBaselines(title: editedTitle, content: editedContent)
-    }
-
-    private func acceptStoreDrivenContent(_ content: String, revealIfNeeded: Bool = false) {
-        contentBaseline = content
-        if revealIfNeeded {
-            contentFocused = false
-            revealContent(content)
-            return
-        }
-        withAnimation(.easeOut(duration: 0.4)) {
-            editedContent = content
-        }
-    }
-
-    private func acceptResolvedNoteContent(_ content: String, fadeInIfNeeded: Bool = true) {
-        contentBaseline = content
-        editedContent = content
-        if fadeInIfNeeded, contentOpacity == 0 {
-            withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
-        }
-    }
-
-    private func syncStoreTitle(_ title: String) {
-        titleBaseline = title
-        guard !title.isEmpty else {
-            editedTitle = title
-            return
-        }
-        titleTypewriterTask?.cancel()
-        editedTitle = ""
-        titleTypewriterTask = Task {
-            for char in title {
-                guard !Task.isCancelled else { break }
-                editedTitle.append(char)
-                try? await Task.sleep(for: .milliseconds(25))
-            }
-            titleTypewriterTask = nil
-        }
-    }
-
-    private func cancelContentTypewriterAndRestoreFromStore() {
-        typewriterTask?.cancel()
-        typewriterTask = nil
-        let resolvedContent = noteStore.resolvedContent(for: note)
-        editedContent = resolvedContent
-        contentBaseline = resolvedContent
-    }
-
-    // MARK: - Speaker Names
-
-    private func renameSpeaker(key: String, newName: String) {
-        guard !newName.isEmpty else { return }
-
-        func applyRename(to text: String) -> String {
-            text
-                .components(separatedBy: "\n")
-                .map { $0 == key ? newName : $0 }
-                .joined(separator: "\n")
-                .replacingOccurrences(of: "[\(key)]:", with: "[\(newName)]:")
-        }
-
-        // Update current displayed content
-        editedContent = applyRename(to: editedContent)
-
-        // Update speakerNames: find the original key whose current value is `key`
-        var names = note.speakerNames ?? [:]
-        if let originalKey = names.first(where: { $0.value == key })?.key {
-            names[originalKey] = newName
-        } else {
-            names[key] = newName
-        }
-
-        var updated = note
-        updated.speakerNames = names
-        // Also rename in originalContent so switching to Original stays consistent
-        if let original = updated.originalContent {
-            updated.originalContent = applyRename(to: original)
-        }
-        updated.updatedAt = Date()
-        noteStore.updateNote(updated)
-
-        // Rename in all cached rewrites so switching between prompts stays consistent
-        noteStore.renameSpeakerInRewrites(noteId: noteId, oldName: key, newName: newName)
-        rewrites = noteStore.rewritesCache[noteId] ?? []
-
-        saveChanges()
-    }
-
-    // MARK: - Helpers
-
-    private func downloadAudio() {
-        guard let urlString = note.audioUrl, let url = URL(string: urlString) else { return }
-
-        isDownloadingAudio = true
-        Task {
-            do {
-                let (tempURL, _) = try await URLSession.shared.download(from: url)
-                let fileName = note.title.map { $0.prefix(50) + ".m4a" } ?? "audio.m4a"
-                let destURL = FileManager.default.temporaryDirectory.appendingPathComponent(String(fileName))
-                try? FileManager.default.removeItem(at: destURL)
-                try FileManager.default.moveItem(at: tempURL, to: destURL)
-                audioShareItem = destURL
-            } catch {
-                errorMessage = "Failed to download audio"
-            }
-            isDownloadingAudio = false
-        }
-    }
-
-    private func performRewrite(tone: String?, instructions: String?, toneLabel: String? = nil, toneEmoji: String? = nil) {
-        if let emoji = toneEmoji, let name = toneLabel { rewritingLabel = "\(emoji) \(name)" }
-        else if let name = toneLabel { rewritingLabel = name }
-        else if let instructions { rewritingLabel = String(instructions.prefix(30)) + (instructions.count > 30 ? "…" : "") }
-        else { rewritingLabel = "Rewriting…" }
-        isRewriting = true
-        rewriteLabelOpacity = 1
-        Task {
-            do {
-                let sourceContent = note.originalContent ?? editedContent
-
-                // Preserve original before streaming starts
-                var updated = note
-                if updated.originalContent == nil {
-                    updated.originalContent = editedContent
-                    noteStore.updateNote(updated)
-                }
-
-                // Stream with typewriter reveal
-                scrollToTop()
-
-                let stream = AIService.rewriteStreaming(
-                    content: sourceContent,
-                    tone: tone,
-                    customInstructions: instructions,
-                    language: note.language,
-                    multiSpeaker: !(note.speakerNames ?? [:]).isEmpty
-                )
-
-                // Buffer streamed chunks, reveal progressively by character index
-                var fullText = ""
-                var revealed = 0
-                var firstChunk = true
-
-                for try await chunk in stream {
-                    fullText += chunk
-
-                    // Clear old content when first chunk arrives
-                    if firstChunk {
-                        editedContent = ""
-                        firstChunk = false
-                    }
-
-                    // Reveal buffered text a few characters at a time
-                    while revealed < fullText.count {
-                        let end = min(revealed + 3, fullText.count)
-                        let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
-                        let endIdx = fullText.index(fullText.startIndex, offsetBy: end)
-                        editedContent += fullText[startIdx..<endIdx]
-                        revealed = end
-                        try await Task.sleep(for: .milliseconds(15))
-                    }
-                }
-
-                // Flush any remaining
-                if revealed < fullText.count {
-                    let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
-                    editedContent += fullText[startIdx...]
-                }
-
-                // Normalize any "- " line starts to "• " (safety net if model ignores prompt)
-                editedContent = editedContent
-                    .components(separatedBy: "\n")
-                    .map { $0.hasPrefix("- ") ? "• " + $0.dropFirst(2) : $0 }
-                    .joined(separator: "\n")
-
-                // Save rewrite version
-                let rewrite = NoteRewrite(
-                    id: UUID(),
-                    noteId: noteId,
-                    userId: authStore.userId,
-                    tone: tone,
-                    toneLabel: toneLabel,
-                    toneEmoji: toneEmoji,
-                    instructions: instructions,
-                    content: editedContent,
-                    createdAt: Date()
-                )
-                await noteStore.saveRewrite(rewrite)
-                rewrites = noteStore.rewritesCache[noteId] ?? []
-                activeRewriteId = rewrite.id
-                if rewriteLabelOpacity == 0 {
-                    try? await Task.sleep(for: .milliseconds(32))
-                    rewriteLabelOpacity = 1
-                }
-
-                // Save note content
-                updated.content = editedContent
-                updated.activeRewriteId = rewrite.id
-                updated.title = editedTitle.isEmpty ? nil : editedTitle
-                updated.updatedAt = Date()
-                noteStore.updateNote(updated)
-                markCurrentStateAsSaved()
-
-                // Auto-save custom instructions as a recent preset
-                if tone == nil, let instructions, !instructions.isEmpty {
-                    RecentPresetsStore.add(instructions: instructions)
-                }
-            } catch {
-                if editedContent.isEmpty {
-                    editedContent = note.originalContent ?? note.content
-                }
-                errorMessage = "Rewrite failed: \(error.localizedDescription)"
-            }
-            isRewriting = false
-        }
-    }
-
-    private func switchToRewrite(_ rewrite: NoteRewrite) {
-        guard rewrite.id != activeRewriteId else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
-        rewriteLabelOpacity = 0
-        activeRewriteId = rewrite.id
-        contentOpacity = 0
-        editedContent = rewrite.content
-        scrollToTop()
-        var updated = note
-        updated.content = rewrite.content
-        updated.activeRewriteId = rewrite.id
-        updated.updatedAt = Date()
-        noteStore.updateNote(updated)
-        syncSavedBaselines(content: rewrite.content)
-        withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
-        Task {
-            try? await Task.sleep(for: .milliseconds(50))
-            rewriteLabelOpacity = 1
-        }
-    }
-
-    private func deleteActiveRewrite(_ rewrite: NoteRewrite) {
-        noteStore.deleteRewrite(rewrite)
-        rewrites.removeAll { $0.id == rewrite.id }
-
-        // If there are remaining rewrites, switch to the last one; otherwise restore original
-        if let last = rewrites.last {
-            switchToRewrite(last)
-        } else {
-            switchToOriginal()
-            // No rewrites left — clear originalContent and activeRewriteId so the note is back to plain state
-            var updated = note
-            updated.originalContent = nil
-            updated.activeRewriteId = nil
-            noteStore.updateNote(updated)
-        }
-    }
-
-    private func switchToOriginal() {
-        guard let original = note.originalContent else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
-        rewriteLabelOpacity = 0
-        activeRewriteId = nil
-        contentOpacity = 0
-        editedContent = original
-        scrollToTop()
-        var updated = note
-        updated.content = original
-        updated.activeRewriteId = nil
-        updated.updatedAt = Date()
-        noteStore.updateNote(updated)
-        syncSavedBaselines(content: original)
-        withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
-        Task {
-            try? await Task.sleep(for: .milliseconds(50))
-            rewriteLabelOpacity = 1
-        }
-    }
-
-    private func scheduleAutosave() {
-        autosaveTask?.cancel()
-        autosaveTask = Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled, hasChanges else { return }
-            saveChanges()
-        }
-    }
-
-    private func saveChanges() {
-        // Keep the note's displayed content canonical even while a rewrite is active.
-        if let rewriteId = activeRewriteId,
-           let rewrite = rewrites.first(where: { $0.id == rewriteId }),
-           editedContent != rewrite.content {
-            var updatedRewrite = rewrite
-            updatedRewrite.content = editedContent
-            rewrites = rewrites.map { $0.id == rewriteId ? updatedRewrite : $0 }
-            noteStore.updateRewrite(updatedRewrite)
-        }
-
-        var updated = note
-        updated.title = editedTitle.isEmpty ? nil : editedTitle
-        updated.content = editedContent
-        updated.updatedAt = Date()
-        if isInStore {
-            noteStore.updateNote(updated)
-        } else {
-            withAnimation(.snappy) {
-                noteStore.addNote(updated)
-            }
-        }
-        markCurrentStateAsSaved()
-    }
-
-    private func buildShareText() -> String {
-        let title = editedTitle.isEmpty ? "" : editedTitle + "\n\n"
-        return title + editedContent
-    }
-
-
-    // MARK: - Append Recording Actions
-
-    private func startAppendRecording(scrollToBottom: Bool = false) {
-        // Use last known cursor position, or end of content if cursor was never placed
-        let position = scrollToBottom ? editedContent.count : (contentFocused && isCursorReady ? cursorPosition : (lastKnownCursorPosition > 0 ? lastKnownCursorPosition : editedContent.count))
-        appendInsertPosition = min(position, editedContent.count)
-        contentFocused = false
-        insertPlaceholder(NoteBodyState.recordingPlaceholder)
-        do {
-            try appendRecorder.startRecording()
-            isAppendRecording = true
-            if scrollToBottom {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
-                    }
-                }
-            }
-        } catch {
-            removePlaceholder()
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
-        }
-    }
-
-    private func insertPlaceholder(_ placeholder: String) {
-        preserveScroll = true
-        let pos = min(appendInsertPosition, editedContent.count)
-        let index = editedContent.index(editedContent.startIndex, offsetBy: pos)
-        let before = editedContent[..<index]
-        let after = editedContent[index...]
-
-        // Insert inline — add a space only if adjacent to non-whitespace
-        let leading = !before.isEmpty && !before.last!.isWhitespace ? " " : ""
-        let trailing = !after.isEmpty && !after.first!.isWhitespace ? " " : ""
-
-        editedContent = before + leading + placeholder + trailing + after
-    }
-
-    private func removePlaceholder() {
-        // Remove placeholder and collapse any double spaces left behind
-        for placeholder in [NoteBodyState.recordingPlaceholder, NoteBodyState.transcribingPlaceholder] {
-            editedContent = editedContent
-                .replacingOccurrences(of: " " + placeholder + " ", with: " ")
-                .replacingOccurrences(of: placeholder + " ", with: "")
-                .replacingOccurrences(of: " " + placeholder, with: "")
-                .replacingOccurrences(of: placeholder, with: "")
-        }
-    }
-
-    private func replacePlaceholder(with text: String) {
-        preserveScroll = true
-        // Replace whichever placeholder is present
-        for placeholder in [NoteBodyState.transcribingPlaceholder, NoteBodyState.recordingPlaceholder] {
-            let nsContent = editedContent as NSString
-            let placeholderRange = nsContent.range(of: placeholder)
-            guard placeholderRange.location != NSNotFound else { continue }
-
-            editedContent = editedContent.replacingOccurrences(of: placeholder, with: text)
-            highlightRange = NSRange(location: placeholderRange.location, length: (text as NSString).length)
-            return
-        }
-        // Fallback: append at end
-        let insertLocation = (editedContent as NSString).length
-        let separator = editedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : "\n\n"
-        editedContent = editedContent + separator + text
-        highlightRange = NSRange(location: insertLocation + (separator as NSString).length, length: (text as NSString).length)
-    }
-
-    private func stopAppendRecording() {
-        guard let audioFileURL = appendRecorder.stopRecording() else {
-            isAppendRecording = false
-            removePlaceholder()
-            return
-        }
-
-        isAppendRecording = false
-        isAppendTranscribing = true
-
-        // Swap recording placeholder → transcribing placeholder
-        preserveScroll = true
-        if editedContent.contains(NoteBodyState.recordingPlaceholder) {
-            editedContent = editedContent.replacingOccurrences(
-                of: NoteBodyState.recordingPlaceholder,
-                with: NoteBodyState.transcribingPlaceholder
-            )
-        }
-
-        Task {
-            do {
-                let uploadURL = (try? await AudioCompressor.compress(sourceURL: audioFileURL)) ?? audioFileURL
-                defer { if uploadURL != audioFileURL { AudioCompressor.cleanup(uploadURL) } }
-
-                let audioData = try Data(contentsOf: uploadURL)
-                let fileName = uploadURL.lastPathComponent
-
-                let language = settingsStore.language == "auto" ? nil : settingsStore.language
-                let service = TranscriptionService()
-                let result = try await service.transcribe(
-                    audioData: audioData,
-                    fileName: fileName,
-                    language: language,
-                    userId: authStore.userId,
-                    customDictionary: settingsStore.customDictionary
-                )
-
-                let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !transcribedText.isEmpty else {
-                    removePlaceholder()
-                    errorMessage = "Could not transcribe the recording."
-                    isAppendTranscribing = false
-                    return
-                }
-
-                // Replace placeholder with transcribed text
-                replacePlaceholder(with: transcribedText)
-
-                // Save to store + server
-                var updated = note
-                updated.content = editedContent
-                updated.title = editedTitle.isEmpty ? nil : editedTitle
-                updated.updatedAt = Date()
-                noteStore.updateNote(updated)
-                markCurrentStateAsSaved()
-            } catch {
-                removePlaceholder()
-                errorMessage = "Transcription failed: \(error.localizedDescription)"
-            }
-            // Clean up local audio — append recordings don't need to be kept
-            try? FileManager.default.removeItem(at: audioFileURL)
-            isAppendTranscribing = false
-        }
-    }
-
-    private func cancelAppendRecording() {
-        appendRecorder.cancelRecording()
-        removePlaceholder()
-        isAppendRecording = false
-    }
-
-    private func restartAppendRecording() {
-        appendRecorder.cancelRecording()
-        do {
-            try appendRecorder.startRecording()
-        } catch {
-            isAppendRecording = false
-            errorMessage = "Failed to restart recording: \(error.localizedDescription)"
-        }
-    }
-
-    private func toggleAppendPause() {
-        if appendRecorder.isPaused {
-            appendRecorder.resumeRecording()
-        } else {
-            appendRecorder.pauseRecording()
-        }
-    }
-
-    private func formattedDuration(_ totalSeconds: Int) -> String {
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
 }
