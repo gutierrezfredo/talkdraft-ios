@@ -64,6 +64,7 @@ struct HomeView: View {
                                         NoteCard(
                                             note: note,
                                             category: category,
+                                            content: noteStore.resolvedContent(for: note),
                                             selectionMode: isSelecting,
                                             isSelected: selectedIds.contains(note.id)
                                         )
@@ -178,10 +179,7 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(item: $selectedNote) { note in
-                let cachedContent = note.activeRewriteId.flatMap { id in
-                    noteStore.rewritesCache[note.id]?.first { $0.id == id }?.content
-                }
-                NoteDetailView(note: note, initialContent: cachedContent)
+                NoteDetailView(note: note, initialContent: noteStore.resolvedContent(for: note))
             }
             .task {
                 // Catch any cold-launch race where categories failed to load
@@ -720,7 +718,7 @@ struct HomeView: View {
                 userId: authStore.userId,
                 categoryId: selectedCategory,
                 title: sourceURL.deletingPathExtension().lastPathComponent,
-                content: "Transcribing…",
+                content: NoteBodyState.transcribingPlaceholder,
                 source: .voice,
                 audioUrl: destinationURL.path,
                 durationSeconds: duration.isFinite ? Int(duration) : nil,
@@ -812,7 +810,7 @@ struct HomeView: View {
             let lowered = query.lowercased()
             notes = notes.filter { note in
                 (note.title?.lowercased().contains(lowered) ?? false)
-                    || note.content.lowercased().contains(lowered)
+                    || noteStore.resolvedContent(for: note).lowercased().contains(lowered)
             }
         }
 
@@ -826,8 +824,10 @@ struct HomeView: View {
                 }
                 return $0.updatedAt > $1.updatedAt
             case .actionItems:
-                let aHas = $0.content.contains("☐") || $0.content.contains("☑")
-                let bHas = $1.content.contains("☐") || $1.content.contains("☑")
+                let aContent = noteStore.resolvedContent(for: $0)
+                let bContent = noteStore.resolvedContent(for: $1)
+                let aHas = aContent.contains("☐") || aContent.contains("☑")
+                let bHas = bContent.contains("☐") || bContent.contains("☑")
                 if aHas != bHas { return aHas }
                 return $0.updatedAt > $1.updatedAt
             }
@@ -876,4 +876,3 @@ private struct CategoryReorderDelegate: DropDelegate {
         return true
     }
 }
-

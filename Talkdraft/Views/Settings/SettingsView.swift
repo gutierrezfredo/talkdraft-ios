@@ -270,10 +270,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $importedNote) { note in
-            let cachedContent = note.activeRewriteId.flatMap { id in
-                noteStore.rewritesCache[note.id]?.first { $0.id == id }?.content
-            }
-            NoteDetailView(note: note, initialContent: cachedContent)
+            NoteDetailView(note: note, initialContent: noteStore.resolvedContent(for: note))
         }
         .fileImporter(
             isPresented: $showAudioImporter,
@@ -373,7 +370,7 @@ struct SettingsView: View {
                 userId: authStore.userId,
                 categoryId: nil,
                 title: sourceURL.deletingPathExtension().lastPathComponent,
-                content: "Transcribing…",
+                content: NoteBodyState.transcribingPlaceholder,
                 source: .voice,
                 audioUrl: destinationURL.path,
                 durationSeconds: duration.isFinite ? Int(duration) : nil,
@@ -690,4 +687,3 @@ private struct ThemePickerView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-

@@ -3,6 +3,7 @@ import SwiftUI
 struct NoteCard: View {
     let note: Note
     let category: Category?
+    var content: String? = nil
     var selectionMode: Bool = false
     var isSelected: Bool = false
 
@@ -10,6 +11,8 @@ struct NoteCard: View {
     @State private var transcribingPulse = false
 
     private var isDark: Bool { colorScheme == .dark }
+    private var resolvedContent: String { content ?? note.content }
+    private var bodyState: NoteBodyState { NoteBodyState(content: resolvedContent) }
 
     private var cardBackground: Color {
         guard let category else {
@@ -20,8 +23,8 @@ struct NoteCard: View {
     }
 
     private var actionItemCounts: (completed: Int, total: Int)? {
-        let checked = note.content.filter { $0 == "☑" }.count
-        let unchecked = note.content.filter { $0 == "☐" }.count
+        let checked = resolvedContent.filter { $0 == "☑" }.count
+        let unchecked = resolvedContent.filter { $0 == "☐" }.count
         let total = checked + unchecked
         guard total > 0 else { return nil }
         return (checked, total)
@@ -60,20 +63,20 @@ struct NoteCard: View {
             }
 
             // Content preview
-            if note.content == "Transcribing…" {
-                Text("Transcribing…")
+            if bodyState == .transcribing {
+                Text(NoteBodyState.transcribingPlaceholder)
                     .italic()
-                .font(.caption)
-                .foregroundStyle(Color.brand)
-                .opacity(transcribingPulse ? 0.35 : 1.0)
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                        transcribingPulse = true
+                    .font(.caption)
+                    .foregroundStyle(Color.brand)
+                    .opacity(transcribingPulse ? 0.35 : 1.0)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                            transcribingPulse = true
+                        }
                     }
-                }
-                .onDisappear { transcribingPulse = false }
+                    .onDisappear { transcribingPulse = false }
             } else {
-                Text(note.content)
+                Text(resolvedContent)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)

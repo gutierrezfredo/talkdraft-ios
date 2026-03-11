@@ -60,6 +60,155 @@ final class CheckboxTextView: UITextView {
     }
 }
 
+enum NoteEditorMutation: Equatable {
+    case allowSystem
+    case reject
+    case apply(updatedText: String, selectedRange: NSRange)
+}
+
+struct NoteEditorRules {
+    static let uncheckedPrefix = "☐ "
+    static let checkedPrefix = "☑ "
+    static let bulletPrefix = "• "
+
+    static func toggleCheckbox(in text: String, at plainIndex: Int) -> String? {
+        let nsText = text as NSString
+        guard plainIndex < nsText.length else { return nil }
+        let currentChar = nsText.character(at: plainIndex)
+        guard currentChar == 0x2610 || currentChar == 0x2611 else { return nil }
+        let replacement = currentChar == 0x2611 ? "☐" : "☑"
+        return nsText.replacingCharacters(in: NSRange(location: plainIndex, length: 1), with: replacement)
+    }
+
+    static func mutation(
+        for text: String,
+        range: NSRange,
+        replacementText: String,
+        protectedLines: Set<String> = []
+    ) -> NoteEditorMutation {
+        let nsText = text as NSString
+
+        if !replacementText.isEmpty, nsText.length > 0 {
+            let lineRange = currentLineRange(in: nsText, at: range.location)
+            if lineRange.location < nsText.length, lineRange.length > 0 {
+                let firstChar = nsText.character(at: lineRange.location)
+                if (firstChar == 0x2610 || firstChar == 0x2611) && range.location <= lineRange.location + 1 {
+                    return .reject
+                }
+            }
+        }
+
+        if !protectedLines.isEmpty, nsText.length > 0 {
+            let lineRange = currentLineRange(in: nsText, at: range.location)
+            let currentLine = trimmedLine(in: nsText, lineRange: lineRange)
+            if protectedLines.contains(currentLine) {
+                return .reject
+            }
+        }
+
+        if replacementText == "]", range.location > 0, range.location <= nsText.length {
+            let prevIdx = range.location - 1
+            if prevIdx < nsText.length, nsText.character(at: prevIdx) == UInt16(Character("[").asciiValue!) {
+                let updatedText = nsText.replacingCharacters(in: NSRange(location: prevIdx, length: 1), with: uncheckedPrefix)
+                return .apply(
+                    updatedText: updatedText,
+                    selectedRange: NSRange(location: prevIdx + (uncheckedPrefix as NSString).length, length: 0)
+                )
+            }
+        }
+
+        if replacementText == " ", range.location <= nsText.length, nsText.length > 0 {
+            let lineStart = currentLineRange(in: nsText, at: range.location).location
+            if range.location > lineStart {
+                let typed = nsText.substring(with: NSRange(location: lineStart, length: range.location - lineStart))
+                if typed == "-" {
+                    let updatedText = nsText.replacingCharacters(
+                        in: NSRange(location: lineStart, length: range.location - lineStart),
+                        with: bulletPrefix
+                    )
+                    return .apply(
+                        updatedText: updatedText,
+                        selectedRange: NSRange(location: lineStart + (bulletPrefix as NSString).length, length: 0)
+                    )
+                }
+            }
+        }
+
+        guard replacementText == "\n", nsText.length > 0, range.location <= nsText.length else {
+            return .allowSystem
+        }
+
+        let lineRange = currentLineRange(in: nsText, at: range.location)
+        let currentLine = nsText.substring(with: lineRange).trimmingCharacters(in: .newlines)
+
+        if currentLine.hasPrefix(uncheckedPrefix) || currentLine.hasPrefix(checkedPrefix) {
+            let trimmed = currentLine.trimmingCharacters(in: .whitespaces)
+            if trimmed == "☐" || trimmed == "☑" {
+                let updatedText = nsText.replacingCharacters(
+                    in: NSRange(location: lineRange.location, length: (uncheckedPrefix as NSString).length),
+                    with: ""
+                )
+                return .apply(
+                    updatedText: updatedText,
+                    selectedRange: NSRange(location: lineRange.location, length: 0)
+                )
+            }
+
+            let insertedText = "\n" + uncheckedPrefix
+            let updatedText = nsText.replacingCharacters(in: range, with: insertedText)
+            return .apply(
+                updatedText: updatedText,
+                selectedRange: NSRange(location: range.location + (insertedText as NSString).length, length: 0)
+            )
+        }
+
+        guard currentLine.hasPrefix(bulletPrefix) else { return .allowSystem }
+
+        if currentLine == bulletPrefix.trimmingCharacters(in: .whitespaces) || currentLine == bulletPrefix {
+            let updatedText = nsText.replacingCharacters(
+                in: NSRange(location: lineRange.location, length: (bulletPrefix as NSString).length),
+                with: ""
+            )
+            return .apply(
+                updatedText: updatedText,
+                selectedRange: NSRange(location: lineRange.location, length: 0)
+            )
+        }
+
+        let insertedText = "\n" + bulletPrefix
+        let updatedText = nsText.replacingCharacters(in: range, with: insertedText)
+        return .apply(
+            updatedText: updatedText,
+            selectedRange: NSRange(location: range.location + (insertedText as NSString).length, length: 0)
+        )
+    }
+
+    private static func trimmedLine(in text: NSString, lineRange: NSRange) -> String {
+        text.substring(with: NSRange(
+            location: lineRange.location,
+            length: max(0, lineRange.length - (text.length > lineRange.location + lineRange.length ? 1 : 0))
+        ))
+    }
+
+    private static func currentLineRange(in text: NSString, at location: Int) -> NSRange {
+        let boundedLocation = min(max(0, location), text.length)
+        var start = boundedLocation
+        while start > 0, text.character(at: start - 1) != 0x0A {
+            start -= 1
+        }
+
+        var end = boundedLocation
+        while end < text.length, text.character(at: end) != 0x0A {
+            end += 1
+        }
+        if end < text.length, text.character(at: end) == 0x0A {
+            end += 1
+        }
+
+        return NSRange(location: start, length: end - start)
+    }
+}
+
 // MARK: - ExpandingTextView
 
 /// A UITextView wrapper that expands to fit content (like TextField(axis: .vertical))
@@ -81,7 +230,10 @@ struct ExpandingTextView: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
-    static let styledPlaceholders = ["Recording…", "Transcribing…"]
+    static let styledPlaceholders = [
+        NoteBodyState.recordingPlaceholder,
+        NoteBodyState.transcribingPlaceholder,
+    ]
 
     private static let brandColor = UIColor { traits in
         traits.userInterfaceStyle == .dark
@@ -156,7 +308,7 @@ struct ExpandingTextView: UIViewRepresentable {
         context.coordinator.needsAttributeRefresh = false
         let currentPlain = Self.extractPlainText(from: tv)
         if currentPlain != text || needsRefresh {
-            let selectedPlainRange = Self.plainRange(forAttributedRange: tv.selectedRange, in: tv.attributedText)
+            let selectedPlainRange = Self.selectedPlainRange(in: tv)
             let shouldPreserveScroll = context.coordinator.preserveScrollOnNextUpdate || preserveScroll
             context.coordinator.preserveScrollOnNextUpdate = false
             if preserveScroll {
@@ -179,7 +331,7 @@ struct ExpandingTextView: UIViewRepresentable {
             }
 
             applyTextAttributes(tv)
-            tv.selectedRange = Self.attributedRange(forPlainRange: selectedPlainRange, in: tv.attributedText)
+            Self.setSelectedPlainRange(selectedPlainRange, in: tv)
             // Re-sync typingAttributes after programmatic cursor placement — setting
             // tv.selectedRange causes UIKit to reset typingAttributes to the adjacent
             // character's attributes, which for checkbox attachments lacks .foregroundColor.
@@ -270,6 +422,18 @@ struct ExpandingTextView: UIViewRepresentable {
             }
         }
         return result
+    }
+
+    fileprivate static func selectedPlainRange(in tv: UITextView) -> NSRange {
+        plainRange(forAttributedRange: tv.selectedRange, in: tv.attributedText)
+    }
+
+    fileprivate static func setSelectedPlainRange(_ range: NSRange, in tv: UITextView) {
+        tv.selectedRange = attributedRange(forPlainRange: range, in: tv.attributedText)
+    }
+
+    fileprivate static func plainCursorLocation(in tv: UITextView) -> Int {
+        plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
     }
 
     fileprivate static func plainOffset(forAttributedOffset attributedOffset: Int, in attributed: NSAttributedString?) -> Int {
@@ -479,7 +643,7 @@ struct ExpandingTextView: UIViewRepresentable {
     ) -> [NSAttributedString.Key: Any] {
         let nsText = text as NSString
         guard nsText.length > 0 else { return baseAttributes }
-        let cursorLoc = Self.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
+        let cursorLoc = Self.plainCursorLocation(in: tv)
         let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
         let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
         guard lineRange.location < nsText.length else { return baseAttributes }
@@ -641,9 +805,6 @@ struct ExpandingTextView: UIViewRepresentable {
 
         // MARK: - UITextViewDelegate
 
-        private static let bulletPrefix = "• "
-        private static let uncheckedPrefix = "☐ "
-
         // MARK: - Checkbox Tap Handling
 
         @objc func handleCheckboxTap(_ recognizer: UITapGestureRecognizer) {
@@ -688,18 +849,14 @@ struct ExpandingTextView: UIViewRepresentable {
         /// Toggles the checkbox at the given plain-text index. Called from handleCheckboxTap.
         func toggleCheckbox(at plainIndex: Int, in tv: CheckboxTextView) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            let nsText = parent.text as NSString
-            guard plainIndex < nsText.length else { return }
-            let currentChar = nsText.character(at: plainIndex)
-            let replacement = currentChar == 0x2611 ? "☐" : "☑"
-            let updatedText = nsText.replacingCharacters(in: NSRange(location: plainIndex, length: 1), with: replacement)
-            preserveScrollOnNextUpdate = true
-            let savedSelection = ExpandingTextView.plainRange(forAttributedRange: tv.selectedRange, in: tv.attributedText)
-            isAnimatingAttributes = true
-            parent.text = updatedText
-            parent.applyTextAttributes(tv)
-            tv.selectedRange = ExpandingTextView.attributedRange(forPlainRange: savedSelection, in: tv.attributedText)
-            isAnimatingAttributes = false
+            let savedSelection = ExpandingTextView.selectedPlainRange(in: tv)
+            guard let updatedText = NoteEditorRules.toggleCheckbox(in: parent.text, at: plainIndex) else { return }
+            applyPlainTextEdit(
+                updatedText: updatedText,
+                selectedPlainRange: savedSelection,
+                in: tv,
+                preserveScroll: true
+            )
             parent.onCheckboxToggle?(updatedText)
         }
 
@@ -777,144 +934,49 @@ struct ExpandingTextView: UIViewRepresentable {
         func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
             guard !isAnimatingAttributes else { return true }
 
-            // Work with plain text representation for line analysis
             let plainText = ExpandingTextView.extractPlainText(from: tv)
-            let nsText = plainText as NSString
-
             let plainRange = ExpandingTextView.plainRange(forAttributedRange: range, in: tv.attributedText)
-            let plainOffset = plainRange.location
+            let mutation = NoteEditorRules.mutation(
+                for: plainText,
+                range: plainRange,
+                replacementText: text,
+                protectedLines: Set(parent.speakerColors.keys)
+            )
 
-            // Block insertions at or before the ☐/☑ prefix on a checkbox line.
-            // (Deletions/selections spanning the prefix are still allowed.)
-            if !text.isEmpty, nsText.length > 0 {
-                let safeOffset = min(plainOffset, nsText.length - 1)
-                let cbLineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
-                if cbLineRange.location < nsText.length {
-                    let firstChar = nsText.character(at: cbLineRange.location)
-                    if (firstChar == 0x2610 || firstChar == 0x2611) && plainOffset <= cbLineRange.location + 1 {
-                        return false
-                    }
-                }
-            }
-
-            // Block edits on speaker name lines — they're structural markers, renamed via chips only
-            if !parent.speakerColors.isEmpty {
-                let safeLocation = min(plainOffset, max(nsText.length - 1, 0))
-                let lineRange = nsText.lineRange(for: NSRange(location: safeLocation, length: 0))
-                let currentLine = nsText.substring(with: NSRange(
-                    location: lineRange.location,
-                    length: max(0, lineRange.length - (nsText.length > lineRange.location + lineRange.length ? 1 : 0))
-                ))
-                if parent.speakerColors[currentLine] != nil { return false }
-            }
-
-            // Auto-convert "[]" to "☐ " — triggered when user types "]"
-            if text == "]" && plainOffset > 0 && plainOffset <= nsText.length {
-                let prevIdx = plainOffset - 1
-                if prevIdx < nsText.length {
-                    let prevChar = nsText.character(at: prevIdx)
-                    if prevChar == UInt16(Character("[").asciiValue!) {
-                        let bracketRange = ExpandingTextView.attributedRange(
-                            forPlainRange: NSRange(location: prevIdx, length: 1),
-                            in: tv.attributedText
-                        )
-                        tv.selectedRange = bracketRange
-                        tv.insertText(Self.uncheckedPrefix)
-                        needsAttributeRefresh = true
-                        syncTypingAttributesToCurrentLine(tv)
-                        return false
-                    }
-                }
-            }
-
-            // Normalize "- " to "• " at line start
-            if text == " " && plainOffset <= nsText.length {
-                let lineLookup = min(plainOffset, max(nsText.length - 1, 0))
-                let lineStart = nsText.lineRange(for: NSRange(location: lineLookup, length: 0)).location
-                if plainOffset > lineStart {
-                    let typed = nsText.substring(with: NSRange(location: lineStart, length: plainOffset - lineStart))
-                    if typed == "-" {
-                        let replaceRange = ExpandingTextView.attributedRange(
-                            forPlainRange: NSRange(location: lineStart, length: plainOffset - lineStart),
-                            in: tv.attributedText
-                        )
-                        tv.selectedRange = replaceRange
-                        tv.insertText(Self.bulletPrefix)
-                        syncTypingAttributesToCurrentLine(tv)
-                        return false
-                    }
-                }
-            }
-
-            // Handle return key for bullet/checkbox continuation
-            guard text == "\n" else { return true }
-
-            // Use plainOffset (not range.location) for line lookup — attributed and plain
-            // text positions diverge by 1 per attachment, so using attributed coords here
-            // lands on the wrong line after multiple checkbox insertions.
-            guard plainOffset <= nsText.length else { return true }
-            let safeLocation = min(plainOffset, max(nsText.length - 1, 0))
-            let lineRange = nsText.lineRange(for: NSRange(location: safeLocation, length: 0))
-            let currentLine = nsText.substring(with: lineRange).trimmingCharacters(in: .newlines)
-
-            // Find the current line boundaries in attributed text for delete/replace ops.
-            // (lineRange is in plain-text coords; we need attributed coords for tv.selectedRange.)
-            let attrLineRange = ExpandingTextView.attributedRange(forPlainRange: lineRange, in: tv.attributedText)
-            let attrLineStart = attrLineRange.location
-
-            // Checkbox continuation
-            if currentLine.hasPrefix("☐ ") || currentLine.hasPrefix("☑ ") {
-                let trimmed = currentLine.trimmingCharacters(in: .whitespaces)
-                if trimmed == "☐" || trimmed == "☑" {
-                    // Remove only the checkbox attachment, leaving an empty plain line
-                    tv.selectedRange = NSRange(location: attrLineStart, length: 1)
-                    tv.replace(tv.selectedTextRange!, withText: "")
-                    tv.selectedRange = NSRange(location: attrLineStart, length: 0)
-                    return false
-                }
-                if let sel = tv.selectedTextRange {
-                    tv.replace(sel, withText: "\n" + Self.uncheckedPrefix)
-                }
-                needsAttributeRefresh = true
-                syncTypingAttributesToCurrentLine(tv)
-                let insertedPrefixLength = (("\n" + Self.uncheckedPrefix) as NSString).length
-                let targetPlainOffset = plainOffset + insertedPrefixLength
-                DispatchQueue.main.async { [weak self, weak tv] in
-                    guard let self, let tv else { return }
-                    self.isAnimatingAttributes = true
-                    tv.selectedRange = ExpandingTextView.attributedRange(
-                        forPlainRange: NSRange(location: targetPlainOffset, length: 0),
-                        in: tv.attributedText
-                    )
-                    self.isAnimatingAttributes = false
-                    self.syncTypingAttributesToCurrentLine(tv)
-                }
+            switch mutation {
+            case .allowSystem:
+                return true
+            case .reject:
+                return false
+            case let .apply(updatedText, selectedPlainRange):
+                applyPlainTextEdit(updatedText: updatedText, selectedPlainRange: selectedPlainRange, in: tv)
                 return false
             }
+        }
 
-            // Bullet continuation
-            guard currentLine.hasPrefix(Self.bulletPrefix) else { return true }
-
-            if currentLine == Self.bulletPrefix.trimmingCharacters(in: .whitespaces) || currentLine == Self.bulletPrefix {
-                // Remove only the bullet prefix ("• "), leaving an empty plain line
-                let bulletLen = (Self.bulletPrefix as NSString).length
-                tv.selectedRange = NSRange(location: attrLineStart, length: bulletLen)
-                tv.replace(tv.selectedTextRange!, withText: "")
-                tv.selectedRange = NSRange(location: attrLineStart, length: 0)
-                return false
+        private func applyPlainTextEdit(
+            updatedText: String,
+            selectedPlainRange: NSRange,
+            in tv: UITextView,
+            preserveScroll: Bool = false
+        ) {
+            preserveScrollOnNextUpdate = preserveScroll
+            isAnimatingAttributes = true
+            parent.text = updatedText
+            parent.applyTextAttributes(tv)
+            ExpandingTextView.setSelectedPlainRange(selectedPlainRange, in: tv)
+            parent.cursorPosition = selectedPlainRange.location
+            if let label = tv.viewWithTag(999) as? UILabel {
+                label.isHidden = !updatedText.isEmpty
             }
-
-            if let sel = tv.selectedTextRange {
-                tv.replace(sel, withText: "\n" + Self.bulletPrefix)
-            }
+            isAnimatingAttributes = false
             syncTypingAttributesToCurrentLine(tv)
-            return false
         }
 
         func textViewDidChange(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
             parent.text = ExpandingTextView.extractPlainText(from: tv)
-            parent.cursorPosition = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
+            parent.cursorPosition = ExpandingTextView.plainCursorLocation(in: tv)
             if let label = tv.viewWithTag(999) as? UILabel {
                 label.isHidden = !parent.text.isEmpty
             }
@@ -974,7 +1036,7 @@ struct ExpandingTextView: UIViewRepresentable {
             if parent.moveCursorToEnd.wrappedValue {
                 parent.moveCursorToEnd.wrappedValue = false
             }
-            parent.cursorPosition = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
+            parent.cursorPosition = ExpandingTextView.plainCursorLocation(in: tv)
 
             nudgeCursorOffCheckbox(tv)
             if !parent.speakerColors.isEmpty {
@@ -998,7 +1060,7 @@ struct ExpandingTextView: UIViewRepresentable {
         private func nudgeCursorOffSpeakerLine(_ tv: UITextView) {
             let nsText = parent.text as NSString
             guard nsText.length > 0, tv.selectedRange.length == 0 else { return }
-            let cursor = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
+            let cursor = ExpandingTextView.plainCursorLocation(in: tv)
             let safeOffset = min(cursor, nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
@@ -1009,10 +1071,7 @@ struct ExpandingTextView: UIViewRepresentable {
             let nextStart = lineRange.location + lineRange.length
             let target = nextStart <= nsText.length ? nextStart : lineRange.location
             isAnimatingAttributes = true
-            tv.selectedRange = ExpandingTextView.attributedRange(
-                forPlainRange: NSRange(location: target, length: 0),
-                in: tv.attributedText
-            )
+            ExpandingTextView.setSelectedPlainRange(NSRange(location: target, length: 0), in: tv)
             isAnimatingAttributes = false
         }
 
@@ -1027,7 +1086,7 @@ struct ExpandingTextView: UIViewRepresentable {
                 .paragraphStyle: baseStyle,
             ]
             if nsText.length > 0 {
-                let cursorLoc = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
+                let cursorLoc = ExpandingTextView.plainCursorLocation(in: tv)
                 let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
                 let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
                 if lineRange.location < nsText.length {

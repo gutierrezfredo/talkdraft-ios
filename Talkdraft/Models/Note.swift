@@ -1,5 +1,39 @@
 import Foundation
 
+enum NoteBodyState: Equatable, Sendable {
+    case content
+    case transcribing
+    case waitingForConnection
+    case transcriptionFailed
+
+    init(content: String) {
+        switch content {
+        case NoteBodyState.transcribingPlaceholder:
+            self = .transcribing
+        case NoteBodyState.waitingForConnectionPlaceholder:
+            self = .waitingForConnection
+        case NoteBodyState.transcriptionFailedPlaceholder:
+            self = .transcriptionFailed
+        default:
+            self = .content
+        }
+    }
+
+    static let recordingPlaceholder = "Recording…"
+    static let transcribingPlaceholder = "Transcribing…"
+    static let waitingForConnectionPlaceholder = "Waiting for connection…"
+    static let transcriptionFailedPlaceholder = "Transcription failed — tap to edit"
+
+    var isTransientTranscriptionState: Bool {
+        switch self {
+        case .content:
+            return false
+        case .transcribing, .waitingForConnection, .transcriptionFailed:
+            return true
+        }
+    }
+}
+
 struct Note: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var userId: UUID?

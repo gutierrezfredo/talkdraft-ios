@@ -126,18 +126,32 @@ final class NoteStore {
         return nil
     }
 
+    func activeRewrite(for note: Note) -> NoteRewrite? {
+        guard let rewriteId = note.activeRewriteId else { return nil }
+        return rewritesCache[note.id]?.first { $0.id == rewriteId }
+    }
+
+    func resolvedContent(for note: Note) -> String {
+        activeRewrite(for: note)?.content ?? note.content
+    }
+
+    func bodyState(for note: Note) -> NoteBodyState {
+        NoteBodyState(content: resolvedContent(for: note))
+    }
+
     /// Retry any notes stuck in "Waiting for connection…".
     /// Scans the notes array directly — works even after app restart.
     /// Each note goes through transcribeNote which has its own connectivity probe.
     func retryWaitingNotes(language: String?, userId: UUID?, customDictionary: [String] = []) {
         let waiting = notes.filter {
-            $0.content == "Waiting for connection…" || $0.content == "Transcription failed — tap to edit"
+            let state = NoteBodyState(content: $0.content)
+            return state == .waitingForConnection || state == .transcriptionFailed
         }
         guard !waiting.isEmpty else { return }
 
         for note in waiting {
             guard let url = localAudioFileURL(for: note.id, audioUrl: note.audioUrl) else { continue }
-            setNoteContent(id: note.id, content: "Transcribing…")
+            setNoteContent(id: note.id, content: NoteBodyState.transcribingPlaceholder)
             transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId, customDictionary: customDictionary)
         }
     }
@@ -399,7 +413,7 @@ final class NoteStore {
                       let fileSize = attrs[.size] as? Int, fileSize > 0
                 else {
                     logger.error("transcribeNote: audio file missing or empty at \(audioFileURL.path)")
-                    setNoteContent(id: id, content: "Transcription failed — tap to edit")
+                    setNoteContent(id: id, content: NoteBodyState.transcriptionFailedPlaceholder)
                     ErrorLogger.shared.log(
                         type: "transcription_failed",
                         message: "Audio file missing or empty",
@@ -422,7 +436,7 @@ final class NoteStore {
                     }
                 } catch {
                     logger.info("Connectivity probe failed — device appears offline: \(error)")
-                    setNoteContent(id: id, content: "Waiting for connection…")
+                    setNoteContent(id: id, content: NoteBodyState.waitingForConnectionPlaceholder)
                     return
                 }
 
@@ -457,7 +471,7 @@ final class NoteStore {
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
                     logger.warning("transcribeNote: received empty transcription for \(id)")
-                    setNoteContent(id: id, content: "Transcription failed — tap to edit")
+                    setNoteContent(id: id, content: NoteBodyState.transcriptionFailedPlaceholder)
                     ErrorLogger.shared.log(
                         type: "transcription_empty",
                         message: "Whisper returned empty text",
@@ -504,7 +518,7 @@ final class NoteStore {
                     .map { String(format: "%.1f", Double($0) / 1_048_576.0) } ?? "?"
 
                 if error is URLError {
-                    notes[noteIndex].content = "Waiting for connection…"
+                    notes[noteIndex].content = NoteBodyState.waitingForConnectionPlaceholder
                     notes[noteIndex].updatedAt = Date()
                     ErrorLogger.shared.log(
                         type: "transcription_offline",
@@ -513,7 +527,7 @@ final class NoteStore {
                         userId: userId
                     )
                 } else {
-                    notes[noteIndex].content = "Transcription failed — tap to edit"
+                    notes[noteIndex].content = NoteBodyState.transcriptionFailedPlaceholder
                     notes[noteIndex].updatedAt = Date()
                     ErrorLogger.shared.log(
                         type: "transcription_failed",

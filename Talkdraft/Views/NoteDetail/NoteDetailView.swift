@@ -137,9 +137,6 @@ struct NoteDetailView: View {
         noteStore.generatingTitleIds.contains(noteId)
     }
 
-    private static let recordingPlaceholder = "Recording…"
-    private static let transcribingPlaceholder = "Transcribing…"
-
     init(note: Note, initialContent: String? = nil) {
         self.noteId = note.id
         self.initialNote = note
@@ -180,8 +177,12 @@ struct NoteDetailView: View {
         return URL(string: urlString)
     }
 
+    private var bodyState: NoteBodyState {
+        NoteBodyState(content: editedContent)
+    }
+
     private var isTranscribing: Bool {
-        editedContent == "Transcribing…"
+        bodyState == .transcribing
     }
 
     /// Unique speaker display names in order of first appearance.
@@ -218,11 +219,11 @@ struct NoteDetailView: View {
     }
 
     private var isTranscriptionFailed: Bool {
-        editedContent == "Transcription failed — tap to edit"
+        bodyState == .transcriptionFailed
     }
 
     private var isWaitingForConnection: Bool {
-        editedContent == "Waiting for connection…"
+        bodyState == .waitingForConnection
     }
 
     /// Returns the local audio file URL if it still exists on disk,
@@ -272,13 +273,9 @@ struct NoteDetailView: View {
             await noteStore.fetchRewrites(for: noteId)
             rewrites = noteStore.rewritesCache[noteId] ?? []
             activeRewriteId = note.activeRewriteId
-            // Sync editedContent to the active rewrite — note.content may be stale
-            if let rewriteId = activeRewriteId,
-               let rewrite = rewrites.first(where: { $0.id == rewriteId }),
-               editedContent != rewrite.content {
-                contentBaseline = rewrite.content
-                editedContent = rewrite.content
-                withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
+            let resolvedContent = noteStore.resolvedContent(for: note)
+            if editedContent != resolvedContent {
+                acceptResolvedNoteContent(resolvedContent)
             } else if contentOpacity == 0 {
                 withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
             }
@@ -399,38 +396,18 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
-                contentBaseline = newValue
-                let isPlaceholder = oldValue == "Transcribing…"
-                    || oldValue == "Waiting for connection…"
-                    || oldValue == "Transcription failed — tap to edit"
+                let oldState = NoteBodyState(content: oldValue)
+                let isPlaceholder = oldState.isTransientTranscriptionState
                 if isPlaceholder && newValue != oldValue {
-                    contentFocused = false
-                    revealContent(newValue)
+                    acceptStoreDrivenContent(newValue, revealIfNeeded: true)
                 } else {
-                    withAnimation(.easeOut(duration: 0.4)) {
-                        editedContent = newValue
-                    }
+                    acceptStoreDrivenContent(newValue)
                 }
             }
         }
         .onChange(of: note.title) { oldValue, newValue in
             if editedTitle == (oldValue ?? "") {
-                let title = newValue ?? ""
-                titleBaseline = title
-                guard !title.isEmpty else {
-                    editedTitle = title
-                    return
-                }
-                titleTypewriterTask?.cancel()
-                editedTitle = ""
-                titleTypewriterTask = Task {
-                    for char in title {
-                        guard !Task.isCancelled else { break }
-                        editedTitle.append(char)
-                        try? await Task.sleep(for: .milliseconds(25))
-                    }
-                    titleTypewriterTask = nil
-                }
+                syncStoreTitle(newValue ?? "")
             }
         }
         .onChange(of: isGeneratingTitle) { _, generating in
@@ -450,10 +427,7 @@ struct NoteDetailView: View {
         }
         .onChange(of: contentFocused) { _, focused in
             if focused, typewriterTask != nil {
-                typewriterTask?.cancel()
-                typewriterTask = nil
-                editedContent = note.content
-                contentBaseline = note.content
+                cancelContentTypewriterAndRestoreFromStore()
             }
             if !focused { isCursorReady = false }
         }
@@ -928,7 +902,7 @@ struct NoteDetailView: View {
                 Image(systemName: "wifi.slash")
                     .font(.body)
                     .foregroundStyle(.secondary)
-                Text("Waiting for connection…")
+                Text(NoteBodyState.waitingForConnectionPlaceholder)
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -984,8 +958,8 @@ struct NoteDetailView: View {
         guard let audioFileURL = localAudioFileURL else { return }
 
         // Update local UI only — transcribeNote handles server sync on success
-        editedContent = "Transcribing…"
-        noteStore.setNoteContent(id: noteId, content: "Transcribing…")
+        editedContent = NoteBodyState.transcribingPlaceholder
+        noteStore.setNoteContent(id: noteId, content: NoteBodyState.transcribingPlaceholder)
 
         let language = settingsStore.language == "auto" ? nil : settingsStore.language
         noteStore.transcribeNote(
@@ -1237,7 +1211,7 @@ struct NoteDetailView: View {
             if isAppendTranscribing {
                 ProgressView()
                     .controlSize(.small)
-                Text("Transcribing…")
+                Text(NoteBodyState.transcribingPlaceholder)
                     .font(.subheadline)
                     .fontWeight(.medium)
             } else {
@@ -1287,6 +1261,52 @@ struct NoteDetailView: View {
 
     private func markCurrentStateAsSaved() {
         syncSavedBaselines(title: editedTitle, content: editedContent)
+    }
+
+    private func acceptStoreDrivenContent(_ content: String, revealIfNeeded: Bool = false) {
+        contentBaseline = content
+        if revealIfNeeded {
+            contentFocused = false
+            revealContent(content)
+            return
+        }
+        withAnimation(.easeOut(duration: 0.4)) {
+            editedContent = content
+        }
+    }
+
+    private func acceptResolvedNoteContent(_ content: String, fadeInIfNeeded: Bool = true) {
+        contentBaseline = content
+        editedContent = content
+        if fadeInIfNeeded, contentOpacity == 0 {
+            withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
+        }
+    }
+
+    private func syncStoreTitle(_ title: String) {
+        titleBaseline = title
+        guard !title.isEmpty else {
+            editedTitle = title
+            return
+        }
+        titleTypewriterTask?.cancel()
+        editedTitle = ""
+        titleTypewriterTask = Task {
+            for char in title {
+                guard !Task.isCancelled else { break }
+                editedTitle.append(char)
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+            titleTypewriterTask = nil
+        }
+    }
+
+    private func cancelContentTypewriterAndRestoreFromStore() {
+        typewriterTask?.cancel()
+        typewriterTask = nil
+        let resolvedContent = noteStore.resolvedContent(for: note)
+        editedContent = resolvedContent
+        contentBaseline = resolvedContent
     }
 
     // MARK: - Speaker Names
@@ -1527,7 +1547,7 @@ struct NoteDetailView: View {
     }
 
     private func saveChanges() {
-        // If viewing a rewrite, save edits to the rewrite — not note.content
+        // Keep the note's displayed content canonical even while a rewrite is active.
         if let rewriteId = activeRewriteId,
            let rewrite = rewrites.first(where: { $0.id == rewriteId }),
            editedContent != rewrite.content {
@@ -1539,9 +1559,7 @@ struct NoteDetailView: View {
 
         var updated = note
         updated.title = editedTitle.isEmpty ? nil : editedTitle
-        if activeRewriteId == nil {
-            updated.content = editedContent
-        }
+        updated.content = editedContent
         updated.updatedAt = Date()
         if isInStore {
             noteStore.updateNote(updated)
@@ -1566,7 +1584,7 @@ struct NoteDetailView: View {
         let position = scrollToBottom ? editedContent.count : (contentFocused && isCursorReady ? cursorPosition : (lastKnownCursorPosition > 0 ? lastKnownCursorPosition : editedContent.count))
         appendInsertPosition = min(position, editedContent.count)
         contentFocused = false
-        insertPlaceholder(Self.recordingPlaceholder)
+        insertPlaceholder(NoteBodyState.recordingPlaceholder)
         do {
             try appendRecorder.startRecording()
             isAppendRecording = true
@@ -1599,7 +1617,7 @@ struct NoteDetailView: View {
 
     private func removePlaceholder() {
         // Remove placeholder and collapse any double spaces left behind
-        for placeholder in [Self.recordingPlaceholder, Self.transcribingPlaceholder] {
+        for placeholder in [NoteBodyState.recordingPlaceholder, NoteBodyState.transcribingPlaceholder] {
             editedContent = editedContent
                 .replacingOccurrences(of: " " + placeholder + " ", with: " ")
                 .replacingOccurrences(of: placeholder + " ", with: "")
@@ -1611,7 +1629,7 @@ struct NoteDetailView: View {
     private func replacePlaceholder(with text: String) {
         preserveScroll = true
         // Replace whichever placeholder is present
-        for placeholder in [Self.transcribingPlaceholder, Self.recordingPlaceholder] {
+        for placeholder in [NoteBodyState.transcribingPlaceholder, NoteBodyState.recordingPlaceholder] {
             let nsContent = editedContent as NSString
             let placeholderRange = nsContent.range(of: placeholder)
             guard placeholderRange.location != NSNotFound else { continue }
@@ -1639,10 +1657,10 @@ struct NoteDetailView: View {
 
         // Swap recording placeholder → transcribing placeholder
         preserveScroll = true
-        if editedContent.contains(Self.recordingPlaceholder) {
+        if editedContent.contains(NoteBodyState.recordingPlaceholder) {
             editedContent = editedContent.replacingOccurrences(
-                of: Self.recordingPlaceholder,
-                with: Self.transcribingPlaceholder
+                of: NoteBodyState.recordingPlaceholder,
+                with: NoteBodyState.transcribingPlaceholder
             )
         }
 

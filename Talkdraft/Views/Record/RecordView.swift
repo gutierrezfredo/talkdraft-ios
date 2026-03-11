@@ -261,7 +261,7 @@ struct RecordView: View {
             userId: userId,
             categoryId: categoryId,
             title: nil,
-            content: "Transcribing…",
+            content: NoteBodyState.transcribingPlaceholder,
             source: .voice,
             audioUrl: audioURL.absoluteString,
             durationSeconds: Int(duration),
