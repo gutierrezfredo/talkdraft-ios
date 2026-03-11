@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Recent Presets
 
-private struct RecentPreset: Codable, Identifiable {
+struct RecentPreset: Codable, Identifiable {
     let id: UUID
     var instructions: String
     var pinned: Bool
@@ -16,7 +16,7 @@ private struct RecentPreset: Codable, Identifiable {
     }
 }
 
-private enum RecentPresetsStore {
+enum RecentPresetsStore {
     private static let key = "recentRewritePresets"
     private static let maxRecents = 8
 

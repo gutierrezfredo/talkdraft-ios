@@ -77,7 +77,6 @@ struct NoteDetailView: View {
     @State private var transcribingPhraseIndex = 0
     @State private var transcribingIsLong = false
     @State private var whileIndex = 0
-    @State private var transcribingPulse = false
     @State private var renamingSpeaker: String? = nil
     @State private var renameText: String = ""
     @State private var rewriteSweep: CGFloat = 0
@@ -807,60 +806,19 @@ struct NoteDetailView: View {
 
     // MARK: - Transcribing Indicator
 
+    private var transcribingSubtitle: String {
+        transcribingIsLong
+            ? whilePhrases[whileIndex].subtitle
+            : transcribingPhrases[transcribingPhraseIndex]
+    }
+
     private var transcribingIndicator: some View {
-        VStack(spacing: 24) {
-            ZStack {
-                Circle()
-                    .fill(Color.brand.opacity(0.12))
-                    .frame(width: 220, height: 220)
-
-                if let player = transcribingVideoPlayer {
-                    LoopingVideoView(player: player)
-                        .frame(width: 180, height: 180)
-                } else {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 36))
-                        .foregroundStyle(Color.brand)
-                }
-            }
-            .onAppear {
-                setupTranscribingVideo()
-                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                    transcribingPulse = true
-                }
-            }
-            .onDisappear {
-                transcribingVideoPlayer?.pause()
-                transcribingPulse = false
-            }
-
-            VStack(spacing: 8) {
-                if transcribingIsLong {
-                    Text("Transcribing your note…")
-                        .font(.brandTitle2)
-                        .multilineTextAlignment(.center)
-                        .opacity(transcribingPulse ? 0.4 : 1.0)
-
-                    Text(whilePhrases[whileIndex].subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("Transcribing your note…")
-                        .font(.brandTitle2)
-                        .multilineTextAlignment(.center)
-                        .opacity(transcribingPulse ? 0.4 : 1.0)
-
-                    Text(transcribingPhrases[transcribingPhraseIndex])
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.top, 40)
+        NoteDetailTranscribingIndicatorView(
+            videoPlayer: transcribingVideoPlayer,
+            subtitle: transcribingSubtitle,
+            onAppear: setupTranscribingVideo,
+            onDisappear: { transcribingVideoPlayer?.pause() }
+        )
     }
 
     private func setupTranscribingState() {
@@ -897,61 +855,16 @@ struct NoteDetailView: View {
     // MARK: - Waiting for Connection
 
     private var waitingForConnectionView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "wifi.slash")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Text(NoteBodyState.waitingForConnectionPlaceholder)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-            .phaseAnimator([false, true]) { content, pulse in
-                content.opacity(pulse ? 0.4 : 1.0)
-            } animation: { _ in
-                .easeInOut(duration: 1.5)
-            }
-
-            Text("Will transcribe automatically when online.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
+        NoteDetailWaitingForConnectionView()
     }
 
     // MARK: - Transcription Failed
 
     private var transcriptionFailedView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Transcription failed")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            if localAudioFileURL != nil {
-                Button {
-                    retryTranscription()
-                } label: {
-                    Label("Retry Transcription", systemImage: "arrow.clockwise")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Capsule().fill(Color.brand))
-                }
-
-                Text("Your audio recording is still saved on this device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                Text("Audio file is no longer available on this device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
+        NoteDetailTranscriptionFailedView(
+            hasLocalAudio: localAudioFileURL != nil,
+            onRetry: retryTranscription
+        )
     }
 
     private func retryTranscription() {
@@ -1036,197 +949,60 @@ struct NoteDetailView: View {
     private var bottomBar: some View {
         Group {
             if isAppendRecording {
-                appendRecordingControls
+                NoteDetailAppendRecordingControls(
+                    isTranscribing: isAppendTranscribing,
+                    isPaused: appendRecorder.isPaused,
+                    remainingSeconds: max(0, 900 - Int(appendRecorder.elapsedSeconds)),
+                    onCancel: cancelAppendRecording,
+                    onRestart: restartAppendRecording,
+                    onStop: stopAppendRecording,
+                    onTogglePause: toggleAppendPause
+                )
             } else {
-                normalBottomBar
+                NoteDetailNormalBottomBar(
+                    keyboardVisible: keyboardVisible,
+                    categoryColor: category.map { Color.categoryColor(hex: $0.color) },
+                    isAppendTranscribing: isAppendTranscribing,
+                    onShowCategoryPicker: presentCategoryPicker,
+                    onShowRewriteSheet: presentRewriteSheet,
+                    onShare: presentTextShareSheet,
+                    onStartAppendRecording: { startAppendRecording() },
+                    onDismissKeyboard: { contentFocused = false }
+                )
+                .sensoryFeedback(.selection, trigger: showCategoryPicker)
             }
         }
     }
 
-    private var normalBottomBar: some View {
-        HStack(spacing: keyboardVisible ? 12 : 40) {
-            // Tag
-            Button {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    showCategoryPicker = true
-                }
-            } label: {
-                Image(systemName: "tag")
-                    .font(keyboardVisible ? .callout : .title3)
-                    .foregroundStyle(
-                        category.map { Color.categoryColor(hex: $0.color) } ?? .secondary
-                    )
-                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-            .sensoryFeedback(.selection, trigger: showCategoryPicker)
-
-            // Rewrite
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    showRewriteSheet = true
-                }
-            } label: {
-                if keyboardVisible {
-                    Image(systemName: "wand.and.stars")
-                        .font(.callout)
-                        .foregroundStyle(Color.brand)
-                        .frame(width: 40, height: 40)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                } else {
-                    Image(systemName: "wand.and.stars")
-                        .font(.title)
-                        .foregroundStyle(.white)
-                        .frame(width: 72, height: 72)
-                        .background(Circle().fill(Color.brand))
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-            }
-            .buttonStyle(.plain)
-
-            // Share
-            Button {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    textShareItem = buildShareText()
-                }
-            } label: {
-                Image(systemName: "arrowshape.turn.up.right")
-                    .font(keyboardVisible ? .callout : .title3)
-                    .foregroundStyle(.primary)
-                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            if keyboardVisible {
-                Spacer()
-
-                // Append recording
-                Button {
-                    startAppendRecording()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mic")
-                            .font(.callout)
-                        Text("Record")
-                            .font(.callout)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(Color.brand)
-                    .padding(.horizontal, 14)
-                    .frame(height: 50)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .disabled(isAppendTranscribing)
-                .opacity(isAppendTranscribing ? 0.5 : 1)
-
-                Button {
-                    contentFocused = false
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, keyboardVisible ? 16 : 20)
-        .contentShape(Rectangle())
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    // MARK: - Append Recording Controls
-
-    private var appendRecordingControls: some View {
-        HStack(spacing: 20) {
-            // Cancel
-            Button {
-                cancelAppendRecording()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            // Restart
-            Button {
-                restartAppendRecording()
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            // Stop (red square)
-            Button {
-                stopAppendRecording()
-            } label: {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(.red)
-                    .frame(width: 22, height: 22)
-                    .frame(width: 56, height: 56)
-                    .background(Circle().fill(colorScheme == .dark ? Color.darkSurface : .white))
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            // Pause / Resume
-            Button {
-                toggleAppendPause()
-            } label: {
-                Image(systemName: appendRecorder.isPaused ? "play.fill" : "pause.fill")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 20)
-        .overlay(alignment: .top) {
-            appendRecordingPill
-                .offset(y: -44)
+    private func presentAfterKeyboardDismiss(_ action: @escaping () -> Void) {
+        contentFocused = false
+        dismissKeyboard()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            action()
         }
     }
 
-    // MARK: - Append Recording Pill
-
-    private var appendRecordingPill: some View {
-        HStack(spacing: 8) {
-            if isAppendTranscribing {
-                ProgressView()
-                    .controlSize(.small)
-                Text(NoteBodyState.transcribingPlaceholder)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            } else {
-                Circle()
-                    .fill(.red)
-                    .frame(width: 8, height: 8)
-                Text(formattedDuration(max(0, 900 - Int(appendRecorder.elapsedSeconds))))
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .monospacedDigit()
-            }
+    private func presentCategoryPicker() {
+        presentAfterKeyboardDismiss {
+            showCategoryPicker = true
         }
-        .padding(.horizontal, 14)
-        .frame(height: 36)
-        .glassEffect(.regular, in: .capsule)
+    }
+
+    private func presentRewriteSheet() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        presentAfterKeyboardDismiss {
+            showRewriteSheet = true
+        }
+    }
+
+    private func presentTextShareSheet() {
+        presentAfterKeyboardDismiss {
+            textShareItem = buildShareText()
+        }
     }
 
     // MARK: - Typewriter
