@@ -4,25 +4,42 @@ import UIKit
 // MARK: - Checkbox Attachment
 
 final class CheckboxAttachment: NSTextAttachment {
+    static let trailingPadding: CGFloat = 8
+    static let hitSlop: CGFloat = 6
+
+    static func iconSize(for font: UIFont) -> CGFloat {
+        min(26, max(20, ceil(font.lineHeight - 2)))
+    }
+
+    static func attachmentHeight(for font: UIFont) -> CGFloat {
+        ceil(font.lineHeight)
+    }
+
     let isChecked: Bool
+    let iconSize: CGFloat
+    let attachmentHeight: CGFloat
     private let textFont: UIFont
 
     init(checked: Bool, font: UIFont, color: UIColor) {
         self.isChecked = checked
         self.textFont = font
+        self.iconSize = Self.iconSize(for: font)
+        self.attachmentHeight = Self.attachmentHeight(for: font)
         super.init(data: nil, ofType: nil)
         let symbolName = checked ? "checkmark.circle.fill" : "circle"
-        let config = UIImage.SymbolConfiguration(pointSize: 28, weight: checked ? .medium : .light)
+        let config = UIImage.SymbolConfiguration(pointSize: iconSize, weight: checked ? .medium : .light)
         if let symbol = UIImage(systemName: symbolName, withConfiguration: config)?
             .withTintColor(color, renderingMode: .alwaysOriginal) {
-            // Draw icon into a wider canvas (icon + 16pt trailing padding) so
-            // the layout engine reserves the correct space on the first line too.
-            // Force exactly 28×28 for the icon to ensure perfect square proportions.
-            let iconSize: CGFloat = 28
-            let paddedSize = CGSize(width: iconSize + 12, height: iconSize)
+            let paddedSize = CGSize(width: iconSize + Self.trailingPadding, height: attachmentHeight)
             let renderer = UIGraphicsImageRenderer(size: paddedSize)
             self.image = renderer.image { _ in
-                symbol.draw(in: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
+                let iconRect = CGRect(
+                    x: 0,
+                    y: floor((attachmentHeight - iconSize) / 2),
+                    width: iconSize,
+                    height: iconSize
+                )
+                symbol.draw(in: iconRect)
             }
         }
     }
@@ -32,10 +49,8 @@ final class CheckboxAttachment: NSTextAttachment {
 
     override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
         guard image != nil else { return .zero }
-        // Use a fixed size so checked/unchecked don't cause layout shifts
-        let fixedSize: CGFloat = 28
-        let yOffset = (textFont.capHeight - fixedSize) / 2
-        return CGRect(x: 0, y: yOffset, width: fixedSize + 12, height: fixedSize)
+        let yOffset = floor((textFont.capHeight - attachmentHeight) / 2)
+        return CGRect(x: 0, y: yOffset, width: iconSize + Self.trailingPadding, height: attachmentHeight)
     }
 }
 
@@ -410,7 +425,7 @@ struct ExpandingTextView: UIViewRepresentable {
             target: context.coordinator,
             action: #selector(Coordinator.handleCheckboxTap(_:))
         )
-        checkboxTap.cancelsTouchesInView = false
+        checkboxTap.cancelsTouchesInView = true
         checkboxTap.delegate = context.coordinator
         tv.addGestureRecognizer(checkboxTap)
 
@@ -582,12 +597,12 @@ struct ExpandingTextView: UIViewRepresentable {
         NoteTextMapper(attributedText: attributed).attributedRange(forPlainRange: range)
     }
 
-    fileprivate static func checkboxParagraphStyle(lineSpacing: CGFloat) -> NSMutableParagraphStyle {
+    fileprivate static func checkboxParagraphStyle(font: UIFont, lineSpacing: CGFloat) -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = lineSpacing - 2
         style.paragraphSpacingBefore = 6
         style.firstLineHeadIndent = 0
-        style.headIndent = 40
+        style.headIndent = CheckboxAttachment.iconSize(for: font) + CheckboxAttachment.trailingPadding
         return style
     }
 
@@ -691,7 +706,7 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         // Replace checkbox chars with attachments (reverse order to preserve offsets)
-        let checkboxParaStyle = Self.checkboxParagraphStyle(lineSpacing: lineSpacing)
+        let checkboxParaStyle = Self.checkboxParagraphStyle(font: font, lineSpacing: lineSpacing)
         for r in replacements.reversed() {
             let attachStr = NSMutableAttributedString(attachment: r.attachment)
             attachStr.addAttribute(.paragraphStyle, value: checkboxParaStyle, range: NSRange(location: 0, length: attachStr.length))
@@ -783,7 +798,10 @@ struct ExpandingTextView: UIViewRepresentable {
         private weak var textView: UITextView?
         private var displayLink: CADisplayLink?
         private var pendingTypingAttributesSync: DispatchWorkItem?
+        private var pendingCursorVisibilitySync: DispatchWorkItem?
+        private var pendingScrollOffsetRestore: DispatchWorkItem?
         private var pendingCheckboxTapSelection: NSRange?
+        private var lastTextChangeSelection: NSRange?
         private var pulseStart: CFTimeInterval = 0
         private var isAnimatingAttributes = false
         var preserveScrollOnNextUpdate = false
@@ -796,8 +814,14 @@ struct ExpandingTextView: UIViewRepresentable {
             super.init()
             NotificationCenter.default.addObserver(
                 self,
-                selector: #selector(keyboardDidShow),
-                name: UIResponder.keyboardDidShowNotification,
+                selector: #selector(keyboardWillChangeFrame),
+                name: UIResponder.keyboardWillChangeFrameNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardWillHide),
+                name: UIResponder.keyboardWillHideNotification,
                 object: nil
             )
         }
@@ -806,14 +830,31 @@ struct ExpandingTextView: UIViewRepresentable {
             NotificationCenter.default.removeObserver(self)
         }
 
-        @objc private func keyboardDidShow(_ notification: Notification) {
+        @objc private func keyboardWillChangeFrame(_ notification: Notification) {
             guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-            lastKnownKeyboardHeight = frame.height
-            guard let tv = textView, tv.isFirstResponder else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                guard let tv = self?.textView else { return }
-                self?.scrollCursorVisible(in: tv)
+            lastKnownKeyboardFrame = frame
+            if let window = textView?.window {
+                let frameInWindow = window.convert(frame, from: nil)
+                lastKnownKeyboardHeight = max(0, window.bounds.intersection(frameInWindow).height)
+            } else {
+                lastKnownKeyboardHeight = frame.height
             }
+            guard let tv = textView, tv.isFirstResponder else { return }
+            let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0.25
+            let curveRaw = notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 0
+            let options = UIView.AnimationOptions(rawValue: curveRaw << 16).union([.beginFromCurrentState, .allowUserInteraction])
+            scheduleScrollCursorVisible(
+                in: tv,
+                animated: false,
+                delay: 0,
+                animationDuration: duration,
+                animationOptions: options
+            )
+        }
+
+        @objc private func keyboardWillHide(_ notification: Notification) {
+            lastKnownKeyboardHeight = 0
+            lastKnownKeyboardFrame = .null
         }
 
         func invalidateDisplayLink() {
@@ -972,8 +1013,7 @@ struct ExpandingTextView: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
         ) -> Bool {
-            // Allow UITextView's built-in recognizers (cursor, selection) to fire alongside ours.
-            return true
+            false
         }
 
         /// Toggles the checkbox at the given plain-text index. Called from handleCheckboxTap.
@@ -993,23 +1033,23 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         /// Returns the plain-text index of the checkbox character if the touch point is within
-        /// the checkbox icon tap zone on a checkbox line, else nil.
+        /// the checkbox icon hit rect on a checkbox line, else nil.
         /// Uses NSLayoutManager exclusively — no UITextInput methods — so it is safe to call
         /// from touchesBegan without disturbing UITextInteraction's cursor placement state.
         func checkboxIndex(near point: CGPoint, in tv: UITextView) -> Int? {
-            // Only trigger within the left tap zone (checkbox icon area)
-            let maxTapX: CGFloat = tv.textContainerInset.left + 40
-            guard point.x <= maxTapX else { return nil }
+            checkboxHit(near: point, in: tv)?.plainIndex
+        }
 
-            // Convert view point → layout manager coordinate space
+        private func checkboxHit(near point: CGPoint, in tv: UITextView) -> (plainIndex: Int, iconRect: CGRect)? {
             let lm = tv.layoutManager
             let tc = tv.textContainer
+            lm.ensureLayout(for: tc)
+
             let layoutPoint = CGPoint(
                 x: point.x - tv.textContainerInset.left,
                 y: point.y - tv.textContainerInset.top
             )
 
-            // characterIndex gives the nearest character — pure geometry, no UITextInput involved
             var fraction: CGFloat = 0
             let charIdx = lm.characterIndex(for: layoutPoint, in: tc, fractionOfDistanceBetweenInsertionPoints: &fraction)
 
@@ -1025,20 +1065,26 @@ struct ExpandingTextView: UIViewRepresentable {
             let firstChar = nsText.character(at: lineRange.location)
             guard firstChar == 0x2610 || firstChar == 0x2611 else { return nil }
 
-            // Restrict to the first visual line of the checkbox item so tapping a wrapped
-            // continuation line doesn't toggle. Get the line fragment rect via NSLayoutManager.
             let attrCheckboxOffset = mapper.attributedOffset(forPlainOffset: lineRange.location)
             guard attrCheckboxOffset < (tv.attributedText?.length ?? 0) else { return nil }
+            guard let attachment = tv.attributedText?.attribute(.attachment, at: attrCheckboxOffset, effectiveRange: nil) as? CheckboxAttachment else {
+                return nil
+            }
 
-            let glyphAtCheckbox = lm.glyphIndexForCharacter(at: attrCheckboxOffset)
-            let lineFragRect = lm.lineFragmentRect(forGlyphAt: glyphAtCheckbox, effectiveRange: nil)
-            let lineRectInView = lineFragRect.offsetBy(
-                dx: tv.textContainerInset.left,
-                dy: tv.textContainerInset.top
-            )
-            guard point.y >= lineRectInView.minY && point.y <= lineRectInView.maxY else { return nil }
+            let glyphRange = lm.glyphRange(forCharacterRange: NSRange(location: attrCheckboxOffset, length: 1), actualCharacterRange: nil)
+            guard glyphRange.length > 0 else { return nil }
 
-            return lineRange.location
+            let glyphRect = lm.boundingRect(forGlyphRange: glyphRange, in: tc)
+            let lineRect = lm.lineFragmentUsedRect(forGlyphAt: glyphRange.location, effectiveRange: nil, withoutAdditionalLayout: true)
+            let iconRect = CGRect(
+                x: glyphRect.minX + tv.textContainerInset.left,
+                y: lineRect.midY - (attachment.iconSize / 2) + tv.textContainerInset.top,
+                width: attachment.iconSize,
+                height: attachment.iconSize
+            ).insetBy(dx: -CheckboxAttachment.hitSlop, dy: -CheckboxAttachment.hitSlop)
+
+            guard iconRect.contains(point) else { return nil }
+            return (plainIndex: lineRange.location, iconRect: iconRect)
         }
 
         /// Returns the speaker name if the touch point lands on a speaker name line, else nil.
@@ -1084,7 +1130,12 @@ struct ExpandingTextView: UIViewRepresentable {
             case .reject:
                 return false
             case let .apply(updatedText, selectedPlainRange):
-                applyPlainTextEdit(updatedText: updatedText, selectedPlainRange: selectedPlainRange, in: tv)
+                applyPlainTextEdit(
+                    updatedText: updatedText,
+                    selectedPlainRange: selectedPlainRange,
+                    in: tv,
+                    ensureCursorVisible: text == "\n"
+                )
                 return false
             }
         }
@@ -1093,7 +1144,8 @@ struct ExpandingTextView: UIViewRepresentable {
             updatedText: String,
             selectedPlainRange: NSRange,
             in tv: UITextView,
-            preserveScroll: Bool = false
+            preserveScroll: Bool = false,
+            ensureCursorVisible: Bool = false
         ) {
             preserveScrollOnNextUpdate = preserveScroll
             isAnimatingAttributes = true
@@ -1106,6 +1158,16 @@ struct ExpandingTextView: UIViewRepresentable {
             }
             isAnimatingAttributes = false
             syncTypingAttributesToCurrentLine(tv)
+            if ensureCursorVisible, tv.isFirstResponder {
+                lastTextChangeSelection = tv.selectedRange
+                scheduleScrollCursorVisible(
+                    in: tv,
+                    animated: false,
+                    delay: 0.02,
+                    animationDuration: 0.18,
+                    animationOptions: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+                )
+            }
         }
 
         func textViewDidChange(_ tv: UITextView) {
@@ -1121,23 +1183,27 @@ struct ExpandingTextView: UIViewRepresentable {
             // textViewDidChangeSelection prevents iOS 26 from snapping the cursor to a
             // word boundary when typingAttributes is mutated during a selection change.
             syncTypingAttributesToCurrentLine(tv)
-            // Defer 50 ms so SwiftUI has finished laying out the expanded text view
-            // and the outer UIScrollView's contentSize is up to date before we scroll.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak tv] in
-                guard let self, let tv else { return }
-                self.scrollCursorVisible(in: tv, animated: false)
+            lastTextChangeSelection = tv.selectedRange
+            if let savedOffset = enclosingScrollView(for: tv)?.contentOffset {
+                scheduleScrollOffsetRestore(in: tv, savedOffset: savedOffset, delays: [0, 0.02])
             }
+            scheduleScrollCursorVisible(in: tv, animated: false, delay: 0.05)
         }
 
-        func scrollCursorVisible(in tv: UITextView, animated: Bool = true) {
-            guard let cursorPosition = tv.position(from: tv.beginningOfDocument, offset: tv.selectedRange.location),
-                  let caretRange = tv.textRange(from: cursorPosition, to: cursorPosition)
-            else { return }
+        func scrollCursorVisible(
+            in tv: UITextView,
+            animated: Bool = true,
+            animationDuration: TimeInterval? = nil,
+            animationOptions: UIView.AnimationOptions = []
+        ) {
+            tv.layoutManager.ensureLayout(for: tv.textContainer)
+            guard let cursorPosition = tv.position(from: tv.beginningOfDocument, offset: tv.selectedRange.location) else {
+                return
+            }
 
-            let caretRect = tv.firstRect(for: caretRange)
+            let caretRect = tv.caretRect(for: cursorPosition)
             guard !caretRect.isNull && !caretRect.isInfinite else { return }
 
-            // Find the enclosing UIScrollView (SwiftUI's ScrollView)
             var scrollView: UIScrollView?
             var current: UIView? = tv.superview
             while let view = current {
@@ -1149,21 +1215,43 @@ struct ExpandingTextView: UIViewRepresentable {
             }
             guard let scrollView, let window = tv.window else { return }
 
-            // Work in window coordinates so the result is correct regardless of
-            // whether SwiftUI has updated UITextView's frame height yet.
+            scrollView.layoutIfNeeded()
+            tv.layoutIfNeeded()
+
             let caretInWindow = tv.convert(caretRect, to: window)
-            let screenHeight = window.bounds.height
-            let keyboardHeight = max(scrollView.adjustedContentInset.bottom, lastKnownKeyboardHeight)
-            let toolbarHeight: CGFloat = 88
-            let visibleBottom = screenHeight - keyboardHeight - toolbarHeight
+            let scrollFrameInWindow = scrollView.convert(scrollView.bounds, to: window)
+            let keyboardFrameInWindow = lastKnownKeyboardFrame.isNull
+                ? CGRect(x: 0, y: window.bounds.maxY, width: 0, height: 0)
+                : window.convert(lastKnownKeyboardFrame, from: nil)
+            let keyboardOverlap = max(0, scrollFrameInWindow.maxY - keyboardFrameInWindow.minY)
+            let editorToolbarClearance: CGFloat = tv.isFirstResponder ? 108 : 24
+            let visibleBottom = scrollFrameInWindow.maxY - keyboardOverlap - editorToolbarClearance
+            let visibleTop = scrollFrameInWindow.minY + 12
 
-            let caretBottom = caretInWindow.maxY
-            guard caretBottom > visibleBottom else { return }
+            let targetOffset: CGPoint?
+            if caretInWindow.maxY > visibleBottom {
+                let scrollAmount = caretInWindow.maxY - visibleBottom + 20
+                targetOffset = CGPoint(x: scrollView.contentOffset.x, y: scrollView.contentOffset.y + scrollAmount)
+            } else if caretInWindow.minY < visibleTop {
+                let scrollAmount = visibleTop - caretInWindow.minY + 12
+                targetOffset = CGPoint(
+                    x: scrollView.contentOffset.x,
+                    y: max(-scrollView.adjustedContentInset.top, scrollView.contentOffset.y - scrollAmount)
+                )
+            } else {
+                targetOffset = nil
+            }
 
-            let scrollAmount = caretBottom - visibleBottom + 20 // 20 pt breathing room
-            let newOffset = CGPoint(x: scrollView.contentOffset.x,
-                                    y: scrollView.contentOffset.y + scrollAmount)
-            scrollView.setContentOffset(newOffset, animated: animated)
+            guard let newOffset = targetOffset, abs(newOffset.y - scrollView.contentOffset.y) > 0.5 else { return }
+
+            if let animationDuration, animationDuration > 0 {
+                UIView.animate(withDuration: animationDuration, delay: 0, options: animationOptions) {
+                    scrollView.contentOffset = newOffset
+                    scrollView.layoutIfNeeded()
+                }
+            } else {
+                scrollView.setContentOffset(newOffset, animated: animated)
+            }
         }
 
         func textViewDidChangeSelection(_ tv: UITextView) {
@@ -1181,6 +1269,13 @@ struct ExpandingTextView: UIViewRepresentable {
             let mapper = NoteTextMapper(attributedText: tv.attributedText)
             parent.cursorPosition = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
             scheduleTypingAttributesSync(for: tv)
+            guard tv.isFirstResponder else { return }
+            if lastTextChangeSelection == tv.selectedRange {
+                lastTextChangeSelection = nil
+                return
+            }
+            lastTextChangeSelection = nil
+            scheduleScrollCursorVisible(in: tv, animated: true, delay: 0.02)
         }
 
         private func nudgeCursorOffCheckbox(_ tv: UITextView) {
@@ -1235,7 +1330,7 @@ struct ExpandingTextView: UIViewRepresentable {
                     bulletStyle.lineSpacing = parent.lineSpacing
                     bulletStyle.firstLineHeadIndent = 0
                     bulletStyle.headIndent = bulletIndent
-                    let checkboxStyle = ExpandingTextView.checkboxParagraphStyle(lineSpacing: parent.lineSpacing)
+                    let checkboxStyle = ExpandingTextView.checkboxParagraphStyle(font: parent.font, lineSpacing: parent.lineSpacing)
                     let lineStart = nsText.character(at: lineRange.location)
                     attrs = parent.typingAttributes(
                         forLineStart: lineStart,
@@ -1260,6 +1355,69 @@ struct ExpandingTextView: UIViewRepresentable {
             DispatchQueue.main.async(execute: workItem)
         }
 
+        private func scheduleScrollCursorVisible(
+            in tv: UITextView,
+            animated: Bool,
+            delay: TimeInterval,
+            animationDuration: TimeInterval? = nil,
+            animationOptions: UIView.AnimationOptions = []
+        ) {
+            pendingCursorVisibilitySync?.cancel()
+            let expectedSelection = tv.selectedRange
+            let workItem = DispatchWorkItem { [weak self, weak tv] in
+                guard let self, let tv, !self.isAnimatingAttributes else { return }
+                guard tv.selectedRange == expectedSelection else { return }
+                self.scrollCursorVisible(
+                    in: tv,
+                    animated: animated,
+                    animationDuration: animationDuration,
+                    animationOptions: animationOptions
+                )
+            }
+            pendingCursorVisibilitySync = workItem
+            if delay == 0 {
+                DispatchQueue.main.async(execute: workItem)
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            }
+        }
+
+        private func scheduleScrollOffsetRestore(in tv: UITextView, savedOffset: CGPoint, delays: [TimeInterval]) {
+            pendingScrollOffsetRestore?.cancel()
+            let expectedSelection = tv.selectedRange
+            for delay in delays {
+                let workItem = DispatchWorkItem { [weak self, weak tv] in
+                    guard let self, let tv, !self.isAnimatingAttributes else { return }
+                    guard tv.selectedRange == expectedSelection else { return }
+                    guard let scrollView = self.enclosingScrollView(for: tv) else { return }
+                    let currentOffset = scrollView.contentOffset
+                    guard currentOffset.y + 24 < savedOffset.y else { return }
+                    UIView.performWithoutAnimation {
+                        scrollView.layer.removeAllAnimations()
+                        scrollView.setContentOffset(CGPoint(x: currentOffset.x, y: savedOffset.y), animated: false)
+                        scrollView.layoutIfNeeded()
+                    }
+                }
+                pendingScrollOffsetRestore = workItem
+                if delay == 0 {
+                    DispatchQueue.main.async(execute: workItem)
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+                }
+            }
+        }
+
+        private func enclosingScrollView(for view: UIView) -> UIScrollView? {
+            var current: UIView? = view.superview
+            while let candidate = current {
+                if let scrollView = candidate as? UIScrollView, scrollView !== view {
+                    return scrollView
+                }
+                current = candidate.superview
+            }
+            return nil
+        }
+
         func textViewDidBeginEditing(_ tv: UITextView) {
             parent.isFocused = true
             textView = tv
@@ -1272,5 +1430,6 @@ struct ExpandingTextView: UIViewRepresentable {
         // MARK: - Keyboard Observer
 
         private var lastKnownKeyboardHeight: CGFloat = 0
+        private var lastKnownKeyboardFrame: CGRect = .null
     }
 }
