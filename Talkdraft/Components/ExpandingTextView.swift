@@ -31,7 +31,7 @@ final class CheckboxAttachment: NSTextAttachment {
     required init?(coder: NSCoder) { fatalError() }
 
     override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
-        guard let image else { return .zero }
+        guard image != nil else { return .zero }
         // Use a fixed size so checked/unchecked don't cause layout shifts
         let fixedSize: CGFloat = 28
         let yOffset = (textFont.capHeight - fixedSize) / 2
@@ -48,13 +48,29 @@ final class CheckboxTextView: UITextView {
     /// making this view first responder (which would show the keyboard).
     var suppressBecomeFirstResponder = false
 
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        configureTraitObservation()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureTraitObservation()
+    }
+
     override func becomeFirstResponder() -> Bool {
         guard !suppressBecomeFirstResponder else { return false }
         return super.becomeFirstResponder()
     }
 
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
+    private func configureTraitObservation() {
+        updateKeyboardAppearance()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+            self.updateKeyboardAppearance()
+        }
+    }
+
+    private func updateKeyboardAppearance() {
         keyboardAppearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
         if isFirstResponder { reloadInputViews() }
     }
@@ -365,7 +381,7 @@ struct ExpandingTextView: UIViewRepresentable {
                 // Read traitCollection directly at call time — more reliable than the
                 // SwiftUI colorScheme captured earlier, preventing a keyboard color flash.
                 tv.keyboardAppearance = tv.traitCollection.userInterfaceStyle == .dark ? .dark : .light
-                tv.becomeFirstResponder()
+                _ = tv.becomeFirstResponder()
                 // Do NOT set selectedRange here — let moveCursorToEnd handle it when needed,
                 // and let UITextView's own touch handling place the cursor for user taps.
             }
@@ -404,7 +420,8 @@ struct ExpandingTextView: UIViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: CheckboxTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? UIScreen.main.bounds.width
+        let fallbackWidth = uiView.window?.windowScene?.screen.bounds.width ?? uiView.bounds.width
+        let width = proposal.width ?? max(fallbackWidth, 1)
         let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         return CGSize(width: width, height: max(size.height, 40))
     }
@@ -688,7 +705,9 @@ struct ExpandingTextView: UIViewRepresentable {
             NotificationCenter.default.removeObserver(self)
         }
 
-        @objc private func keyboardDidShow() {
+        @objc private func keyboardDidShow(_ notification: Notification) {
+            guard let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            lastKnownKeyboardHeight = frame.height
             guard let tv = textView, tv.isFirstResponder else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                 guard let tv = self?.textView else { return }
@@ -1109,37 +1128,14 @@ struct ExpandingTextView: UIViewRepresentable {
         func textViewDidBeginEditing(_ tv: UITextView) {
             parent.isFocused = true
             textView = tv
-            startKeyboardObserver(for: tv)
         }
 
         func textViewDidEndEditing(_ tv: UITextView) {
             parent.isFocused = false
-            stopKeyboardObserver()
         }
 
         // MARK: - Keyboard Observer
 
-        private var keyboardObserver: NSObjectProtocol?
         private var lastKnownKeyboardHeight: CGFloat = 0
-
-        private func startKeyboardObserver(for tv: UITextView) {
-            stopKeyboardObserver()
-            keyboardObserver = NotificationCenter.default.addObserver(
-                forName: UIResponder.keyboardDidShowNotification,
-                object: nil,
-                queue: .main
-            ) { [weak tv] notification in
-                guard let tv, let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-                self.lastKnownKeyboardHeight = frame.height
-                self.scrollCursorVisible(in: tv)
-            }
-        }
-
-        private func stopKeyboardObserver() {
-            if let observer = keyboardObserver {
-                NotificationCenter.default.removeObserver(observer)
-                keyboardObserver = nil
-            }
-        }
     }
 }
