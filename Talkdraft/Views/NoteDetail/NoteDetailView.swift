@@ -55,6 +55,7 @@ struct NoteDetailView: View {
     @State private var moveCursorToEnd = false
     @FocusState private var titleFocused: Bool
     @State private var contentOpacity: Double = 1
+    @State private var titleBaseline: String = ""
     @State private var contentBaseline: String = ""
     @State private var errorMessage: String?
     @State private var isDownloadingAudio = false
@@ -139,9 +140,6 @@ struct NoteDetailView: View {
     private static let recordingPlaceholder = "Recording…"
     private static let transcribingPlaceholder = "Transcribing…"
 
-    private let initialEditedTitle: String
-    private let initialEditedContent: String
-
     init(note: Note, initialContent: String? = nil) {
         self.noteId = note.id
         self.initialNote = note
@@ -153,10 +151,9 @@ struct NoteDetailView: View {
         self._editedTitle = State(initialValue: title)
         self._editedContent = State(initialValue: content)
         self._contentFocused = State(initialValue: false)
+        self._titleBaseline = State(initialValue: title)
         self._contentBaseline = State(initialValue: content)
         self._contentOpacity = State(initialValue: willSwitch ? 0 : 1)
-        self.initialEditedTitle = title
-        self.initialEditedContent = content
     }
 
     private var note: Note {
@@ -171,7 +168,7 @@ struct NoteDetailView: View {
         typewriterTask == nil
             && titleTypewriterTask == nil
             && !isRewriting
-            && (editedTitle != initialEditedTitle || editedContent != contentBaseline)
+            && (editedTitle != titleBaseline || editedContent != contentBaseline)
     }
 
     private var category: Category? {
@@ -402,6 +399,7 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
+                contentBaseline = newValue
                 let isPlaceholder = oldValue == "Transcribing…"
                     || oldValue == "Waiting for connection…"
                     || oldValue == "Transcription failed — tap to edit"
@@ -417,8 +415,10 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.title) { oldValue, newValue in
             if editedTitle == (oldValue ?? "") {
-                guard let title = newValue, !title.isEmpty else {
-                    editedTitle = newValue ?? ""
+                let title = newValue ?? ""
+                titleBaseline = title
+                guard !title.isEmpty else {
+                    editedTitle = title
                     return
                 }
                 titleTypewriterTask?.cancel()
@@ -453,6 +453,7 @@ struct NoteDetailView: View {
                 typewriterTask?.cancel()
                 typewriterTask = nil
                 editedContent = note.content
+                contentBaseline = note.content
             }
             if !focused { isCursorReady = false }
         }
@@ -1275,6 +1276,19 @@ struct NoteDetailView: View {
         }
     }
 
+    private func syncSavedBaselines(title: String? = nil, content: String? = nil) {
+        if let title {
+            titleBaseline = title
+        }
+        if let content {
+            contentBaseline = content
+        }
+    }
+
+    private func markCurrentStateAsSaved() {
+        syncSavedBaselines(title: editedTitle, content: editedContent)
+    }
+
     // MARK: - Speaker Names
 
     private func renameSpeaker(key: String, newName: String) {
@@ -1428,6 +1442,7 @@ struct NoteDetailView: View {
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
+                markCurrentStateAsSaved()
 
                 // Auto-save custom instructions as a recent preset
                 if tone == nil, let instructions, !instructions.isEmpty {
@@ -1456,6 +1471,7 @@ struct NoteDetailView: View {
         updated.activeRewriteId = rewrite.id
         updated.updatedAt = Date()
         noteStore.updateNote(updated)
+        syncSavedBaselines(content: rewrite.content)
         withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
         Task {
             try? await Task.sleep(for: .milliseconds(50))
@@ -1493,6 +1509,7 @@ struct NoteDetailView: View {
         updated.activeRewriteId = nil
         updated.updatedAt = Date()
         noteStore.updateNote(updated)
+        syncSavedBaselines(content: original)
         withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
         Task {
             try? await Task.sleep(for: .milliseconds(50))
@@ -1533,6 +1550,7 @@ struct NoteDetailView: View {
                 noteStore.addNote(updated)
             }
         }
+        markCurrentStateAsSaved()
     }
 
     private func buildShareText() -> String {
@@ -1663,6 +1681,7 @@ struct NoteDetailView: View {
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
+                markCurrentStateAsSaved()
             } catch {
                 removePlaceholder()
                 errorMessage = "Transcription failed: \(error.localizedDescription)"

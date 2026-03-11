@@ -156,7 +156,7 @@ struct ExpandingTextView: UIViewRepresentable {
         context.coordinator.needsAttributeRefresh = false
         let currentPlain = Self.extractPlainText(from: tv)
         if currentPlain != text || needsRefresh {
-            let selected = tv.selectedRange
+            let selectedPlainRange = Self.plainRange(forAttributedRange: tv.selectedRange, in: tv.attributedText)
             let shouldPreserveScroll = context.coordinator.preserveScrollOnNextUpdate || preserveScroll
             context.coordinator.preserveScrollOnNextUpdate = false
             if preserveScroll {
@@ -178,27 +178,8 @@ struct ExpandingTextView: UIViewRepresentable {
                 }
             }
 
-            // Count literal (non-attachment) ☐/☑ chars before cursor.
-            // applyTextAttributes converts each "☐ " (2 chars) → attachment (1 char),
-            // shifting positions after them by -1.
-            var literalCheckboxesBefore = 0
-            if let oldAttr = tv.attributedText {
-                let limit = min(selected.location, oldAttr.length)
-                if limit > 0 {
-                    oldAttr.enumerateAttributes(in: NSRange(location: 0, length: limit)) { attrs, range, _ in
-                        guard !(attrs[.attachment] is CheckboxAttachment) else { return }
-                        let sub = (oldAttr.string as NSString).substring(with: range)
-                        for scalar in sub.unicodeScalars where scalar.value == 0x2610 || scalar.value == 0x2611 {
-                            literalCheckboxesBefore += 1
-                        }
-                    }
-                }
-            }
-
             applyTextAttributes(tv)
-            let len = tv.attributedText?.length ?? 0
-            let adjustedLoc = max(0, selected.location - literalCheckboxesBefore)
-            tv.selectedRange = NSRange(location: min(adjustedLoc, len), length: 0)
+            tv.selectedRange = Self.attributedRange(forPlainRange: selectedPlainRange, in: tv.attributedText)
             // Re-sync typingAttributes after programmatic cursor placement — setting
             // tv.selectedRange causes UIKit to reset typingAttributes to the adjacent
             // character's attributes, which for checkbox attachments lacks .foregroundColor.
@@ -289,6 +270,65 @@ struct ExpandingTextView: UIViewRepresentable {
             }
         }
         return result
+    }
+
+    fileprivate static func plainOffset(forAttributedOffset attributedOffset: Int, in attributed: NSAttributedString?) -> Int {
+        guard let attributed else { return max(0, attributedOffset) }
+        let boundedOffset = min(max(0, attributedOffset), attributed.length)
+        guard boundedOffset > 0 else { return 0 }
+
+        var plainOffset = 0
+        attributed.enumerateAttributes(in: NSRange(location: 0, length: boundedOffset)) { attrs, range, _ in
+            plainOffset += (attrs[.attachment] is CheckboxAttachment) ? 2 : range.length
+        }
+        return plainOffset
+    }
+
+    fileprivate static func plainRange(forAttributedRange range: NSRange, in attributed: NSAttributedString?) -> NSRange {
+        let start = plainOffset(forAttributedOffset: range.location, in: attributed)
+        let end = plainOffset(forAttributedOffset: range.location + range.length, in: attributed)
+        return NSRange(location: start, length: max(0, end - start))
+    }
+
+    fileprivate static func attributedOffset(forPlainOffset plainOffset: Int, in attributed: NSAttributedString?) -> Int {
+        guard let attributed else { return max(0, plainOffset) }
+        let target = max(0, plainOffset)
+        guard attributed.length > 0, target > 0 else { return 0 }
+
+        var runningPlainOffset = 0
+        var resolvedOffset = attributed.length
+        attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, range, stop in
+            let plainLength = (attrs[.attachment] is CheckboxAttachment) ? 2 : range.length
+            let nextPlainOffset = runningPlainOffset + plainLength
+            guard target <= nextPlainOffset else {
+                runningPlainOffset = nextPlainOffset
+                return
+            }
+
+            if attrs[.attachment] is CheckboxAttachment {
+                resolvedOffset = range.location + (target <= runningPlainOffset ? 0 : range.length)
+            } else {
+                resolvedOffset = range.location + min(range.length, target - runningPlainOffset)
+            }
+            stop.pointee = true
+        }
+
+        return min(max(0, resolvedOffset), attributed.length)
+    }
+
+    fileprivate static func attributedRange(forPlainRange range: NSRange, in attributed: NSAttributedString?) -> NSRange {
+        let start = attributedOffset(forPlainOffset: range.location, in: attributed)
+        let end = attributedOffset(forPlainOffset: range.location + range.length, in: attributed)
+        return NSRange(location: start, length: max(0, end - start))
+    }
+
+    fileprivate static func checkboxParagraphStyle(lineSpacing: CGFloat) -> NSMutableParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = lineSpacing - 2
+        style.paragraphSpacingBefore = 6
+        style.firstLineHeadIndent = 0
+        style.headIndent = 40
+        return style
     }
 
     // MARK: - Apply styled attributes (☐/☑ → SF Symbol attachments)
@@ -391,11 +431,7 @@ struct ExpandingTextView: UIViewRepresentable {
         }
 
         // Replace checkbox chars with attachments (reverse order to preserve offsets)
-        let checkboxParaStyle = NSMutableParagraphStyle()
-        checkboxParaStyle.lineSpacing = lineSpacing - 2
-        checkboxParaStyle.paragraphSpacingBefore = 6
-        checkboxParaStyle.firstLineHeadIndent = 0
-        checkboxParaStyle.headIndent = 40
+        let checkboxParaStyle = Self.checkboxParagraphStyle(lineSpacing: lineSpacing)
         for r in replacements.reversed() {
             let attachStr = NSMutableAttributedString(attachment: r.attachment)
             attachStr.addAttribute(.paragraphStyle, value: checkboxParaStyle, range: NSRange(location: 0, length: attachStr.length))
@@ -426,24 +462,37 @@ struct ExpandingTextView: UIViewRepresentable {
         // Reset typingAttributes after setting attributedText — UIKit resets them to the
         // attributes at the cursor position, which for checkbox attachments lacks .foregroundColor.
         // Use cursor-aware attributes so bullet lines keep their headIndent while typing.
-        tv.typingAttributes = typingAttributesForCurrentLine(in: tv, baseAttributes: attributes, bulletParaStyle: bulletParaStyle)
+        tv.typingAttributes = typingAttributesForCurrentLine(
+            in: tv,
+            baseAttributes: attributes,
+            bulletParaStyle: bulletParaStyle,
+            checkboxParaStyle: checkboxParaStyle
+        )
     }
 
     /// Returns the correct typingAttributes for the line the cursor is currently on.
     func typingAttributesForCurrentLine(
         in tv: UITextView,
         baseAttributes: [NSAttributedString.Key: Any],
-        bulletParaStyle: NSParagraphStyle
+        bulletParaStyle: NSParagraphStyle,
+        checkboxParaStyle: NSParagraphStyle
     ) -> [NSAttributedString.Key: Any] {
         let nsText = text as NSString
         guard nsText.length > 0 else { return baseAttributes }
-        let cursorLoc = tv.selectedRange.location
+        let cursorLoc = Self.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
         let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
         let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
-        guard lineRange.location < nsText.length,
-              nsText.character(at: lineRange.location) == 0x2022 else { return baseAttributes }
+        guard lineRange.location < nsText.length else { return baseAttributes }
+        let lineStart = nsText.character(at: lineRange.location)
         var attrs = baseAttributes
-        attrs[.paragraphStyle] = bulletParaStyle
+        if lineStart == 0x2022 {
+            attrs[.paragraphStyle] = bulletParaStyle
+            return attrs
+        }
+        if lineStart == 0x2610 || lineStart == 0x2611 {
+            attrs[.paragraphStyle] = checkboxParaStyle
+            return attrs
+        }
         return attrs
     }
 
@@ -555,7 +604,8 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func showHighlightOverlay(range: NSRange, in tv: UITextView) {
             DispatchQueue.main.async { [weak self] in
-                self?.addHighlightViews(range: range, in: tv)
+                let attributedRange = ExpandingTextView.attributedRange(forPlainRange: range, in: tv.attributedText)
+                self?.addHighlightViews(range: attributedRange, in: tv)
             }
         }
 
@@ -638,20 +688,19 @@ struct ExpandingTextView: UIViewRepresentable {
         /// Toggles the checkbox at the given plain-text index. Called from handleCheckboxTap.
         func toggleCheckbox(at plainIndex: Int, in tv: CheckboxTextView) {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            var chars = Array(parent.text)
-            guard plainIndex < chars.count else { return }
-            chars[plainIndex] = (chars[plainIndex] == "☑") ? "☐" : "☑"
+            let nsText = parent.text as NSString
+            guard plainIndex < nsText.length else { return }
+            let currentChar = nsText.character(at: plainIndex)
+            let replacement = currentChar == 0x2611 ? "☐" : "☑"
+            let updatedText = nsText.replacingCharacters(in: NSRange(location: plainIndex, length: 1), with: replacement)
             preserveScrollOnNextUpdate = true
-            let savedSelection = tv.selectedRange
+            let savedSelection = ExpandingTextView.plainRange(forAttributedRange: tv.selectedRange, in: tv.attributedText)
             isAnimatingAttributes = true
-            parent.text = String(chars)
+            parent.text = updatedText
             parent.applyTextAttributes(tv)
-            let len = tv.attributedText?.length ?? 0
-            if savedSelection.location + savedSelection.length <= len {
-                tv.selectedRange = savedSelection
-            }
+            tv.selectedRange = ExpandingTextView.attributedRange(forPlainRange: savedSelection, in: tv.attributedText)
             isAnimatingAttributes = false
-            parent.onCheckboxToggle?(String(chars))
+            parent.onCheckboxToggle?(updatedText)
         }
 
         /// Returns the plain-text index of the checkbox character if the touch point is within
@@ -675,15 +724,7 @@ struct ExpandingTextView: UIViewRepresentable {
             var fraction: CGFloat = 0
             let charIdx = lm.characterIndex(for: layoutPoint, in: tc, fractionOfDistanceBetweenInsertionPoints: &fraction)
 
-            // charIdx is attributed-text offset. Convert to plain-text offset by counting
-            // CheckboxAttachments before it (each replaces 2 plain chars with 1 attributed char).
-            var checkboxCount = 0
-            if let attributed = tv.attributedText, charIdx <= attributed.length {
-                attributed.enumerateAttributes(in: NSRange(location: 0, length: min(charIdx, attributed.length))) { attrs, _, _ in
-                    if attrs[.attachment] is CheckboxAttachment { checkboxCount += 1 }
-                }
-            }
-            let plainOffset = charIdx + checkboxCount
+            let plainOffset = ExpandingTextView.plainOffset(forAttributedOffset: charIdx, in: tv.attributedText)
 
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
@@ -696,14 +737,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
             // Restrict to the first visual line of the checkbox item so tapping a wrapped
             // continuation line doesn't toggle. Get the line fragment rect via NSLayoutManager.
-            var checkboxesBeforeLine = 0
-            var scanIdx = 0
-            while scanIdx < lineRange.location && scanIdx < nsText.length {
-                let ch = nsText.character(at: scanIdx)
-                if ch == 0x2610 || ch == 0x2611 { checkboxesBeforeLine += 1 }
-                scanIdx += 1
-            }
-            let attrCheckboxOffset = lineRange.location - checkboxesBeforeLine
+            let attrCheckboxOffset = ExpandingTextView.attributedOffset(forPlainOffset: lineRange.location, in: tv.attributedText)
             guard attrCheckboxOffset < (tv.attributedText?.length ?? 0) else { return nil }
 
             let glyphAtCheckbox = lm.glyphIndexForCharacter(at: attrCheckboxOffset)
@@ -731,7 +765,8 @@ struct ExpandingTextView: UIViewRepresentable {
 
             let nsText = parent.text as NSString
             guard nsText.length > 0 else { return nil }
-            let safeOffset = min(charIdx, nsText.length - 1)
+            let plainOffset = ExpandingTextView.plainOffset(forAttributedOffset: charIdx, in: tv.attributedText)
+            let safeOffset = min(plainOffset, nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
             guard trimLen > 0 else { return nil }
@@ -746,17 +781,8 @@ struct ExpandingTextView: UIViewRepresentable {
             let plainText = ExpandingTextView.extractPlainText(from: tv)
             let nsText = plainText as NSString
 
-            // Convert attributed-text offset to plain-text offset (each checkbox attachment
-            // occupies 1 attributed char but 2 plain chars: ☐/☑ + space).
-            let plainOffset: Int = {
-                guard let attributed = tv.attributedText else { return range.location }
-                var count = 0
-                let scanRange = NSRange(location: 0, length: min(range.location, attributed.length))
-                attributed.enumerateAttributes(in: scanRange) { attrs, _, _ in
-                    if attrs[.attachment] is CheckboxAttachment { count += 1 }
-                }
-                return range.location + count
-            }()
+            let plainRange = ExpandingTextView.plainRange(forAttributedRange: range, in: tv.attributedText)
+            let plainOffset = plainRange.location
 
             // Block insertions at or before the ☐/☑ prefix on a checkbox line.
             // (Deletions/selections spanning the prefix are still allowed.)
@@ -783,29 +809,38 @@ struct ExpandingTextView: UIViewRepresentable {
             }
 
             // Auto-convert "[]" to "☐ " — triggered when user types "]"
-            if text == "]" && range.location > 0 && range.location <= nsText.length {
-                let prevIdx = range.location - 1
+            if text == "]" && plainOffset > 0 && plainOffset <= nsText.length {
+                let prevIdx = plainOffset - 1
                 if prevIdx < nsText.length {
                     let prevChar = nsText.character(at: prevIdx)
                     if prevChar == UInt16(Character("[").asciiValue!) {
-                        let bracketRange = NSRange(location: prevIdx, length: 1)
+                        let bracketRange = ExpandingTextView.attributedRange(
+                            forPlainRange: NSRange(location: prevIdx, length: 1),
+                            in: tv.attributedText
+                        )
                         tv.selectedRange = bracketRange
                         tv.insertText(Self.uncheckedPrefix)
                         needsAttributeRefresh = true
+                        syncTypingAttributesToCurrentLine(tv)
                         return false
                     }
                 }
             }
 
             // Normalize "- " to "• " at line start
-            if text == " " && range.location <= nsText.length {
-                let lineStart = nsText.lineRange(for: NSRange(location: min(range.location, nsText.length - 1), length: 0)).location
-                if range.location > lineStart {
-                    let typed = nsText.substring(with: NSRange(location: lineStart, length: range.location - lineStart))
+            if text == " " && plainOffset <= nsText.length {
+                let lineLookup = min(plainOffset, max(nsText.length - 1, 0))
+                let lineStart = nsText.lineRange(for: NSRange(location: lineLookup, length: 0)).location
+                if plainOffset > lineStart {
+                    let typed = nsText.substring(with: NSRange(location: lineStart, length: plainOffset - lineStart))
                     if typed == "-" {
-                        let replaceRange = NSRange(location: lineStart, length: range.location - lineStart)
+                        let replaceRange = ExpandingTextView.attributedRange(
+                            forPlainRange: NSRange(location: lineStart, length: plainOffset - lineStart),
+                            in: tv.attributedText
+                        )
                         tv.selectedRange = replaceRange
                         tv.insertText(Self.bulletPrefix)
+                        syncTypingAttributesToCurrentLine(tv)
                         return false
                     }
                 }
@@ -824,17 +859,8 @@ struct ExpandingTextView: UIViewRepresentable {
 
             // Find the current line boundaries in attributed text for delete/replace ops.
             // (lineRange is in plain-text coords; we need attributed coords for tv.selectedRange.)
-            let attrStr = (tv.attributedText?.string ?? "") as NSString
-            let attrLen = tv.attributedText?.length ?? 0
-            var attrLineStart = range.location
-            while attrLineStart > 0 && attrStr.character(at: attrLineStart - 1) != 0x000A {
-                attrLineStart -= 1
-            }
-            var attrLineEnd = range.location
-            while attrLineEnd < attrLen {
-                if attrStr.character(at: attrLineEnd) == 0x000A { attrLineEnd += 1; break }
-                attrLineEnd += 1
-            }
+            let attrLineRange = ExpandingTextView.attributedRange(forPlainRange: lineRange, in: tv.attributedText)
+            let attrLineStart = attrLineRange.location
 
             // Checkbox continuation
             if currentLine.hasPrefix("☐ ") || currentLine.hasPrefix("☑ ") {
@@ -850,6 +876,19 @@ struct ExpandingTextView: UIViewRepresentable {
                     tv.replace(sel, withText: "\n" + Self.uncheckedPrefix)
                 }
                 needsAttributeRefresh = true
+                syncTypingAttributesToCurrentLine(tv)
+                let insertedPrefixLength = (("\n" + Self.uncheckedPrefix) as NSString).length
+                let targetPlainOffset = plainOffset + insertedPrefixLength
+                DispatchQueue.main.async { [weak self, weak tv] in
+                    guard let self, let tv else { return }
+                    self.isAnimatingAttributes = true
+                    tv.selectedRange = ExpandingTextView.attributedRange(
+                        forPlainRange: NSRange(location: targetPlainOffset, length: 0),
+                        in: tv.attributedText
+                    )
+                    self.isAnimatingAttributes = false
+                    self.syncTypingAttributesToCurrentLine(tv)
+                }
                 return false
             }
 
@@ -868,13 +907,14 @@ struct ExpandingTextView: UIViewRepresentable {
             if let sel = tv.selectedTextRange {
                 tv.replace(sel, withText: "\n" + Self.bulletPrefix)
             }
+            syncTypingAttributesToCurrentLine(tv)
             return false
         }
 
         func textViewDidChange(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
             parent.text = ExpandingTextView.extractPlainText(from: tv)
-            parent.cursorPosition = tv.selectedRange.location
+            parent.cursorPosition = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
             if let label = tv.viewWithTag(999) as? UILabel {
                 label.isHidden = !parent.text.isEmpty
             }
@@ -934,7 +974,7 @@ struct ExpandingTextView: UIViewRepresentable {
             if parent.moveCursorToEnd.wrappedValue {
                 parent.moveCursorToEnd.wrappedValue = false
             }
-            parent.cursorPosition = tv.selectedRange.location
+            parent.cursorPosition = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
 
             nudgeCursorOffCheckbox(tv)
             if !parent.speakerColors.isEmpty {
@@ -958,7 +998,7 @@ struct ExpandingTextView: UIViewRepresentable {
         private func nudgeCursorOffSpeakerLine(_ tv: UITextView) {
             let nsText = parent.text as NSString
             guard nsText.length > 0, tv.selectedRange.length == 0 else { return }
-            let cursor = tv.selectedRange.location
+            let cursor = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
             let safeOffset = min(cursor, nsText.length - 1)
             let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
             let trimLen = lineRange.location + lineRange.length < nsText.length ? lineRange.length - 1 : lineRange.length
@@ -969,12 +1009,16 @@ struct ExpandingTextView: UIViewRepresentable {
             let nextStart = lineRange.location + lineRange.length
             let target = nextStart <= nsText.length ? nextStart : lineRange.location
             isAnimatingAttributes = true
-            tv.selectedRange = NSRange(location: target, length: 0)
+            tv.selectedRange = ExpandingTextView.attributedRange(
+                forPlainRange: NSRange(location: target, length: 0),
+                in: tv.attributedText
+            )
             isAnimatingAttributes = false
         }
 
         func syncTypingAttributesToCurrentLine(_ tv: UITextView) {
-            let nsText = parent.text as NSString
+            let plainText = ExpandingTextView.extractPlainText(from: tv)
+            let nsText = plainText as NSString
             let baseStyle = NSMutableParagraphStyle()
             baseStyle.lineSpacing = parent.lineSpacing
             var attrs: [NSAttributedString.Key: Any] = [
@@ -983,17 +1027,21 @@ struct ExpandingTextView: UIViewRepresentable {
                 .paragraphStyle: baseStyle,
             ]
             if nsText.length > 0 {
-                let cursorLoc = tv.selectedRange.location
+                let cursorLoc = ExpandingTextView.plainOffset(forAttributedOffset: tv.selectedRange.location, in: tv.attributedText)
                 let checkLoc = min(cursorLoc > 0 ? cursorLoc - 1 : 0, nsText.length - 1)
                 let lineRange = nsText.lineRange(for: NSRange(location: checkLoc, length: 0))
-                if lineRange.location < nsText.length,
-                   nsText.character(at: lineRange.location) == 0x2022 {
-                    let bulletIndent = ("• " as NSString).size(withAttributes: [.font: parent.font]).width
-                    let bulletStyle = NSMutableParagraphStyle()
-                    bulletStyle.lineSpacing = parent.lineSpacing
-                    bulletStyle.firstLineHeadIndent = 0
-                    bulletStyle.headIndent = bulletIndent
-                    attrs[.paragraphStyle] = bulletStyle
+                if lineRange.location < nsText.length {
+                    let lineStart = nsText.character(at: lineRange.location)
+                    if lineStart == 0x2022 {
+                        let bulletIndent = ("• " as NSString).size(withAttributes: [.font: parent.font]).width
+                        let bulletStyle = NSMutableParagraphStyle()
+                        bulletStyle.lineSpacing = parent.lineSpacing
+                        bulletStyle.firstLineHeadIndent = 0
+                        bulletStyle.headIndent = bulletIndent
+                        attrs[.paragraphStyle] = bulletStyle
+                    } else if lineStart == 0x2610 || lineStart == 0x2611 {
+                        attrs[.paragraphStyle] = ExpandingTextView.checkboxParagraphStyle(lineSpacing: parent.lineSpacing)
+                    }
                 }
             }
             tv.typingAttributes = attrs
