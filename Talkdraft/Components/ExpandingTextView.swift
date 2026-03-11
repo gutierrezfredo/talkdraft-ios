@@ -258,6 +258,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
         // Move cursor to end (e.g. tapping empty space below content while already focused)
         if moveCursorToEnd.wrappedValue {
+            let coordinator = context.coordinator
             DispatchQueue.main.async {
                 // Re-check: if user tapped on text in the meantime, textViewDidChangeSelection
                 // will have already cancelled this (set to false). Don't override their cursor.
@@ -266,6 +267,8 @@ struct ExpandingTextView: UIViewRepresentable {
                 guard tv.isFirstResponder else { return }
                 let end = tv.attributedText?.length ?? 0
                 tv.selectedRange = NSRange(location: end, length: 0)
+                // Scroll cursor into view — keyboard may already be visible (no new show notification).
+                coordinator.scrollCursorVisible(in: tv)
             }
         }
 
@@ -859,7 +862,7 @@ struct ExpandingTextView: UIViewRepresentable {
             scrollCursorVisible(in: tv, animated: false)
         }
 
-        private func scrollCursorVisible(in tv: UITextView, animated: Bool = true) {
+        func scrollCursorVisible(in tv: UITextView, animated: Bool = true) {
             guard let cursorPosition = tv.position(from: tv.beginningOfDocument, offset: tv.selectedRange.location),
                   let caretRange = tv.textRange(from: cursorPosition, to: cursorPosition)
             else { return }

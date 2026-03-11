@@ -240,21 +240,24 @@ struct NoteDetailView: View {
             (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
+            GeometryReader { geo in
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
                     scrollContent
                     Color.clear
-                        .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height)
+                        .frame(maxWidth: .infinity, minHeight: 500, maxHeight: geo.size.height)
                         .contentShape(Rectangle())
                         .onTapGesture { contentFocused = true; moveCursorToEnd = true }
                 }
+                .frame(minHeight: geo.size.height, alignment: .top)
                 .background(ScrollViewKeyboardDismissSetup())
                 Color.clear.frame(height: 0).id("scrollBottom")
             }
             .ignoresSafeArea(.all, edges: .bottom)
             .onAppear { scrollProxy = proxy }
             } // ScrollViewReader
+            } // GeometryReader
 
             bottomFade
         }
