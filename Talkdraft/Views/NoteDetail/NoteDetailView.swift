@@ -117,7 +117,6 @@ struct NoteDetailView: View {
         ("while-binge", "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
         ("while-hobby", "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
         ("while-read", "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
-        ("while-outside", "This one might take a bit — maybe step outside for some fresh air? Your note will be here when you return"),
         ("while-snack", "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
         ("while-work", "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
         ("while-rest", "This one might take a bit — maybe take a little rest? Your note will be waiting when you wake up"),
