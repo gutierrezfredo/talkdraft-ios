@@ -12,7 +12,7 @@ struct NoteCard: View {
 
     private var isDark: Bool { colorScheme == .dark }
     private var resolvedContent: String { content ?? note.content }
-    private var bodyState: NoteBodyState { NoteBodyState(content: resolvedContent) }
+    private var bodyState: NoteBodyState { NoteBodyState(content: resolvedContent, source: note.source) }
 
     private var cardBackground: Color {
         guard let category else {

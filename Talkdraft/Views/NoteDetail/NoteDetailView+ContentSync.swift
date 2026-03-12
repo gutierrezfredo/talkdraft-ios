@@ -1,6 +1,14 @@
 import SwiftUI
 
 extension NoteDetailView {
+    func resolvedBodyState(for content: String) -> NoteBodyState {
+        NoteBodyState(content: content, source: note.source)
+    }
+
+    func syncBodyState(with content: String) {
+        noteBodyState = resolvedBodyState(for: content)
+    }
+
     // MARK: - Typewriter
 
     func scrollToTop() {
@@ -16,6 +24,7 @@ extension NoteDetailView {
         typewriterTask = nil
         contentOpacity = 0
         editedContent = text
+        syncBodyState(with: text)
         scrollToTop()
         withAnimation(.easeIn(duration: 0.5)) {
             contentOpacity = 1
@@ -44,12 +53,14 @@ extension NoteDetailView {
         }
         withAnimation(.easeOut(duration: 0.4)) {
             editedContent = content
+            syncBodyState(with: content)
         }
     }
 
     func acceptResolvedNoteContent(_ content: String, fadeInIfNeeded: Bool = true) {
         contentBaseline = content
         editedContent = content
+        syncBodyState(with: content)
         if fadeInIfNeeded, contentOpacity == 0 {
             withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
         }
@@ -78,6 +89,7 @@ extension NoteDetailView {
         typewriterTask = nil
         let resolvedContent = noteStore.resolvedContent(for: note)
         editedContent = resolvedContent
+        syncBodyState(with: resolvedContent)
         contentBaseline = resolvedContent
     }
 

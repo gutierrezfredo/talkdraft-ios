@@ -36,6 +36,7 @@ struct NoteDetailView: View {
 
     @State var editedTitle: String
     @State var editedContent: String
+    @State var noteBodyState: NoteBodyState
     @State var showDeleteConfirmation = false
     @State var pendingDeleteRewrite: NoteRewrite?
     @State var didDelete = false
@@ -73,6 +74,8 @@ struct NoteDetailView: View {
     @State var autosaveTask: Task<Void, Never>?
 
     @State var transcribingVideoPlayer: AVQueuePlayer?
+    @State var transcribingPresentationTask: Task<Void, Never>?
+    @State var showTranscribingIndicator = false
     @State var transcribingPlayerLooper: AVPlayerLooper?
     @State var transcribingPhraseIndex = 0
     @State var transcribingIsLong = false
@@ -146,6 +149,7 @@ struct NoteDetailView: View {
         let willSwitch = note.activeRewriteId != nil && initialContent == nil
         self._editedTitle = State(initialValue: title)
         self._editedContent = State(initialValue: content)
+        self._noteBodyState = State(initialValue: NoteBodyState(content: content, source: note.source))
         self._contentFocused = State(initialValue: false)
         self._titleBaseline = State(initialValue: title)
         self._contentBaseline = State(initialValue: content)
@@ -177,11 +181,15 @@ struct NoteDetailView: View {
     }
 
     var bodyState: NoteBodyState {
-        NoteBodyState(content: editedContent)
+        noteBodyState
     }
 
     var isTranscribing: Bool {
         bodyState == .transcribing
+    }
+
+    var showsTranscribingIndicator: Bool {
+        isTranscribing && showTranscribingIndicator
     }
 
     /// Unique speaker display names in order of first appearance.
@@ -258,7 +266,7 @@ struct NoteDetailView: View {
             bottomFade
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !titleFocused && !isTranscribing && renamingSpeaker == nil {
+            if !titleFocused && bodyState == .content && renamingSpeaker == nil {
                 bottomBarContainer
                     .transition(.opacity)
                     .id(contentFocused)
@@ -267,6 +275,7 @@ struct NoteDetailView: View {
         .animation(.easeOut(duration: 0.2), value: contentFocused)
         .animation(.easeInOut(duration: 0.4), value: isRewriting)
         .animation(.easeOut(duration: 0.25), value: renamingSpeaker == nil)
+        .animation(.easeOut(duration: 0.2), value: bodyState)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await noteStore.fetchRewrites(for: noteId)
@@ -395,7 +404,7 @@ struct NoteDetailView: View {
         }
         .onChange(of: note.content) { oldValue, newValue in
             if editedContent == oldValue {
-                let oldState = NoteBodyState(content: oldValue)
+                let oldState = resolvedBodyState(for: oldValue)
                 let isPlaceholder = oldState.isTransientTranscriptionState
                 if isPlaceholder && newValue != oldValue {
                     acceptStoreDrivenContent(newValue, revealIfNeeded: true)
@@ -414,15 +423,15 @@ struct NoteDetailView: View {
             titlePhraseIndex = Int.random(in: 0..<titlePhrases.count)
         }
         .onAppear {
-            if isTranscribing { setupTranscribingState() }
+            updateTranscribingPresentation(for: bodyState)
         }
         .renameSpeakerAlert(
             renamingSpeaker: $renamingSpeaker,
             renameText: $renameText,
             onConfirm: renameSpeaker
         )
-        .onChange(of: isTranscribing) { _, transcribing in
-            if transcribing { setupTranscribingState() }
+        .onChange(of: bodyState) { _, state in
+            updateTranscribingPresentation(for: state)
         }
         .onChange(of: contentFocused) { _, focused in
             if focused, typewriterTask != nil {
@@ -433,11 +442,13 @@ struct NoteDetailView: View {
         .onDisappear {
             typewriterTask?.cancel()
             titleTypewriterTask?.cancel()
+            transcribingPresentationTask?.cancel()
         }
         .onChange(of: editedTitle) {
             scheduleAutosave()
         }
-        .onChange(of: editedContent) {
+        .onChange(of: editedContent) { _, newValue in
+            syncBodyState(with: newValue)
             scheduleAutosave()
         }
         .onChange(of: cursorPosition) { _, newPos in
@@ -746,7 +757,7 @@ struct NoteDetailView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 0).id("scrollTop")
 
-            if !isTranscribing {
+            if !showsTranscribingIndicator {
                 deadZone(height: 12)
                 metadataRow
 
@@ -760,8 +771,11 @@ struct NoteDetailView: View {
                 titleField
             }
 
-            if isTranscribing {
+            if showsTranscribingIndicator {
                 transcribingIndicator
+            } else if isTranscribing {
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1)
             } else if isWaitingForConnection {
                 waitingForConnectionView
                     .padding(.top, 40)
@@ -821,6 +835,28 @@ struct NoteDetailView: View {
         )
     }
 
+    private func updateTranscribingPresentation(for state: NoteBodyState) {
+        transcribingPresentationTask?.cancel()
+        guard state == .transcribing else {
+            withAnimation(.easeOut(duration: 0.12)) {
+                showTranscribingIndicator = false
+            }
+            return
+        }
+
+        setupTranscribingState()
+        showTranscribingIndicator = false
+        transcribingPresentationTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, noteBodyState == .transcribing else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    showTranscribingIndicator = true
+                }
+            }
+        }
+    }
+
     private func setupTranscribingState() {
         let duration = note.durationSeconds ?? 0
         transcribingIsLong = duration >= 300
@@ -872,6 +908,7 @@ struct NoteDetailView: View {
 
         // Update local UI only — transcribeNote handles server sync on success
         editedContent = NoteBodyState.transcribingPlaceholder
+        noteBodyState = .transcribing
         noteStore.setNoteContent(id: noteId, content: NoteBodyState.transcribingPlaceholder)
 
         let language = settingsStore.language == "auto" ? nil : settingsStore.language

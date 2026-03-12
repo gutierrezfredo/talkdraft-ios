@@ -6,7 +6,12 @@ enum NoteBodyState: Equatable, Sendable {
     case waitingForConnection
     case transcriptionFailed
 
-    init(content: String) {
+    init(content: String, source: Note.NoteSource? = nil) {
+        guard source == nil || source == .voice else {
+            self = .content
+            return
+        }
+
         switch content {
         case NoteBodyState.transcribingPlaceholder:
             self = .transcribing
@@ -24,6 +29,19 @@ enum NoteBodyState: Equatable, Sendable {
     static let waitingForConnectionPlaceholder = "Waiting for connection…"
     static let transcriptionFailedPlaceholder = "Transcription failed — tap to edit"
 
+    var placeholderContent: String? {
+        switch self {
+        case .content:
+            return nil
+        case .transcribing:
+            return Self.transcribingPlaceholder
+        case .waitingForConnection:
+            return Self.waitingForConnectionPlaceholder
+        case .transcriptionFailed:
+            return Self.transcriptionFailedPlaceholder
+        }
+    }
+
     var isTransientTranscriptionState: Bool {
         switch self {
         case .content:
@@ -35,6 +53,10 @@ enum NoteBodyState: Equatable, Sendable {
 }
 
 struct Note: Identifiable, Codable, Hashable, Sendable {
+    var bodyState: NoteBodyState {
+        NoteBodyState(content: content, source: source)
+    }
+
     let id: UUID
     var userId: UUID?
     var categoryId: UUID?

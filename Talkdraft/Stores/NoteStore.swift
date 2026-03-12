@@ -6,6 +6,17 @@ import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 
+private enum TranscriptionWorkflowError: LocalizedError {
+    case timedOut(seconds: TimeInterval)
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut(let seconds):
+            "Transcription timed out after \(Int(seconds)) seconds"
+        }
+    }
+}
+
 private struct NoteUpdate: Encodable {
     var categoryId: UUID?
     var title: String?
@@ -58,6 +69,7 @@ final class NoteStore {
     var hasInitiallyLoaded = false
     var lastError: String?
     var generatingTitleIds: Set<UUID> = []
+    var activeTranscriptionIds: Set<UUID> = []
 
     // MARK: - Multi-Speaker Format
 
@@ -136,21 +148,40 @@ final class NoteStore {
     }
 
     func bodyState(for note: Note) -> NoteBodyState {
-        NoteBodyState(content: resolvedContent(for: note))
+        NoteBodyState(content: resolvedContent(for: note), source: note.source)
     }
 
-    /// Retry any notes stuck in "Waiting for connection…".
-    /// Scans the notes array directly — works even after app restart.
-    /// Each note goes through transcribeNote which has its own connectivity probe.
-    func retryWaitingNotes(language: String?, userId: UUID?, customDictionary: [String] = []) {
-        let waiting = notes.filter {
-            let state = NoteBodyState(content: $0.content)
-            return state == .waitingForConnection || state == .transcriptionFailed
+    func repairOrphanedTranscriptions() {
+        let now = Date()
+        for index in notes.indices {
+            let note = notes[index]
+            guard note.source == .voice,
+                  note.bodyState == .transcribing,
+                  !activeTranscriptionIds.contains(note.id)
+            else { continue }
+
+            let hasLocalAudio = localAudioFileURL(for: note.id, audioUrl: note.audioUrl) != nil
+            let isStale = now.timeIntervalSince(note.updatedAt) >= transcriptionRepairThresholdSeconds(for: note)
+            guard hasLocalAudio || isStale else { continue }
+
+            logger.warning("Repairing orphaned transcription state for \(note.id); localAudio=\(hasLocalAudio) stale=\(isStale)")
+            notes[index].content = NoteBodyState.transcriptionFailedPlaceholder
+            notes[index].updatedAt = now
         }
+    }
+
+    /// Retry notes that are explicitly waiting for connectivity.
+    /// Failed notes stay failed until the user retries them manually.
+    func retryWaitingNotes(language: String?, userId: UUID?, customDictionary: [String] = []) {
+        let waiting = notes.filter { $0.bodyState == .waitingForConnection }
         guard !waiting.isEmpty else { return }
 
         for note in waiting {
-            guard let url = localAudioFileURL(for: note.id, audioUrl: note.audioUrl) else { continue }
+            guard let url = localAudioFileURL(for: note.id, audioUrl: note.audioUrl) else {
+                logger.warning("Waiting transcription note \(note.id) is missing local audio; marking it as failed")
+                setNoteContent(id: note.id, content: NoteBodyState.transcriptionFailedPlaceholder)
+                continue
+            }
             setNoteContent(id: note.id, content: NoteBodyState.transcribingPlaceholder)
             transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId, customDictionary: customDictionary)
         }
@@ -187,6 +218,7 @@ final class NoteStore {
             .execute()
             .value
         notes = fetched
+        repairOrphanedTranscriptions()
 
         let deleted: [Note] = try await supabase
             .from("notes")
@@ -399,10 +431,16 @@ final class NoteStore {
     // MARK: - Transcription
 
     func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?, customDictionary: [String] = [], multiSpeaker: Bool = false) {
+        guard activeTranscriptionIds.insert(id).inserted else {
+            logger.info("Skipping duplicate transcription start for \(id)")
+            return
+        }
+
         // Persist the local file path so it survives app restarts
         registerLocalAudio(audioFileURL, for: id)
 
         Task {
+            defer { self.activeTranscriptionIds.remove(id) }
             var compressedURL: URL?
             defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
 
@@ -456,16 +494,27 @@ final class NoteStore {
                 }
 
                 let service = TranscriptionService()
-                let result = try await service.transcribe(
-                    audioData: audioData,
-                    fileName: fileName,
-                    language: language,
-                    userId: userId,
-                    customDictionary: customDictionary,
-                    whisperData: whisperData,
-                    whisperFileName: whisperFileName,
-                    multiSpeaker: multiSpeaker
-                )
+                let timeoutSeconds = transcriptionTimeoutSeconds(for: id)
+                let requestAudioData = audioData
+                let requestFileName = fileName
+                let requestLanguage = language
+                let requestUserId = userId
+                let requestDictionary = customDictionary
+                let requestWhisperData = whisperData
+                let requestWhisperFileName = whisperFileName
+                let requestMultiSpeaker = multiSpeaker
+                let result = try await performTranscriptionWithTimeout(seconds: timeoutSeconds) {
+                    try await service.transcribe(
+                        audioData: requestAudioData,
+                        fileName: requestFileName,
+                        language: requestLanguage,
+                        userId: requestUserId,
+                        customDictionary: requestDictionary,
+                        whisperData: requestWhisperData,
+                        whisperFileName: requestWhisperFileName,
+                        multiSpeaker: requestMultiSpeaker
+                    )
+                }
 
                 // Guard against empty transcription
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -526,6 +575,15 @@ final class NoteStore {
                         context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB],
                         userId: userId
                     )
+                } else if let timeoutError = error as? TranscriptionWorkflowError {
+                    notes[noteIndex].content = NoteBodyState.transcriptionFailedPlaceholder
+                    notes[noteIndex].updatedAt = Date()
+                    ErrorLogger.shared.log(
+                        type: "transcription_timeout",
+                        message: timeoutError.localizedDescription,
+                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB, "language": language ?? "auto"],
+                        userId: userId
+                    )
                 } else {
                     notes[noteIndex].content = NoteBodyState.transcriptionFailedPlaceholder
                     notes[noteIndex].updatedAt = Date()
@@ -537,6 +595,44 @@ final class NoteStore {
                     )
                 }
             }
+        }
+    }
+
+    private func transcriptionRepairThresholdSeconds(for note: Note) -> TimeInterval {
+        transcriptionTimeoutSeconds(for: note.durationSeconds) + 30
+    }
+
+    private func transcriptionTimeoutSeconds(for noteId: UUID) -> TimeInterval {
+        transcriptionTimeoutSeconds(for: notes.first(where: { $0.id == noteId })?.durationSeconds)
+    }
+
+    private func transcriptionTimeoutSeconds(for durationSeconds: Int?) -> TimeInterval {
+        switch durationSeconds ?? 0 {
+        case 900...:
+            return 420
+        case 300...:
+            return 300
+        default:
+            return 180
+        }
+    }
+
+    private func performTranscriptionWithTimeout(
+        seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> TranscriptionResult
+    ) async throws -> TranscriptionResult {
+        try await withThrowingTaskGroup(of: TranscriptionResult.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw TranscriptionWorkflowError.timedOut(seconds: seconds)
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 

@@ -71,6 +71,7 @@ struct ContentView: View {
             Task {
                 // Wait for connectivity to stabilize after coming from airplane mode
                 try? await Task.sleep(for: .seconds(3))
+                noteStore.repairOrphanedTranscriptions()
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 noteStore.retryWaitingNotes(language: language, userId: authStore.userId, customDictionary: settingsStore.customDictionary)
             }

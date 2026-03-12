@@ -6,11 +6,17 @@ import UIKit
     #expect(true)
 }
 
-@Test func noteBodyStateRecognizesTranscriptionStates() {
-    #expect(NoteBodyState(content: NoteBodyState.transcribingPlaceholder) == .transcribing)
-    #expect(NoteBodyState(content: NoteBodyState.waitingForConnectionPlaceholder) == .waitingForConnection)
-    #expect(NoteBodyState(content: NoteBodyState.transcriptionFailedPlaceholder) == .transcriptionFailed)
-    #expect(NoteBodyState(content: "Plain note body") == .content)
+@Test func noteBodyStateRecognizesVoiceTranscriptionStates() {
+    #expect(NoteBodyState(content: NoteBodyState.transcribingPlaceholder, source: .voice) == .transcribing)
+    #expect(NoteBodyState(content: NoteBodyState.waitingForConnectionPlaceholder, source: .voice) == .waitingForConnection)
+    #expect(NoteBodyState(content: NoteBodyState.transcriptionFailedPlaceholder, source: .voice) == .transcriptionFailed)
+    #expect(NoteBodyState(content: "Plain note body", source: .voice) == .content)
+}
+
+@Test func noteBodyStateTreatsTextPlaceholderPhrasesAsContent() {
+    #expect(NoteBodyState(content: NoteBodyState.transcribingPlaceholder, source: .text) == .content)
+    #expect(NoteBodyState(content: NoteBodyState.waitingForConnectionPlaceholder, source: .text) == .content)
+    #expect(NoteBodyState(content: NoteBodyState.transcriptionFailedPlaceholder, source: .text) == .content)
 }
 
 @MainActor
@@ -42,11 +48,47 @@ import UIKit
     let rewriteId = UUID()
     let note = makeNote(
         content: NoteBodyState.waitingForConnectionPlaceholder,
-        activeRewriteId: rewriteId
+        activeRewriteId: rewriteId,
+        source: .voice
     )
 
     #expect(store.resolvedContent(for: note) == NoteBodyState.waitingForConnectionPlaceholder)
     #expect(store.bodyState(for: note) == .waitingForConnection)
+}
+
+@MainActor
+@Test func noteStoreRepairsStaleVoiceTranscriptionWithoutLocalAudio() {
+    let store = NoteStore()
+    store.notes = [
+        makeNote(
+            content: NoteBodyState.transcribingPlaceholder,
+            source: .voice,
+            durationSeconds: 60,
+            updatedAt: .now.addingTimeInterval(-400)
+        )
+    ]
+
+    store.repairOrphanedTranscriptions()
+
+    #expect(store.notes[0].bodyState == .transcriptionFailed)
+    #expect(store.notes[0].content == NoteBodyState.transcriptionFailedPlaceholder)
+}
+
+@MainActor
+@Test func noteStoreLeavesFreshVoiceTranscriptionAloneWithoutLocalAudio() {
+    let store = NoteStore()
+    store.notes = [
+        makeNote(
+            content: NoteBodyState.transcribingPlaceholder,
+            source: .voice,
+            durationSeconds: 60,
+            updatedAt: .now.addingTimeInterval(-20)
+        )
+    ]
+
+    store.repairOrphanedTranscriptions()
+
+    #expect(store.notes[0].bodyState == .transcribing)
 }
 
 @Test func noteEditorRulesToggleCheckbox() {
@@ -251,7 +293,12 @@ import UIKit
 private func makeNote(
     id: UUID = UUID(),
     content: String,
-    activeRewriteId: UUID? = nil
+    activeRewriteId: UUID? = nil,
+    source: Note.NoteSource = .text,
+    audioUrl: String? = nil,
+    durationSeconds: Int? = nil,
+    createdAt: Date = .now,
+    updatedAt: Date = .now
 ) -> Note {
     Note(
         id: id,
@@ -262,13 +309,13 @@ private func makeNote(
         content: content,
         originalContent: nil,
         activeRewriteId: activeRewriteId,
-        source: .text,
+        source: source,
         language: nil,
-        audioUrl: nil,
-        durationSeconds: nil,
+        audioUrl: audioUrl,
+        durationSeconds: durationSeconds,
         speakerNames: nil,
-        createdAt: .now,
-        updatedAt: .now,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
         deletedAt: nil
     )
 }
