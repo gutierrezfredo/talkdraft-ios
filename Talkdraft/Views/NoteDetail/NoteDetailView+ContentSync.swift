@@ -2,7 +2,12 @@ import SwiftUI
 
 extension NoteDetailView {
     func resolvedBodyState(for content: String) -> NoteBodyState {
-        NoteBodyState(content: NoteAppendPlaceholderEditor.strippedContent(from: content, placeholder: appendPlaceholder), source: note.source)
+        let strippedContent = NoteAppendPlaceholderEditor.strippedContent(from: content, placeholder: appendPlaceholder)
+        let inferredState = NoteBodyState(content: strippedContent, source: note.source)
+        if inferredState == .content, note.source == .voice, strippedContent.isEmpty {
+            return noteStore.bodyState(for: note)
+        }
+        return inferredState
     }
 
     func syncBodyState(with content: String) {
@@ -90,11 +95,11 @@ extension NoteDetailView {
     func cancelContentTypewriterAndRestoreFromStore() {
         typewriterTask?.cancel()
         typewriterTask = nil
-        let resolvedContent = noteStore.resolvedContent(for: note)
+        let displayContent = noteStore.displayContent(for: note)
         appendPlaceholder = nil
-        editedContent = resolvedContent
-        syncBodyState(with: resolvedContent)
-        contentBaseline = resolvedContent
+        editedContent = displayContent
+        syncBodyState(with: displayContent)
+        contentBaseline = displayContent
     }
 
     // MARK: - Speaker Names

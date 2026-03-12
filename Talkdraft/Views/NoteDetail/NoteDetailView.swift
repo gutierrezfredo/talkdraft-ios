@@ -176,26 +176,11 @@ struct NoteDetailView: View {
         noteStore.categories.first { $0.id == note.categoryId }
     }
 
-    var audioURL: URL? {
-        guard let urlString = note.audioUrl else { return nil }
-        return URL(string: urlString)
-    }
-
-    var bodyState: NoteBodyState {
-        noteBodyState
-    }
 
     var persistedEditedContent: String {
         NoteAppendPlaceholderEditor.strippedContent(from: editedContent, placeholder: appendPlaceholder)
     }
 
-    var isTranscribing: Bool {
-        bodyState == .transcribing
-    }
-
-    var showsTranscribingIndicator: Bool {
-        isTranscribing && showTranscribingIndicator
-    }
 
     /// Unique speaker display names in order of first appearance.
     /// Uses note.speakerNames as the authoritative source (survives renames),
@@ -230,19 +215,6 @@ struct NoteDetailView: View {
         return Self.speakerColors[index % Self.speakerColors.count]
     }
 
-    var isTranscriptionFailed: Bool {
-        bodyState == .transcriptionFailed
-    }
-
-    var isWaitingForConnection: Bool {
-        bodyState == .waitingForConnection
-    }
-
-    /// Returns the local audio file URL if it still exists on disk,
-    /// falling back to the persisted index in case the app was restarted after a failed transcription.
-    var localAudioFileURL: URL? {
-        noteStore.localAudioFileURL(for: noteId, audioUrl: note.audioUrl)
-    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -286,9 +258,9 @@ struct NoteDetailView: View {
             await noteStore.fetchRewrites(for: noteId)
             rewrites = noteStore.rewritesCache[noteId] ?? []
             activeRewriteId = note.activeRewriteId
-            let resolvedContent = noteStore.resolvedContent(for: note)
-            if editedContent != resolvedContent {
-                acceptResolvedNoteContent(resolvedContent)
+            let displayContent = noteStore.displayContent(for: note)
+            if editedContent != displayContent {
+                acceptResolvedNoteContent(displayContent)
             } else if contentOpacity == 0 {
                 withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
             }
@@ -407,8 +379,8 @@ struct NoteDetailView: View {
                 player.preload(url: url)
             }
         }
-        .onChange(of: note.content) { oldValue, newValue in
-            if editedContent == oldValue {
+        .onChange(of: noteStore.displayContent(for: note)) { oldValue, newValue in
+            if editedContent == oldValue || persistedEditedContent == oldValue {
                 let oldState = resolvedBodyState(for: oldValue)
                 let isPlaceholder = oldState.isTransientTranscriptionState
                 if isPlaceholder && newValue != oldValue {
@@ -765,7 +737,7 @@ struct NoteDetailView: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 0).id("scrollTop")
 
-            if !showsTranscribingIndicator {
+            if !isTranscribing {
                 deadZone(height: 12)
                 metadataRow
 
@@ -782,8 +754,7 @@ struct NoteDetailView: View {
             if showsTranscribingIndicator {
                 transcribingIndicator
             } else if isTranscribing {
-                Color.clear
-                    .frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1)
+                transcribingPlaceholderView
             } else if isWaitingForConnection {
                 waitingForConnectionView
                     .padding(.top, 40)
@@ -826,108 +797,6 @@ struct NoteDetailView: View {
         }
     }
 
-    // MARK: - Transcribing Indicator
-
-    private var transcribingSubtitle: String {
-        transcribingIsLong
-            ? whilePhrases[whileIndex].subtitle
-            : transcribingPhrases[transcribingPhraseIndex]
-    }
-
-    private var transcribingIndicator: some View {
-        NoteDetailTranscribingIndicatorView(
-            videoPlayer: transcribingVideoPlayer,
-            subtitle: transcribingSubtitle,
-            onAppear: setupTranscribingVideo,
-            onDisappear: { transcribingVideoPlayer?.pause() }
-        )
-    }
-
-    private func updateTranscribingPresentation(for state: NoteBodyState) {
-        transcribingPresentationTask?.cancel()
-        guard state == .transcribing else {
-            withAnimation(.easeOut(duration: 0.12)) {
-                showTranscribingIndicator = false
-            }
-            return
-        }
-
-        setupTranscribingState()
-        showTranscribingIndicator = false
-        transcribingPresentationTask = Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled, noteBodyState == .transcribing else { return }
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    showTranscribingIndicator = true
-                }
-            }
-        }
-    }
-
-    private func setupTranscribingState() {
-        let duration = note.durationSeconds ?? 0
-        transcribingIsLong = duration >= 300
-        // Derive index from note ID — deterministic per note, no runtime randomness,
-        // prevents ghosting from multiple onAppear calls while still rotating across notes.
-        let hash = abs(noteId.hashValue)
-        if transcribingIsLong {
-            whileIndex = hash % whilePhrases.count
-        } else {
-            transcribingPhraseIndex = hash % transcribingPhrases.count
-        }
-    }
-
-    private func setupTranscribingVideo() {
-        guard transcribingVideoPlayer == nil else { return }
-        let name: String
-        if transcribingIsLong {
-            name = whilePhrases[whileIndex].video
-        } else {
-            let shortVideos = ["transcribing-1", "transcribing-2"]
-            name = shortVideos[abs(noteId.hashValue) % shortVideos.count]
-        }
-        guard let url = Bundle.main.url(forResource: name, withExtension: "mp4") else { return }
-        let item = AVPlayerItem(url: url)
-        let player = AVQueuePlayer(playerItem: item)
-        transcribingPlayerLooper = AVPlayerLooper(player: player, templateItem: item)
-        player.isMuted = true
-        player.play()
-        transcribingVideoPlayer = player
-    }
-
-    // MARK: - Waiting for Connection
-
-    private var waitingForConnectionView: some View {
-        NoteDetailWaitingForConnectionView()
-    }
-
-    // MARK: - Transcription Failed
-
-    private var transcriptionFailedView: some View {
-        NoteDetailTranscriptionFailedView(
-            hasLocalAudio: localAudioFileURL != nil,
-            onRetry: retryTranscription
-        )
-    }
-
-    private func retryTranscription() {
-        guard let audioFileURL = localAudioFileURL else { return }
-
-        // Update local UI only — transcribeNote handles server sync on success
-        editedContent = NoteBodyState.transcribingPlaceholder
-        noteBodyState = .transcribing
-        noteStore.setNoteContent(id: noteId, content: NoteBodyState.transcribingPlaceholder)
-
-        let language = settingsStore.language == "auto" ? nil : settingsStore.language
-        noteStore.transcribeNote(
-            id: noteId,
-            audioFileURL: audioFileURL,
-            language: language,
-            userId: authStore.userId,
-            customDictionary: settingsStore.customDictionary
-        )
-    }
 
     // MARK: - Speaker Chips
 

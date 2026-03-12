@@ -21,7 +21,7 @@ import UIKit
 
 @MainActor
 @Test func noteStoreResolvedContentPrefersActiveRewrite() {
-    let store = NoteStore()
+    let store = NoteStore(persistsLocalVoiceBodyStates: false)
     let noteId = UUID()
     let rewriteId = UUID()
     let note = makeNote(
@@ -44,7 +44,7 @@ import UIKit
 
 @MainActor
 @Test func noteStoreResolvedContentFallsBackToNoteContentWithoutCachedRewrite() {
-    let store = NoteStore()
+    let store = NoteStore(persistsLocalVoiceBodyStates: false)
     let rewriteId = UUID()
     let note = makeNote(
         content: NoteBodyState.waitingForConnectionPlaceholder,
@@ -58,7 +58,7 @@ import UIKit
 
 @MainActor
 @Test func noteStoreRepairsStaleVoiceTranscriptionWithoutLocalAudio() {
-    let store = NoteStore()
+    let store = NoteStore(persistsLocalVoiceBodyStates: false)
     store.notes = [
         makeNote(
             content: NoteBodyState.transcribingPlaceholder,
@@ -70,13 +70,13 @@ import UIKit
 
     store.repairOrphanedTranscriptions()
 
-    #expect(store.notes[0].bodyState == .transcriptionFailed)
-    #expect(store.notes[0].content == NoteBodyState.transcriptionFailedPlaceholder)
+    #expect(store.bodyState(for: store.notes[0]) == .transcriptionFailed)
+    #expect(store.notes[0].content == "")
 }
 
 @MainActor
 @Test func noteStoreLeavesFreshVoiceTranscriptionAloneWithoutLocalAudio() {
-    let store = NoteStore()
+    let store = NoteStore(persistsLocalVoiceBodyStates: false)
     store.notes = [
         makeNote(
             content: NoteBodyState.transcribingPlaceholder,
@@ -88,7 +88,37 @@ import UIKit
 
     store.repairOrphanedTranscriptions()
 
-    #expect(store.notes[0].bodyState == .transcribing)
+    #expect(store.bodyState(for: store.notes[0]) == .transcribing)
+}
+
+@MainActor
+@Test func noteStoreUsesLocalVoiceBodyStateForDisplayContent() {
+    let note = makeNote(content: "", source: .voice)
+    let store = NoteStore(
+        localVoiceBodyStates: [note.id: .transcribing],
+        persistsLocalVoiceBodyStates: false
+    )
+    store.notes = [note]
+
+    #expect(store.resolvedContent(for: note) == "")
+    #expect(store.bodyState(for: note) == .transcribing)
+    #expect(store.displayContent(for: note) == NoteBodyState.transcribingPlaceholder)
+}
+
+@MainActor
+@Test func noteStoreSetNoteContentClearsTransientVoiceOverrideWhenRealContentArrives() {
+    let note = makeNote(content: "", source: .voice)
+    let store = NoteStore(
+        localVoiceBodyStates: [note.id: .waitingForConnection],
+        persistsLocalVoiceBodyStates: false
+    )
+    store.notes = [note]
+
+    store.setNoteContent(id: note.id, content: "Actual transcript")
+
+    #expect(store.resolvedContent(for: store.notes[0]) == "Actual transcript")
+    #expect(store.bodyState(for: store.notes[0]) == .content)
+    #expect(store.displayContent(for: store.notes[0]) == "Actual transcript")
 }
 
 @Test func noteAppendPlaceholderEditorTracksInsertedRanges() {

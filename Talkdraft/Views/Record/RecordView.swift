@@ -261,7 +261,7 @@ struct RecordView: View {
             userId: userId,
             categoryId: categoryId,
             title: nil,
-            content: NoteBodyState.transcribingPlaceholder,
+            content: "",
             source: .voice,
             audioUrl: audioURL.absoluteString,
             durationSeconds: Int(duration),
@@ -269,6 +269,7 @@ struct RecordView: View {
             updatedAt: Date()
         )
         noteStore.addNote(note)
+        noteStore.setNoteBodyState(id: noteId, state: .transcribing)
 
         // Transcribe in background
         Task { @MainActor in

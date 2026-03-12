@@ -29,6 +29,32 @@ enum NoteBodyState: Equatable, Sendable {
     static let waitingForConnectionPlaceholder = "Waiting for connection…"
     static let transcriptionFailedPlaceholder = "Transcription failed — tap to edit"
 
+    init?(storageKey: String) {
+        switch storageKey {
+        case "transcribing":
+            self = .transcribing
+        case "waiting":
+            self = .waitingForConnection
+        case "failed":
+            self = .transcriptionFailed
+        default:
+            return nil
+        }
+    }
+
+    var storageKey: String? {
+        switch self {
+        case .content:
+            return nil
+        case .transcribing:
+            return "transcribing"
+        case .waitingForConnection:
+            return "waiting"
+        case .transcriptionFailed:
+            return "failed"
+        }
+    }
+
     var placeholderContent: String? {
         switch self {
         case .content:

@@ -70,6 +70,13 @@ final class NoteStore {
     var lastError: String?
     var generatingTitleIds: Set<UUID> = []
     var activeTranscriptionIds: Set<UUID> = []
+    var localVoiceBodyStates: [UUID: NoteBodyState]
+    let persistsLocalVoiceBodyStates: Bool
+
+    init(localVoiceBodyStates: [UUID: NoteBodyState]? = nil, persistsLocalVoiceBodyStates: Bool = true) {
+        self.persistsLocalVoiceBodyStates = persistsLocalVoiceBodyStates
+        self.localVoiceBodyStates = localVoiceBodyStates ?? (persistsLocalVoiceBodyStates ? Self.loadLocalVoiceBodyStates() : [:])
+    }
 
     // MARK: - Multi-Speaker Format
 
@@ -102,6 +109,40 @@ final class NoteStore {
     // so after a restart the app loses the reference to the local recording file.
 
     private static let localAudioKey = "localAudioPaths"
+    private static let localVoiceBodyStateKey = "localVoiceBodyStates"
+
+    private static func loadLocalVoiceBodyStates() -> [UUID: NoteBodyState] {
+        let raw = (UserDefaults.standard.dictionary(forKey: Self.localVoiceBodyStateKey) as? [String: String]) ?? [:]
+        return raw.reduce(into: [:]) { result, item in
+            guard let id = UUID(uuidString: item.key), let state = NoteBodyState(storageKey: item.value) else { return }
+            result[id] = state
+        }
+    }
+
+    private func persistLocalVoiceBodyStates() {
+        guard persistsLocalVoiceBodyStates else { return }
+        let raw = localVoiceBodyStates.reduce(into: [String: String]()) { result, item in
+            guard let key = item.value.storageKey else { return }
+            result[item.key.uuidString] = key
+        }
+        UserDefaults.standard.set(raw, forKey: Self.localVoiceBodyStateKey)
+    }
+
+    private func setLocalVoiceBodyState(_ state: NoteBodyState?, for noteId: UUID) {
+        if let state, state != .content {
+            localVoiceBodyStates[noteId] = state
+        } else {
+            localVoiceBodyStates.removeValue(forKey: noteId)
+        }
+        persistLocalVoiceBodyStates()
+    }
+
+    private func pruneLocalVoiceBodyStates(validNoteIds: Set<UUID>) {
+        let filtered = localVoiceBodyStates.filter { validNoteIds.contains($0.key) }
+        guard filtered.count != localVoiceBodyStates.count else { return }
+        localVoiceBodyStates = filtered
+        persistLocalVoiceBodyStates()
+    }
 
     private func registerLocalAudio(_ url: URL, for noteId: UUID) {
         var index = (UserDefaults.standard.dictionary(forKey: Self.localAudioKey) as? [String: String]) ?? [:]
@@ -148,7 +189,49 @@ final class NoteStore {
     }
 
     func bodyState(for note: Note) -> NoteBodyState {
-        NoteBodyState(content: resolvedContent(for: note), source: note.source)
+        localVoiceBodyStates[note.id] ?? NoteBodyState(content: resolvedContent(for: note), source: note.source)
+    }
+
+    func displayContent(for note: Note) -> String {
+        if let placeholder = bodyState(for: note).placeholderContent,
+           activeRewrite(for: note) == nil {
+            return placeholder
+        }
+        return resolvedContent(for: note)
+    }
+
+    private func normalizeLocalVoiceNote(_ note: Note) -> Note {
+        guard note.source == .voice else {
+            setLocalVoiceBodyState(nil, for: note.id)
+            return note
+        }
+
+        let inferredState = NoteBodyState(content: note.content, source: note.source)
+        var normalized = note
+        if inferredState.isTransientTranscriptionState {
+            setLocalVoiceBodyState(inferredState, for: note.id)
+            normalized.content = ""
+            return normalized
+        }
+
+        if note.content.isEmpty,
+           let existing = localVoiceBodyStates[note.id],
+           existing.isTransientTranscriptionState {
+            normalized.content = ""
+            return normalized
+        }
+
+        setLocalVoiceBodyState(nil, for: note.id)
+        return normalized
+    }
+
+    func setNoteBodyState(id: UUID, state: NoteBodyState) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        if notes[index].source == .voice, state.isTransientTranscriptionState {
+            notes[index].content = ""
+        }
+        notes[index].updatedAt = Date()
+        setLocalVoiceBodyState(state == .content ? nil : state, for: id)
     }
 
     func repairOrphanedTranscriptions() {
@@ -156,7 +239,7 @@ final class NoteStore {
         for index in notes.indices {
             let note = notes[index]
             guard note.source == .voice,
-                  note.bodyState == .transcribing,
+                  bodyState(for: note) == .transcribing,
                   !activeTranscriptionIds.contains(note.id)
             else { continue }
 
@@ -165,24 +248,23 @@ final class NoteStore {
             guard hasLocalAudio || isStale else { continue }
 
             logger.warning("Repairing orphaned transcription state for \(note.id); localAudio=\(hasLocalAudio) stale=\(isStale)")
-            notes[index].content = NoteBodyState.transcriptionFailedPlaceholder
-            notes[index].updatedAt = now
+            setNoteBodyState(id: note.id, state: .transcriptionFailed)
         }
     }
 
     /// Retry notes that are explicitly waiting for connectivity.
     /// Failed notes stay failed until the user retries them manually.
     func retryWaitingNotes(language: String?, userId: UUID?, customDictionary: [String] = []) {
-        let waiting = notes.filter { $0.bodyState == .waitingForConnection }
+        let waiting = notes.filter { bodyState(for: $0) == .waitingForConnection }
         guard !waiting.isEmpty else { return }
 
         for note in waiting {
             guard let url = localAudioFileURL(for: note.id, audioUrl: note.audioUrl) else {
                 logger.warning("Waiting transcription note \(note.id) is missing local audio; marking it as failed")
-                setNoteContent(id: note.id, content: NoteBodyState.transcriptionFailedPlaceholder)
+                setNoteBodyState(id: note.id, state: .transcriptionFailed)
                 continue
             }
-            setNoteContent(id: note.id, content: NoteBodyState.transcribingPlaceholder)
+            setNoteBodyState(id: note.id, state: .transcribing)
             transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId, customDictionary: customDictionary)
         }
     }
@@ -217,7 +299,8 @@ final class NoteStore {
             .order("created_at", ascending: false)
             .execute()
             .value
-        notes = fetched
+        pruneLocalVoiceBodyStates(validNoteIds: Set(fetched.map(\.id)))
+        notes = fetched.map(normalizeLocalVoiceNote)
         repairOrphanedTranscriptions()
 
         let deleted: [Note] = try await supabase
@@ -248,12 +331,22 @@ final class NoteStore {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[index].content = content
         notes[index].updatedAt = Date()
+        guard notes[index].source == .voice else { return }
+
+        let inferredState = NoteBodyState(content: content, source: notes[index].source)
+        if inferredState.isTransientTranscriptionState {
+            notes[index].content = ""
+            setLocalVoiceBodyState(inferredState, for: id)
+        } else {
+            setLocalVoiceBodyState(nil, for: id)
+        }
     }
 
     // MARK: - Note CRUD
 
     func addNote(_ note: Note) {
-        notes.insert(note, at: 0)
+        let localNote = normalizeLocalVoiceNote(note)
+        notes.insert(localNote, at: 0)
 
         Task {
             do {
@@ -270,7 +363,9 @@ final class NoteStore {
     func updateNote(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
         let previous = notes[index]
-        notes[index] = note
+        let previousBodyState = localVoiceBodyStates[note.id]
+        let localNote = normalizeLocalVoiceNote(note)
+        notes[index] = localNote
 
         Task {
             do {
@@ -285,6 +380,7 @@ final class NoteStore {
                 if let i = notes.firstIndex(where: { $0.id == note.id }) {
                     notes[i] = previous
                 }
+                setLocalVoiceBodyState(previousBodyState, for: note.id)
             }
         }
     }
@@ -294,6 +390,7 @@ final class NoteStore {
         var removed = notes.remove(at: index)
         removed.deletedAt = Date()
         deletedNotes.insert(removed, at: 0)
+        setLocalVoiceBodyState(nil, for: id)
 
         Task {
             do {
@@ -315,6 +412,7 @@ final class NoteStore {
         notes.removeAll { ids.contains($0.id) }
         for i in removed.indices { removed[i].deletedAt = now }
         deletedNotes.insert(contentsOf: removed, at: 0)
+        ids.forEach { setLocalVoiceBodyState(nil, for: $0) }
 
         Task {
             // Batch in chunks of 20 to avoid oversized IN clauses
@@ -438,6 +536,7 @@ final class NoteStore {
 
         // Persist the local file path so it survives app restarts
         registerLocalAudio(audioFileURL, for: id)
+        setNoteBodyState(id: id, state: .transcribing)
 
         Task {
             defer { self.activeTranscriptionIds.remove(id) }
@@ -451,7 +550,7 @@ final class NoteStore {
                       let fileSize = attrs[.size] as? Int, fileSize > 0
                 else {
                     logger.error("transcribeNote: audio file missing or empty at \(audioFileURL.path)")
-                    setNoteContent(id: id, content: NoteBodyState.transcriptionFailedPlaceholder)
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
                     ErrorLogger.shared.log(
                         type: "transcription_failed",
                         message: "Audio file missing or empty",
@@ -474,7 +573,7 @@ final class NoteStore {
                     }
                 } catch {
                     logger.info("Connectivity probe failed — device appears offline: \(error)")
-                    setNoteContent(id: id, content: NoteBodyState.waitingForConnectionPlaceholder)
+                    setNoteBodyState(id: id, state: .waitingForConnection)
                     return
                 }
 
@@ -520,7 +619,7 @@ final class NoteStore {
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
                     logger.warning("transcribeNote: received empty transcription for \(id)")
-                    setNoteContent(id: id, content: NoteBodyState.transcriptionFailedPlaceholder)
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
                     ErrorLogger.shared.log(
                         type: "transcription_empty",
                         message: "Whisper returned empty text",
@@ -536,6 +635,7 @@ final class NoteStore {
                     return
                 }
                 let (formattedContent, initialSpeakerNames) = Self.formatMultiSpeakerTranscript(transcribedText)
+                setLocalVoiceBodyState(nil, for: id)
                 note.content = formattedContent
                 if let initialSpeakerNames { note.speakerNames = initialSpeakerNames }
                 note.language = result.language
@@ -558,7 +658,7 @@ final class NoteStore {
                 generateTitle(for: id, content: transcribedText, language: result.language)
             } catch {
                 logger.error("transcribeNote failed for \(id): \(error)")
-                guard let noteIndex = notes.firstIndex(where: { $0.id == id }) else {
+                guard notes.contains(where: { $0.id == id }) else {
                     logger.error("transcribeNote: note \(id) not found in local store after failure")
                     return
                 }
@@ -567,8 +667,7 @@ final class NoteStore {
                     .map { String(format: "%.1f", Double($0) / 1_048_576.0) } ?? "?"
 
                 if error is URLError {
-                    notes[noteIndex].content = NoteBodyState.waitingForConnectionPlaceholder
-                    notes[noteIndex].updatedAt = Date()
+                    setNoteBodyState(id: id, state: .waitingForConnection)
                     ErrorLogger.shared.log(
                         type: "transcription_offline",
                         message: "Network unavailable during transcription",
@@ -576,8 +675,7 @@ final class NoteStore {
                         userId: userId
                     )
                 } else if let timeoutError = error as? TranscriptionWorkflowError {
-                    notes[noteIndex].content = NoteBodyState.transcriptionFailedPlaceholder
-                    notes[noteIndex].updatedAt = Date()
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
                     ErrorLogger.shared.log(
                         type: "transcription_timeout",
                         message: timeoutError.localizedDescription,
@@ -585,8 +683,7 @@ final class NoteStore {
                         userId: userId
                     )
                 } else {
-                    notes[noteIndex].content = NoteBodyState.transcriptionFailedPlaceholder
-                    notes[noteIndex].updatedAt = Date()
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
                     ErrorLogger.shared.log(
                         type: "transcription_failed",
                         message: error.localizedDescription,

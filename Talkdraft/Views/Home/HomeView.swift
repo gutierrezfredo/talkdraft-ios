@@ -64,7 +64,7 @@ struct HomeView: View {
                                         NoteCard(
                                             note: note,
                                             category: category,
-                                            content: noteStore.resolvedContent(for: note),
+                                            content: noteStore.displayContent(for: note),
                                             selectionMode: isSelecting,
                                             isSelected: selectedIds.contains(note.id)
                                         )
@@ -179,7 +179,7 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(item: $selectedNote) { note in
-                NoteDetailView(note: note, initialContent: noteStore.resolvedContent(for: note))
+                NoteDetailView(note: note, initialContent: noteStore.displayContent(for: note))
             }
             .task {
                 // Catch any cold-launch race where categories failed to load
@@ -729,7 +729,7 @@ struct HomeView: View {
                 userId: authStore.userId,
                 categoryId: selectedCategory,
                 title: title,
-                content: NoteBodyState.transcribingPlaceholder,
+                content: "",
                 source: .voice,
                 audioUrl: destinationURL.path,
                 durationSeconds: await importedAudioDurationSeconds(for: destinationURL),
@@ -740,6 +740,7 @@ struct HomeView: View {
             withAnimation(.snappy) {
                 noteStore.addNote(note)
             }
+            noteStore.setNoteBodyState(id: noteId, state: .transcribing)
 
             selectedNote = note
 

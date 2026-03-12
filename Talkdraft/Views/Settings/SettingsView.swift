@@ -263,7 +263,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $importedNote) { note in
-            NoteDetailView(note: note, initialContent: noteStore.resolvedContent(for: note))
+            NoteDetailView(note: note, initialContent: noteStore.displayContent(for: note))
         }
         .fileImporter(
             isPresented: $showAudioImporter,
@@ -369,7 +369,7 @@ struct SettingsView: View {
                 userId: authStore.userId,
                 categoryId: nil,
                 title: title,
-                content: NoteBodyState.transcribingPlaceholder,
+                content: "",
                 source: .voice,
                 audioUrl: destinationURL.path,
                 durationSeconds: await importedAudioDurationSeconds(for: destinationURL),
@@ -380,6 +380,7 @@ struct SettingsView: View {
             withAnimation(.snappy) {
                 noteStore.addNote(note)
             }
+            noteStore.setNoteBodyState(id: noteId, state: .transcribing)
 
             importedNote = note
 
