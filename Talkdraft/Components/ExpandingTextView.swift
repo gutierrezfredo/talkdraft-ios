@@ -444,7 +444,10 @@ struct ExpandingTextView: UIViewRepresentable {
         private var pendingTrailingDeletionFollow: DispatchWorkItem?
         private var pendingCheckboxTapSelection: NSRange?
         private var pendingDeletionAnchorCaretBottom: CGFloat?
+        private var pendingEndInsertionSavedOffset: CGPoint?
         private var suppressNextScrollOffsetRestore = false
+        private var pendingAnimatedNewlineInsertionFollow = false
+        private var pendingAnimatedNewlineDeletionFollow = false
         private var lastTextChangeSelection: NSRange?
         private var pulseStart: CFTimeInterval = 0
         private var isAnimatingAttributes = false
@@ -770,20 +773,33 @@ struct ExpandingTextView: UIViewRepresentable {
 
             switch mutation {
             case .allowSystem:
+                pendingAnimatedNewlineDeletionFollow = false
+                prepareCursorFollowForSystemEdit(
+                    replacementText: text,
+                    plainRange: plainRange,
+                    plainText: plainText,
+                    in: tv
+                )
                 captureDeletionAnchorIfNeeded(
                     replacementText: text,
                     plainRange: plainRange,
-                    plainTextLength: (plainText as NSString).length,
+                    plainText: plainText,
                     in: tv
                 )
                 return true
             case .reject:
                 pendingDeletionAnchorCaretBottom = nil
+                pendingEndInsertionSavedOffset = nil
                 suppressNextScrollOffsetRestore = false
+                pendingAnimatedNewlineInsertionFollow = false
+                pendingAnimatedNewlineDeletionFollow = false
                 return false
             case let .apply(updatedText, selectedPlainRange):
                 pendingDeletionAnchorCaretBottom = nil
+                pendingEndInsertionSavedOffset = nil
                 suppressNextScrollOffsetRestore = false
+                pendingAnimatedNewlineInsertionFollow = false
+                pendingAnimatedNewlineDeletionFollow = false
                 applyPlainTextEdit(
                     updatedText: updatedText,
                     selectedPlainRange: selectedPlainRange,
@@ -842,8 +858,35 @@ struct ExpandingTextView: UIViewRepresentable {
                 scheduleScrollOffsetRestore(in: tv, savedOffset: savedOffset, delays: [0, 0.02])
             }
             suppressNextScrollOffsetRestore = false
-            scheduleTrailingDeletionFollowIfNeeded(in: tv)
-            scheduleScrollCursorVisible(in: tv, animated: false, delay: 0.05)
+            let animateInsertionFollow = pendingAnimatedNewlineInsertionFollow
+            let animateDeletionFollow = pendingAnimatedNewlineDeletionFollow
+            let savedEndInsertionOffset = pendingEndInsertionSavedOffset
+            pendingAnimatedNewlineInsertionFollow = false
+            pendingAnimatedNewlineDeletionFollow = false
+            pendingEndInsertionSavedOffset = nil
+
+            let scheduledDeletionFollow = scheduleTrailingDeletionFollowIfNeeded(
+                in: tv,
+                animationDuration: animateDeletionFollow ? 0.14 : nil,
+                animationOptions: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+            )
+
+            if !scheduledDeletionFollow {
+                if animateInsertionFollow {
+                    if let savedEndInsertionOffset {
+                        scheduleScrollOffsetRestore(in: tv, savedOffset: savedEndInsertionOffset, delays: [0, 0.02])
+                    }
+                    scheduleScrollCursorVisible(
+                        in: tv,
+                        animated: false,
+                        delay: savedEndInsertionOffset == nil ? 0.02 : 0.03,
+                        animationDuration: 0.16,
+                        animationOptions: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+                    )
+                } else {
+                    scheduleScrollCursorVisible(in: tv, animated: false, delay: 0.05)
+                }
+            }
         }
 
         func scrollCursorVisible(
@@ -1066,24 +1109,58 @@ struct ExpandingTextView: UIViewRepresentable {
         private func captureDeletionAnchorIfNeeded(
             replacementText: String,
             plainRange: NSRange,
-            plainTextLength: Int,
+            plainText: String,
             in tv: UITextView
         ) {
+            let nsText = plainText as NSString
             guard replacementText.isEmpty,
-                  plainRange.location + plainRange.length == plainTextLength,
+                  plainRange.length > 0,
                   tv.selectedRange.length == 0,
-                  tv.selectedRange.location == (tv.attributedText?.length ?? 0),
+                  NSMaxRange(plainRange) <= nsText.length,
                   let caretBottom = caretBottomInWindow(for: tv)
             else {
                 pendingDeletionAnchorCaretBottom = nil
+                pendingAnimatedNewlineDeletionFollow = false
                 return
             }
+
+            let deletedText = nsText.substring(with: plainRange)
+            guard deletedText.contains("\n") else {
+                pendingDeletionAnchorCaretBottom = nil
+                pendingAnimatedNewlineDeletionFollow = false
+                return
+            }
+
             pendingDeletionAnchorCaretBottom = caretBottom
+            pendingAnimatedNewlineDeletionFollow = true
             suppressNextScrollOffsetRestore = true
         }
 
-        private func scheduleTrailingDeletionFollowIfNeeded(in tv: UITextView) {
-            guard let anchorCaretBottom = pendingDeletionAnchorCaretBottom else { return }
+        private func prepareCursorFollowForSystemEdit(
+            replacementText: String,
+            plainRange: NSRange,
+            plainText: String,
+            in tv: UITextView
+        ) {
+            pendingAnimatedNewlineInsertionFollow = false
+            pendingEndInsertionSavedOffset = nil
+            if replacementText == "\n",
+               plainRange.length == 0,
+               tv.selectedRange.length == 0 {
+                pendingAnimatedNewlineInsertionFollow = true
+                if plainRange.location == (plainText as NSString).length {
+                    pendingEndInsertionSavedOffset = enclosingScrollView(for: tv)?.contentOffset
+                }
+                suppressNextScrollOffsetRestore = true
+            }
+        }
+
+        private func scheduleTrailingDeletionFollowIfNeeded(
+            in tv: UITextView,
+            animationDuration: TimeInterval? = nil,
+            animationOptions: UIView.AnimationOptions = []
+        ) -> Bool {
+            guard let anchorCaretBottom = pendingDeletionAnchorCaretBottom else { return false }
             pendingDeletionAnchorCaretBottom = nil
             pendingTrailingDeletionFollow?.cancel()
             let expectedSelection = tv.selectedRange
@@ -1091,7 +1168,6 @@ struct ExpandingTextView: UIViewRepresentable {
                 guard let self, let tv, !self.isAnimatingAttributes else { return }
                 guard tv.selectedRange == expectedSelection else { return }
                 guard tv.selectedRange.length == 0,
-                      tv.selectedRange.location == (tv.attributedText?.length ?? 0),
                       let scrollView = self.enclosingScrollView(for: tv),
                       let currentCaretBottom = self.caretBottomInWindow(for: tv)
                 else { return }
@@ -1104,17 +1180,25 @@ struct ExpandingTextView: UIViewRepresentable {
                     scrollView.contentOffset.y + delta
                 )
 
-                UIView.performWithoutAnimation {
-                    scrollView.layer.removeAllAnimations()
-                    scrollView.setContentOffset(
-                        CGPoint(x: scrollView.contentOffset.x, y: newOffsetY),
-                        animated: false
-                    )
-                    scrollView.layoutIfNeeded()
+                if let animationDuration, animationDuration > 0 {
+                    UIView.animate(withDuration: animationDuration, delay: 0, options: animationOptions) {
+                        scrollView.contentOffset = CGPoint(x: scrollView.contentOffset.x, y: newOffsetY)
+                        scrollView.layoutIfNeeded()
+                    }
+                } else {
+                    UIView.performWithoutAnimation {
+                        scrollView.layer.removeAllAnimations()
+                        scrollView.setContentOffset(
+                            CGPoint(x: scrollView.contentOffset.x, y: newOffsetY),
+                            animated: false
+                        )
+                        scrollView.layoutIfNeeded()
+                    }
                 }
             }
             pendingTrailingDeletionFollow = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.02, execute: workItem)
+            return true
         }
 
         private func caretBottomInWindow(for tv: UITextView) -> CGFloat? {
