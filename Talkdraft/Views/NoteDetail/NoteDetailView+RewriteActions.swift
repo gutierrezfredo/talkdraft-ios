@@ -31,12 +31,12 @@ extension NoteDetailView {
         rewriteLabelOpacity = 1
         Task {
             do {
-                let sourceContent = note.originalContent ?? editedContent
+                let sourceContent = note.originalContent ?? persistedEditedContent
 
                 // Preserve original before streaming starts
                 var updated = note
                 if updated.originalContent == nil {
-                    updated.originalContent = editedContent
+                    updated.originalContent = persistedEditedContent
                     noteStore.updateNote(updated)
                 }
 
@@ -199,19 +199,21 @@ extension NoteDetailView {
     }
 
     func saveChanges() {
+        let saveableContent = persistedEditedContent
+
         // Keep the note's displayed content canonical even while a rewrite is active.
         if let rewriteId = activeRewriteId,
            let rewrite = rewrites.first(where: { $0.id == rewriteId }),
-           editedContent != rewrite.content {
+           saveableContent != rewrite.content {
             var updatedRewrite = rewrite
-            updatedRewrite.content = editedContent
+            updatedRewrite.content = saveableContent
             rewrites = rewrites.map { $0.id == rewriteId ? updatedRewrite : $0 }
             noteStore.updateRewrite(updatedRewrite)
         }
 
         var updated = note
         updated.title = editedTitle.isEmpty ? nil : editedTitle
-        updated.content = editedContent
+        updated.content = saveableContent
         updated.updatedAt = Date()
         if isInStore {
             noteStore.updateNote(updated)
@@ -225,7 +227,7 @@ extension NoteDetailView {
 
     func buildShareText() -> String {
         let title = editedTitle.isEmpty ? "" : editedTitle + "\n\n"
-        return title + editedContent
+        return title + persistedEditedContent
     }
 
 }

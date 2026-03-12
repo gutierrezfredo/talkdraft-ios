@@ -65,6 +65,7 @@ struct NoteDetailView: View {
     @State var appendRecorder = AudioRecorder()
     @State var isAppendRecording = false
     @State var isAppendTranscribing = false
+    @State var appendPlaceholder: NoteAppendPlaceholderState?
     @State var cursorPosition: Int = 0
     @State var lastKnownCursorPosition: Int = 0
     @State var isCursorReady = false
@@ -168,7 +169,7 @@ struct NoteDetailView: View {
         typewriterTask == nil
             && titleTypewriterTask == nil
             && !isRewriting
-            && (editedTitle != titleBaseline || editedContent != contentBaseline)
+            && (editedTitle != titleBaseline || persistedEditedContent != contentBaseline)
     }
 
     var category: Category? {
@@ -182,6 +183,10 @@ struct NoteDetailView: View {
 
     var bodyState: NoteBodyState {
         noteBodyState
+    }
+
+    var persistedEditedContent: String {
+        NoteAppendPlaceholderEditor.strippedContent(from: editedContent, placeholder: appendPlaceholder)
     }
 
     var isTranscribing: Bool {
@@ -357,14 +362,14 @@ struct NoteDetailView: View {
                     stopAppendRecording()
                 } else {
                     appendRecorder.cancelRecording()
-                    removePlaceholder()
+                    removeAppendPlaceholder()
                     isAppendRecording = false
                 }
             }
             autosaveTask?.cancel()
             guard !didDelete else { return }
             let hasContent = !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !editedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !persistedEditedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             if hasContent && (hasChanges || !isInStore) {
                 saveChanges()
             }

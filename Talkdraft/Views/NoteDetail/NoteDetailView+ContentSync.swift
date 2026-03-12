@@ -2,7 +2,7 @@ import SwiftUI
 
 extension NoteDetailView {
     func resolvedBodyState(for content: String) -> NoteBodyState {
-        NoteBodyState(content: content, source: note.source)
+        NoteBodyState(content: NoteAppendPlaceholderEditor.strippedContent(from: content, placeholder: appendPlaceholder), source: note.source)
     }
 
     func syncBodyState(with content: String) {
@@ -23,6 +23,7 @@ extension NoteDetailView {
         typewriterTask?.cancel()
         typewriterTask = nil
         contentOpacity = 0
+        appendPlaceholder = nil
         editedContent = text
         syncBodyState(with: text)
         scrollToTop()
@@ -41,7 +42,7 @@ extension NoteDetailView {
     }
 
     func markCurrentStateAsSaved() {
-        syncSavedBaselines(title: editedTitle, content: editedContent)
+        syncSavedBaselines(title: editedTitle, content: persistedEditedContent)
     }
 
     func acceptStoreDrivenContent(_ content: String, revealIfNeeded: Bool = false) {
@@ -52,6 +53,7 @@ extension NoteDetailView {
             return
         }
         withAnimation(.easeOut(duration: 0.4)) {
+            appendPlaceholder = nil
             editedContent = content
             syncBodyState(with: content)
         }
@@ -59,6 +61,7 @@ extension NoteDetailView {
 
     func acceptResolvedNoteContent(_ content: String, fadeInIfNeeded: Bool = true) {
         contentBaseline = content
+        appendPlaceholder = nil
         editedContent = content
         syncBodyState(with: content)
         if fadeInIfNeeded, contentOpacity == 0 {
@@ -88,6 +91,7 @@ extension NoteDetailView {
         typewriterTask?.cancel()
         typewriterTask = nil
         let resolvedContent = noteStore.resolvedContent(for: note)
+        appendPlaceholder = nil
         editedContent = resolvedContent
         syncBodyState(with: resolvedContent)
         contentBaseline = resolvedContent

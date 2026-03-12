@@ -91,6 +91,41 @@ import UIKit
     #expect(store.notes[0].bodyState == .transcribing)
 }
 
+@Test func noteAppendPlaceholderEditorTracksInsertedRanges() {
+    let result = NoteAppendPlaceholderEditor.insert(.recording, into: "HelloWorld", at: 5)
+
+    #expect(result.content == "Hello Recording… World")
+    #expect(result.placeholder.phase == .recording)
+    #expect(result.placeholder.fullRange == NSRange(location: 5, length: 12))
+    #expect(result.placeholder.placeholderRange == NSRange(location: 6, length: 10))
+}
+
+@Test func noteAppendPlaceholderEditorTransitionsWithoutScanningContent() {
+    let inserted = NoteAppendPlaceholderEditor.insert(.recording, into: "HelloWorld", at: 5)
+    let transitioned = NoteAppendPlaceholderEditor.transition(inserted.placeholder, to: .transcribing, in: inserted.content)
+
+    #expect(transitioned?.content == "Hello Transcribing… World")
+    #expect(transitioned?.placeholder.phase == .transcribing)
+    #expect(transitioned?.placeholder.fullRange == NSRange(location: 5, length: 15))
+    #expect(transitioned?.placeholder.placeholderRange == NSRange(location: 6, length: 13))
+}
+
+@Test func noteAppendPlaceholderEditorRemovesFullInsertedSpan() {
+    let inserted = NoteAppendPlaceholderEditor.insert(.recording, into: "HelloWorld", at: 5)
+    let stripped = NoteAppendPlaceholderEditor.strippedContent(from: inserted.content, placeholder: inserted.placeholder)
+
+    #expect(stripped == "HelloWorld")
+}
+
+@Test func noteAppendPlaceholderEditorReplacesPlaceholderAndReturnsHighlightRange() {
+    let inserted = NoteAppendPlaceholderEditor.insert(.transcribing, into: "HelloWorld", at: 5)
+    let replaced = NoteAppendPlaceholderEditor.replace(inserted.placeholder, in: inserted.content, with: "new transcript")
+
+    #expect(replaced?.content == "Hello new transcript World")
+    #expect(replaced?.replacementRange == NSRange(location: 6, length: 14))
+    #expect(replaced?.fullRange == NSRange(location: 5, length: 16))
+}
+
 @Test func noteEditorRulesToggleCheckbox() {
     let updated = NoteEditorRules.toggleCheckbox(in: "☐ Task", at: 0)
     #expect(updated == "☑ Task")
