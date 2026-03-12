@@ -502,13 +502,16 @@ struct NoteDetailView: View {
             }
 
             // Date — non-tappable
-            (Text(note.createdAt, format: .dateTime.month(.wide).day().year())
-                + Text(" · ").foregroundStyle(.tertiary)
-                + Text(note.createdAt, format: .dateTime.hour().minute()))
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-                .allowsHitTesting(false)
+            HStack(spacing: 0) {
+                Text(note.createdAt, format: .dateTime.month(.wide).day().year())
+                Text(" · ")
+                    .foregroundStyle(.tertiary)
+                Text(note.createdAt, format: .dateTime.hour().minute())
+            }
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -697,7 +700,7 @@ struct NoteDetailView: View {
                                     .foregroundStyle(.tertiary)
                             }
                         }
-                        .frame(width: UIScreen.main.bounds.width * 0.55, alignment: .center)
+                        .frame(maxWidth: 240, alignment: .center)
                         .foregroundStyle(Color.primary)
                     }
                     .disabled(rewrites.isEmpty)

@@ -366,8 +366,21 @@ struct HomeView: View {
         return noteStore.categories.first { $0.id == id }
     }
 
+    private var filteredEmptyStateMessage: Text? {
+        if isSearching && !query.isEmpty, let cat = selectedCategoryModel {
+            return Text("No notes matching \"\(query)\" in \(Text(cat.name).foregroundStyle(Color.categoryColor(hex: cat.color))).")
+        }
+        if isSearching && !query.isEmpty {
+            return Text("No notes matching \"\(query)\".")
+        }
+        if let cat = selectedCategoryModel {
+            return Text("No notes in \(Text(cat.name).foregroundStyle(Color.categoryColor(hex: cat.color))).")
+        }
+        return nil
+    }
+
     private var emptyState: some View {
-        Group {
+        SwiftUI.Group {
             if isSearching && !query.isEmpty || selectedCategory != nil {
                 // Standard empty state for search/category filters
                 VStack(spacing: 12) {
@@ -389,22 +402,12 @@ struct HomeView: View {
                     Text(isSearching && !query.isEmpty ? "No results" : "No notes yet")
                         .font(.brandTitle2)
 
-                    Group {
-                        if isSearching && !query.isEmpty, let cat = selectedCategoryModel {
-                            Text("No notes matching \"\(query)\" in ")
-                                + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
-                                + Text(".")
-                        } else if isSearching && !query.isEmpty {
-                            Text("No notes matching \"\(query)\".")
-                        } else if let cat = selectedCategoryModel {
-                            Text("No notes in ")
-                                + Text(cat.name).foregroundColor(Color.categoryColor(hex: cat.color))
-                                + Text(".")
-                        }
+                    if let filteredEmptyStateMessage {
+                        filteredEmptyStateMessage
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 80)
@@ -412,11 +415,13 @@ struct HomeView: View {
                 // Welcome empty state — no notes at all
                 VStack(spacing: 16) {
                     VStack(spacing: 8) {
-                        (Text("Your voice,\n")
-                            + Text("turned into words")
-                                .foregroundColor(.brand))
-                            .font(.brandLargeTitle)
-                            .multilineTextAlignment(.center)
+                        VStack(spacing: 0) {
+                            Text("Your voice,")
+                            Text("turned into words")
+                                .foregroundStyle(Color.brand)
+                        }
+                        .font(.brandLargeTitle)
+                        .multilineTextAlignment(.center)
 
                         Text("Tap the mic and start talking")
                             .font(.subheadline)
@@ -697,31 +702,37 @@ struct HomeView: View {
     private func handleAudioImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let sourceURL = urls.first else { return }
         guard sourceURL.startAccessingSecurityScopedResource() else { return }
-        defer { sourceURL.stopAccessingSecurityScopedResource() }
 
         let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Recordings", isDirectory: true)
+        let title = sourceURL.deletingPathExtension().lastPathComponent
 
+        let destinationURL: URL
         do {
             try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
 
             let fileName = "\(UUID().uuidString).\(sourceURL.pathExtension)"
-            let destinationURL = recordingsDir.appendingPathComponent(fileName)
+            destinationURL = recordingsDir.appendingPathComponent(fileName)
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        } catch {
+            sourceURL.stopAccessingSecurityScopedResource()
+            noteStore.lastError = "Failed to import audio file"
+            return
+        }
 
-            let asset = AVURLAsset(url: destinationURL)
-            let duration = CMTimeGetSeconds(asset.duration)
+        sourceURL.stopAccessingSecurityScopedResource()
 
+        Task { @MainActor in
             let noteId = UUID()
             let note = Note(
                 id: noteId,
                 userId: authStore.userId,
                 categoryId: selectedCategory,
-                title: sourceURL.deletingPathExtension().lastPathComponent,
+                title: title,
                 content: NoteBodyState.transcribingPlaceholder,
                 source: .voice,
                 audioUrl: destinationURL.path,
-                durationSeconds: duration.isFinite ? Int(duration) : nil,
+                durationSeconds: await importedAudioDurationSeconds(for: destinationURL),
                 createdAt: .now,
                 updatedAt: .now
             )
@@ -735,8 +746,17 @@ struct HomeView: View {
             let language = settingsStore.language == "auto" ? nil : settingsStore.language
             let userId = authStore.userId
             noteStore.transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId, customDictionary: settingsStore.customDictionary)
+        }
+    }
+
+    private func importedAudioDurationSeconds(for url: URL) async -> Int? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            return seconds.isFinite ? Int(seconds) : nil
         } catch {
-            noteStore.lastError = "Failed to import audio file"
+            return nil
         }
     }
 
