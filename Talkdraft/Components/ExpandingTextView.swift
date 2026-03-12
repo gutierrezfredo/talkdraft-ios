@@ -874,13 +874,13 @@ struct ExpandingTextView: UIViewRepresentable {
             if !scheduledDeletionFollow {
                 if animateInsertionFollow {
                     if let savedEndInsertionOffset {
-                        scheduleScrollOffsetRestore(in: tv, savedOffset: savedEndInsertionOffset, delays: [0, 0.02])
+                        scheduleScrollOffsetRestore(in: tv, savedOffset: savedEndInsertionOffset, delays: [0, 0.02, 0.05, 0.09])
                     }
                     scheduleScrollCursorVisible(
                         in: tv,
                         animated: false,
-                        delay: savedEndInsertionOffset == nil ? 0.02 : 0.03,
-                        animationDuration: 0.16,
+                        delay: savedEndInsertionOffset == nil ? 0.02 : 0.06,
+                        animationDuration: 0.14,
                         animationOptions: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
                     )
                 } else {
