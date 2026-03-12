@@ -165,13 +165,6 @@ struct NoteDetailView: View {
         noteStore.notes.contains { $0.id == noteId }
     }
 
-    var hasChanges: Bool {
-        typewriterTask == nil
-            && titleTypewriterTask == nil
-            && !isRewriting
-            && (editedTitle != titleBaseline || persistedEditedContent != contentBaseline)
-    }
-
     var category: Category? {
         noteStore.categories.first { $0.id == note.categoryId }
     }
@@ -887,37 +880,5 @@ struct NoteDetailView: View {
             }
         }
     }
-
-    private func dismissKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-
-    private func presentAfterKeyboardDismiss(_ action: @escaping () -> Void) {
-        contentFocused = false
-        dismissKeyboard()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-            action()
-        }
-    }
-
-    private func presentCategoryPicker() {
-        presentAfterKeyboardDismiss {
-            showCategoryPicker = true
-        }
-    }
-
-    private func presentRewriteSheet() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        presentAfterKeyboardDismiss {
-            showRewriteSheet = true
-        }
-    }
-
-    private func presentTextShareSheet() {
-        presentAfterKeyboardDismiss {
-            textShareItem = buildShareText()
-        }
-    }
-
 
 }
