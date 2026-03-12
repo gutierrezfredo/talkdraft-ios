@@ -152,6 +152,8 @@ struct NoteDetailView: View {
         self._editedContent = State(initialValue: content)
         self._noteBodyState = State(initialValue: NoteBodyState(content: content, source: note.source))
         self._contentFocused = State(initialValue: false)
+        self._activeRewriteId = State(initialValue: note.activeRewriteId)
+        self._rewriteLabelOpacity = State(initialValue: (note.originalContent != nil || note.activeRewriteId != nil) ? 1 : 0)
         self._titleBaseline = State(initialValue: title)
         self._contentBaseline = State(initialValue: content)
         self._contentOpacity = State(initialValue: willSwitch ? 0 : 1)
@@ -257,8 +259,7 @@ struct NoteDetailView: View {
             } else if contentOpacity == 0 {
                 withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
             }
-            if !rewrites.isEmpty {
-                try? await Task.sleep(for: .milliseconds(32))
+            if showsRewriteToolbarLabel, rewriteLabelOpacity == 0 {
                 rewriteLabelOpacity = 1
             }
         }

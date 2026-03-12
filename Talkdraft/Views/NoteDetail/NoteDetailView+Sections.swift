@@ -178,60 +178,91 @@ extension NoteDetailView {
         }
     }
 
+    var showsRewriteToolbarLabel: Bool {
+        isRewriting || activeRewriteId != nil || note.originalContent != nil || !rewrites.isEmpty
+    }
+
+    @ViewBuilder
+    func rewriteToolbarLabelView(_ label: String, showsChevron: Bool) -> some View {
+        let chevron = Image(systemName: "chevron.up.chevron.down")
+            .font(.system(size: 9))
+            .fontWeight(.regular)
+            .foregroundStyle(.tertiary)
+
+        HStack(spacing: 2) {
+            Text(label)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if showsChevron {
+                chevron
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(width: 240, alignment: .center)
+        .layoutPriority(1)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+        .foregroundStyle(Color.primary)
+    }
+
     @ToolbarContentBuilder
     func toolbarContent() -> some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            let activeRewrite = rewrites.first { $0.id == activeRewriteId }
-            let label = activeRewriteId == nil ? "Original" : (activeRewrite?.displayLabel ?? "Rewrite")
-            ZStack {
-                if isRewriting {
-                    shimmerLabel(rewritingLabel.isEmpty ? label : rewritingLabel)
-                } else {
-                    Menu {
-                        Section {
-                            Button {
-                                switchToOriginal()
-                            } label: {
-                                if activeRewriteId == nil {
-                                    Label("Original", systemImage: "checkmark")
-                                } else {
-                                    Text("Original")
-                                }
-                            }
-                        }
-                        Section {
-                            ForEach(rewrites) { rewrite in
+        if showsRewriteToolbarLabel {
+            ToolbarItem(placement: .principal) {
+                let activeRewrite = rewrites.first { $0.id == activeRewriteId }
+                let label = activeRewriteId == nil ? "Original" : (activeRewrite?.displayLabel ?? "Rewrite")
+                ZStack {
+                    if isRewriting {
+                        shimmerLabel(rewritingLabel.isEmpty ? label : rewritingLabel)
+                    } else {
+                        Menu {
+                            Section {
                                 Button {
-                                    switchToRewrite(rewrite)
+                                    switchToOriginal()
                                 } label: {
-                                    if rewrite.id == activeRewriteId {
-                                        Label(rewrite.displayLabel, systemImage: "checkmark")
+                                    if activeRewriteId == nil {
+                                        Label("Original", systemImage: "checkmark")
                                     } else {
-                                        Text(rewrite.displayLabel)
+                                        Text("Original")
                                     }
                                 }
                             }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(label)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            if !rewrites.isEmpty {
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 9))
-                                    .fontWeight(.regular)
-                                    .foregroundStyle(.tertiary)
+
+                            if rewrites.isEmpty {
+                                Section {
+                                    Button {
+                                    } label: {
+                                        Label("Loading rewrites…", systemImage: "ellipsis")
+                                    }
+                                    .disabled(true)
+                                }
+                            } else {
+                                Section {
+                                    ForEach(rewrites) { rewrite in
+                                        Button {
+                                            switchToRewrite(rewrite)
+                                        } label: {
+                                            if rewrite.id == activeRewriteId {
+                                                Label(rewrite.displayLabel, systemImage: "checkmark")
+                                            } else {
+                                                Text(rewrite.displayLabel)
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        } label: {
+                            rewriteToolbarLabelView(label, showsChevron: true)
                         }
-                        .frame(maxWidth: 240, alignment: .center)
-                        .foregroundStyle(Color.primary)
+                        .menuIndicator(.hidden)
                     }
-                    .disabled(rewrites.isEmpty)
                 }
+                .opacity(rewriteLabelOpacity)
             }
-            .opacity(rewriteLabelOpacity)
-            .animation(.easeIn(duration: 0.25), value: rewriteLabelOpacity)
         }
 
         if !isTranscribing {

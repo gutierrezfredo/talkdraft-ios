@@ -112,7 +112,7 @@ extension NoteDetailView {
     func switchToRewrite(_ rewrite: NoteRewrite) {
         guard rewrite.id != activeRewriteId else { return }
         UISelectionFeedbackGenerator().selectionChanged()
-        rewriteLabelOpacity = 0
+        rewriteLabelOpacity = 1
         activeRewriteId = rewrite.id
         contentOpacity = 0
         editedContent = rewrite.content
@@ -124,10 +124,6 @@ extension NoteDetailView {
         noteStore.updateNote(updated)
         syncSavedBaselines(content: rewrite.content)
         withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
-        Task {
-            try? await Task.sleep(for: .milliseconds(50))
-            rewriteLabelOpacity = 1
-        }
     }
 
     func deleteActiveRewrite(_ rewrite: NoteRewrite) {
@@ -150,7 +146,7 @@ extension NoteDetailView {
     func switchToOriginal() {
         guard let original = note.originalContent else { return }
         UISelectionFeedbackGenerator().selectionChanged()
-        rewriteLabelOpacity = 0
+        rewriteLabelOpacity = 1
         activeRewriteId = nil
         contentOpacity = 0
         editedContent = original
@@ -162,9 +158,5 @@ extension NoteDetailView {
         noteStore.updateNote(updated)
         syncSavedBaselines(content: original)
         withAnimation(.easeIn(duration: 0.4)) { contentOpacity = 1 }
-        Task {
-            try? await Task.sleep(for: .milliseconds(50))
-            rewriteLabelOpacity = 1
-        }
     }
 }
