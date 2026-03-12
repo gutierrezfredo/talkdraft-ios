@@ -163,6 +163,38 @@ import UIKit
     #expect(mutation == .allowSystem)
 }
 
+
+@Test func noteEditorRulesToggleCheckedCheckboxBackToUnchecked() {
+    let updated = NoteEditorRules.toggleCheckbox(in: "☑ Done", at: 0)
+    #expect(updated == "☐ Done")
+}
+
+@Test func noteEditorRulesContinueCheckedCheckboxLineWithUncheckedPrefix() {
+    let mutation = NoteEditorRules.mutation(
+        for: "☑ Done",
+        range: NSRange(location: 6, length: 0),
+        replacementText: "\n"
+    )
+
+    #expect(mutation == .apply(
+        updatedText: "☑ Done\n☐ ",
+        selectedRange: NSRange(location: 9, length: 0)
+    ))
+}
+
+@Test func noteEditorRulesExitEmptyCheckedCheckboxLine() {
+    let mutation = NoteEditorRules.mutation(
+        for: "☑ ",
+        range: NSRange(location: 2, length: 0),
+        replacementText: "\n"
+    )
+
+    #expect(mutation == .apply(
+        updatedText: "",
+        selectedRange: NSRange(location: 0, length: 0)
+    ))
+}
+
 @MainActor
 @Test func noteTextMapperExtractsCheckboxPlainText() {
     let attributed = makeAttributedCheckboxLine()
@@ -195,6 +227,27 @@ import UIKit
     #expect(mapper.attributedRange(forPlainRange: NSRange(location: 0, length: 2)) == NSRange(location: 0, length: 1))
 }
 
+
+@MainActor
+@Test func noteTextMapperExtractsCheckedCheckboxPlainText() {
+    let attributed = makeAttributedCheckboxLine(checked: true, text: "Done")
+    let mapper = NoteTextMapper(attributedText: attributed)
+
+    #expect(mapper.plainText == "☑ Done")
+}
+
+@MainActor
+@Test func noteTextMapperMapsEndOfDocumentAcrossMultipleCheckboxLines() {
+    let attributed = makeAttributedCheckboxDocument()
+    let mapper = NoteTextMapper(attributedText: attributed)
+    let plainLength = (mapper.plainText as NSString).length
+
+    #expect(mapper.plainText == "☐ Task\n☑ Done\n\nTail")
+    #expect(mapper.plainOffset(forAttributedOffset: attributed.length) == plainLength)
+    #expect(mapper.attributedOffset(forPlainOffset: plainLength) == attributed.length)
+    #expect(mapper.plainRange(forAttributedRange: NSRange(location: attributed.length, length: 0)) == NSRange(location: plainLength, length: 0))
+}
+
 private func makeNote(
     id: UUID = UUID(),
     content: String,
@@ -221,13 +274,26 @@ private func makeNote(
 }
 
 @MainActor
-private func makeAttributedCheckboxLine() -> NSAttributedString {
-    let attributed = NSMutableAttributedString(string: "☐ Task")
+private func makeAttributedCheckboxLine(
+    checked: Bool = false,
+    text: String = "Task"
+) -> NSAttributedString {
+    let prefix = checked ? "☑ " : "☐ "
+    let attributed = NSMutableAttributedString(string: prefix + text)
     let attachment = CheckboxAttachment(
-        checked: false,
+        checked: checked,
         font: .preferredFont(forTextStyle: .body),
-        color: .secondaryLabel
+        color: checked ? .systemPurple : .secondaryLabel
     )
     attributed.replaceCharacters(in: NSRange(location: 0, length: 2), with: NSAttributedString(attachment: attachment))
+    return attributed
+}
+
+@MainActor
+private func makeAttributedCheckboxDocument() -> NSAttributedString {
+    let attributed = NSMutableAttributedString(attributedString: makeAttributedCheckboxLine())
+    attributed.append(NSAttributedString(string: "\n"))
+    attributed.append(makeAttributedCheckboxLine(checked: true, text: "Done"))
+    attributed.append(NSAttributedString(string: "\n\nTail"))
     return attributed
 }
