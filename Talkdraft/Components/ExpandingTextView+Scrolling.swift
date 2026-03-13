@@ -1,5 +1,41 @@
 import UIKit
 
+enum ExpandingTextScrollMath {
+    static func targetOffsetY(
+        currentOffsetY: CGFloat,
+        adjustedTopInset: CGFloat,
+        caretMinY: CGFloat,
+        caretMaxY: CGFloat,
+        visibleTop: CGFloat,
+        visibleBottom: CGFloat
+    ) -> CGFloat? {
+        if caretMaxY > visibleBottom {
+            return currentOffsetY + (caretMaxY - visibleBottom + 20)
+        }
+        if caretMinY < visibleTop {
+            let scrollAmount = visibleTop - caretMinY + 12
+            return max(-adjustedTopInset, currentOffsetY - scrollAmount)
+        }
+        return nil
+    }
+
+    static func restoredOffsetY(currentOffsetY: CGFloat, savedOffsetY: CGFloat) -> CGFloat? {
+        guard currentOffsetY + 24 < savedOffsetY else { return nil }
+        return savedOffsetY
+    }
+
+    static func deletionFollowOffsetY(
+        currentOffsetY: CGFloat,
+        adjustedTopInset: CGFloat,
+        anchorCaretBottom: CGFloat,
+        currentCaretBottom: CGFloat
+    ) -> CGFloat? {
+        let delta = currentCaretBottom - anchorCaretBottom
+        guard delta < -1 else { return nil }
+        return max(-adjustedTopInset, currentOffsetY + delta)
+    }
+}
+
 extension ExpandingTextView.Coordinator {
     // MARK: - Keyboard Observer
 
@@ -60,21 +96,16 @@ extension ExpandingTextView.Coordinator {
         let visibleBottom = scrollFrameInWindow.maxY - keyboardOverlap - editorToolbarClearance
         let visibleTop = scrollFrameInWindow.minY + 12
 
-        let targetOffset: CGPoint?
-        if caretInWindow.maxY > visibleBottom {
-            let scrollAmount = caretInWindow.maxY - visibleBottom + 20
-            targetOffset = CGPoint(x: scrollView.contentOffset.x, y: scrollView.contentOffset.y + scrollAmount)
-        } else if caretInWindow.minY < visibleTop {
-            let scrollAmount = visibleTop - caretInWindow.minY + 12
-            targetOffset = CGPoint(
-                x: scrollView.contentOffset.x,
-                y: max(-scrollView.adjustedContentInset.top, scrollView.contentOffset.y - scrollAmount)
-            )
-        } else {
-            targetOffset = nil
-        }
-
-        guard let newOffset = targetOffset, abs(newOffset.y - scrollView.contentOffset.y) > 0.5 else { return }
+        guard let targetOffsetY = ExpandingTextScrollMath.targetOffsetY(
+            currentOffsetY: scrollView.contentOffset.y,
+            adjustedTopInset: scrollView.adjustedContentInset.top,
+            caretMinY: caretInWindow.minY,
+            caretMaxY: caretInWindow.maxY,
+            visibleTop: visibleTop,
+            visibleBottom: visibleBottom
+        ) else { return }
+        let newOffset = CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY)
+        guard abs(newOffset.y - scrollView.contentOffset.y) > 0.5 else { return }
 
         if let animationDuration, animationDuration > 0 {
             UIView.animate(withDuration: animationDuration, delay: 0, options: animationOptions) {
@@ -122,10 +153,13 @@ extension ExpandingTextView.Coordinator {
                 guard tv.selectedRange == expectedSelection else { return }
                 guard let scrollView = self.enclosingScrollView(for: tv) else { return }
                 let currentOffset = scrollView.contentOffset
-                guard currentOffset.y + 24 < savedOffset.y else { return }
+                guard let restoreOffsetY = ExpandingTextScrollMath.restoredOffsetY(
+                    currentOffsetY: currentOffset.y,
+                    savedOffsetY: savedOffset.y
+                ) else { return }
                 UIView.performWithoutAnimation {
                     scrollView.layer.removeAllAnimations()
-                    scrollView.setContentOffset(CGPoint(x: currentOffset.x, y: savedOffset.y), animated: false)
+                    scrollView.setContentOffset(CGPoint(x: currentOffset.x, y: restoreOffsetY), animated: false)
                     scrollView.layoutIfNeeded()
                 }
             }
@@ -204,13 +238,12 @@ extension ExpandingTextView.Coordinator {
                   let currentCaretBottom = self.caretBottomInWindow(for: tv)
             else { return }
 
-            let delta = currentCaretBottom - anchorCaretBottom
-            guard delta < -1 else { return }
-
-            let newOffsetY = max(
-                -scrollView.adjustedContentInset.top,
-                scrollView.contentOffset.y + delta
-            )
+            guard let newOffsetY = ExpandingTextScrollMath.deletionFollowOffsetY(
+                currentOffsetY: scrollView.contentOffset.y,
+                adjustedTopInset: scrollView.adjustedContentInset.top,
+                anchorCaretBottom: anchorCaretBottom,
+                currentCaretBottom: currentCaretBottom
+            ) else { return }
 
             if let animationDuration, animationDuration > 0 {
                 UIView.animate(withDuration: animationDuration, delay: 0, options: animationOptions) {

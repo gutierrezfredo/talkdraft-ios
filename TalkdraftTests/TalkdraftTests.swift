@@ -484,6 +484,137 @@ import UIKit
     #expect(state.labelText == "Original")
 }
 
+@Test func noteDetailEditorSessionTracksUnsavedChangesAgainstPersistedContent() {
+    var session = NoteDetailEditorSession(title: "Title", content: "Body", bodyState: .content)
+
+    #expect(!session.hasUnsavedChanges(persistedContent: "Body"))
+
+    session.content = "Edited body"
+    #expect(session.hasUnsavedChanges(persistedContent: "Edited body"))
+
+    session.markCurrentStateAsSaved(persistedContent: "Edited body")
+    #expect(!session.hasUnsavedChanges(persistedContent: "Edited body"))
+}
+
+@Test func noteDetailEditorSessionAcceptsStoreDrivenContentAndBodyState() {
+    var session = NoteDetailEditorSession(title: "Title", content: "Body", bodyState: .content)
+
+    session.acceptStoreDrivenContent(
+        NoteBodyState.waitingForConnectionPlaceholder,
+        bodyState: .waitingForConnection
+    )
+
+    #expect(session.content == NoteBodyState.waitingForConnectionPlaceholder)
+    #expect(session.contentBaseline == NoteBodyState.waitingForConnectionPlaceholder)
+    #expect(session.bodyState == .waitingForConnection)
+}
+
+@Test func noteDetailEditorSessionResolvesVoiceFallbackStateWhenPlaceholderStripsToEmpty() {
+    let inserted = NoteAppendPlaceholderEditor.insert(.transcribing, into: "", at: 0)
+
+    let resolvedState = NoteDetailEditorSession.resolvedBodyState(
+        for: inserted.content,
+        source: .voice,
+        fallbackBodyState: .transcribing,
+        appendPlaceholder: inserted.placeholder
+    )
+
+    #expect(resolvedState == .transcribing)
+}
+
+@Test func transcriptSpeakerDetectorPrefersVisibleTranscriptLinesOverStaleMetadata() {
+    let content = """
+    Chaaaaaco
+    Dice algo
+
+    Claclacla
+    Responde algo
+    """
+
+    let speakers = TranscriptSpeakerDetector.detectedSpeakers(
+        in: content,
+        speakerNames: ["0": "Old Speaker", "1": "Another Old Speaker"]
+    )
+
+    #expect(speakers == ["Chaaaaaco", "Claclacla"])
+}
+
+@Test func transcriptSpeakerDetectorFallsBackToMetadataWhenVisibleLinesAreAbsent() {
+    let speakers = TranscriptSpeakerDetector.detectedSpeakers(
+        in: "Regular note body",
+        speakerNames: ["a": "First Speaker", "b": "Second Speaker"]
+    )
+
+    #expect(speakers == ["First Speaker", "Second Speaker"])
+}
+
+@Test func transcriptSpeakerDetectorDetectsGenericSpeakerLinesWithoutMetadata() {
+    let content = """
+    Speaker 1
+    Hello there
+
+    Speaker 2
+    General Kenobi
+    """
+
+    #expect(TranscriptSpeakerDetector.detectedSpeakers(in: content, speakerNames: nil) == ["Speaker 1", "Speaker 2"])
+}
+
+@Test func expandingTextScrollMathMovesDownWhenCaretFallsBelowVisibleBottom() {
+    let targetOffsetY = ExpandingTextScrollMath.targetOffsetY(
+        currentOffsetY: 100,
+        adjustedTopInset: 0,
+        caretMinY: 410,
+        caretMaxY: 430,
+        visibleTop: 200,
+        visibleBottom: 400
+    )
+
+    #expect(targetOffsetY == 150)
+}
+
+@Test func expandingTextScrollMathMovesUpWhenCaretFallsAboveVisibleTop() {
+    let targetOffsetY = ExpandingTextScrollMath.targetOffsetY(
+        currentOffsetY: 100,
+        adjustedTopInset: 12,
+        caretMinY: 180,
+        caretMaxY: 198,
+        visibleTop: 200,
+        visibleBottom: 400
+    )
+
+    #expect(targetOffsetY == 68)
+}
+
+@Test func expandingTextScrollMathIgnoresVisibleCaret() {
+    let targetOffsetY = ExpandingTextScrollMath.targetOffsetY(
+        currentOffsetY: 100,
+        adjustedTopInset: 0,
+        caretMinY: 240,
+        caretMaxY: 260,
+        visibleTop: 200,
+        visibleBottom: 400
+    )
+
+    #expect(targetOffsetY == nil)
+}
+
+@Test func expandingTextScrollMathRestoresOnlyAfterUpwardJump() {
+    #expect(ExpandingTextScrollMath.restoredOffsetY(currentOffsetY: 40, savedOffsetY: 80) == 80)
+    #expect(ExpandingTextScrollMath.restoredOffsetY(currentOffsetY: 70, savedOffsetY: 80) == nil)
+}
+
+@Test func expandingTextScrollMathFollowsDeletionCaretUpward() {
+    let targetOffsetY = ExpandingTextScrollMath.deletionFollowOffsetY(
+        currentOffsetY: 200,
+        adjustedTopInset: 20,
+        anchorCaretBottom: 500,
+        currentCaretBottom: 470
+    )
+
+    #expect(targetOffsetY == 170)
+}
+
 @MainActor
 private final class EditorStateBox {
     var text: String

@@ -5,7 +5,7 @@ extension NoteDetailView {
         typewriterTask == nil
             && titleTypewriterTask == nil
             && !isRewriting
-            && (editedTitle != titleBaseline || persistedEditedContent != contentBaseline)
+            && editorSession.hasUnsavedChanges(persistedContent: persistedEditedContent)
     }
 
     func downloadAudio() {

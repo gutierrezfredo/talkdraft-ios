@@ -33,6 +33,8 @@ struct ExpandingTextView: UIViewRepresentable {
             : UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1)
     }
 
+    static let uncheckedCheckboxColor = UIColor.secondaryLabel
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }

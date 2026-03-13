@@ -2,20 +2,15 @@ import SwiftUI
 
 extension NoteDetailView {
     func syncSavedBaselines(title: String? = nil, content: String? = nil) {
-        if let title {
-            titleBaseline = title
-        }
-        if let content {
-            contentBaseline = content
-        }
+        editorSession.syncSavedBaselines(title: title, content: content)
     }
 
     func markCurrentStateAsSaved() {
-        syncSavedBaselines(title: editedTitle, content: persistedEditedContent)
+        editorSession.markCurrentStateAsSaved(persistedContent: persistedEditedContent)
     }
 
     func acceptStoreDrivenContent(_ content: String, revealIfNeeded: Bool = false) {
-        contentBaseline = content
+        editorSession.syncSavedBaselines(content: content)
         if revealIfNeeded {
             contentFocused = false
             revealContent(content)
@@ -23,23 +18,20 @@ extension NoteDetailView {
         }
         withAnimation(.easeOut(duration: 0.4)) {
             appendPlaceholder = nil
-            editedContent = content
-            syncBodyState(with: content)
+            editorSession.acceptStoreDrivenContent(content, bodyState: resolvedBodyState(for: content))
         }
     }
 
     func acceptResolvedNoteContent(_ content: String, fadeInIfNeeded: Bool = true) {
-        contentBaseline = content
         appendPlaceholder = nil
-        editedContent = content
-        syncBodyState(with: content)
+        editorSession.acceptResolvedContent(content, bodyState: resolvedBodyState(for: content))
         if fadeInIfNeeded, contentOpacity == 0 {
             withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
         }
     }
 
     func syncStoreTitle(_ title: String) {
-        titleBaseline = title
+        editorSession.syncSavedBaselines(title: title)
         guard !title.isEmpty else {
             editedTitle = title
             return
@@ -63,6 +55,6 @@ extension NoteDetailView {
         appendPlaceholder = nil
         editedContent = displayContent
         syncBodyState(with: displayContent)
-        contentBaseline = displayContent
+        editorSession.syncSavedBaselines(content: displayContent)
     }
 }

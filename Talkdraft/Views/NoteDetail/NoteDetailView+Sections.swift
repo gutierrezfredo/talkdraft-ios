@@ -403,7 +403,7 @@ extension NoteDetailView {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 24)
             } else {
-                TextField("Untitled", text: $editedTitle, axis: .vertical)
+                TextField("Untitled", text: editedTitleBinding, axis: .vertical)
                     .font(.brandTitle)
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
@@ -451,7 +451,7 @@ extension NoteDetailView {
 
     var contentField: some View {
         ExpandingTextView(
-            text: $editedContent,
+            text: editedContentBinding,
             isFocused: $contentFocused,
             cursorPosition: $cursorPosition,
             highlightRange: $highlightRange,

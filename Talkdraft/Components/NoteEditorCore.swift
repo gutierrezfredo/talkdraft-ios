@@ -25,21 +25,20 @@ final class CheckboxAttachment: NSTextAttachment {
         self.iconSize = Self.iconSize(for: font)
         self.attachmentHeight = Self.attachmentHeight(for: font)
         super.init(data: nil, ofType: nil)
-        let symbolName = checked ? "checkmark.circle.fill" : "circle"
-        let config = UIImage.SymbolConfiguration(pointSize: iconSize, weight: checked ? .medium : .light)
-        if let symbol = UIImage(systemName: symbolName, withConfiguration: config)?
-            .withTintColor(color, renderingMode: .alwaysOriginal) {
-            let paddedSize = CGSize(width: iconSize + Self.trailingPadding, height: attachmentHeight)
-            let renderer = UIGraphicsImageRenderer(size: paddedSize)
-            self.image = renderer.image { _ in
-                let iconRect = CGRect(
-                    x: 0,
-                    y: floor((attachmentHeight - iconSize) / 2),
-                    width: iconSize,
-                    height: iconSize
-                )
-                symbol.draw(in: iconRect)
-            }
+        let paddedSize = CGSize(width: iconSize + Self.trailingPadding, height: attachmentHeight)
+        let renderer = UIGraphicsImageRenderer(size: paddedSize)
+        self.image = renderer.image { _ in
+            let iconRect = CGRect(
+                x: 0,
+                y: floor((attachmentHeight - iconSize) / 2),
+                width: iconSize,
+                height: iconSize
+            )
+            let symbolName = checked ? "checkmark.circle.fill" : "circle"
+            let config = UIImage.SymbolConfiguration(pointSize: iconSize, weight: checked ? .medium : .light)
+            let symbol = UIImage(systemName: symbolName, withConfiguration: config)?
+                .withTintColor(color, renderingMode: .alwaysOriginal)
+            symbol?.draw(in: iconRect)
         }
     }
 

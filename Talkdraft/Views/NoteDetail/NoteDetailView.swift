@@ -34,9 +34,7 @@ struct NoteDetailView: View {
     let noteId: UUID
     let initialNote: Note
 
-    @State var editedTitle: String
-    @State var editedContent: String
-    @State var noteBodyState: NoteBodyState
+    @State var editorSession: NoteDetailEditorSession
     @State var showDeleteConfirmation = false
     @State var pendingDeleteRewrite: NoteRewrite?
     @State var didDelete = false
@@ -57,8 +55,6 @@ struct NoteDetailView: View {
     @State var moveCursorToEnd = false
     @FocusState var titleFocused: Bool
     @State var contentOpacity: Double = 1
-    @State var titleBaseline: String = ""
-    @State var contentBaseline: String = ""
     @State var errorMessage: String?
     @State var isDownloadingAudio = false
     @State var audioShareItem: URL?
@@ -152,15 +148,11 @@ struct NoteDetailView: View {
         // If the note has an active rewrite but no cached content yet, the task will
         // switch content after fetching — start invisible to prevent the flash.
         let willSwitch = note.activeRewriteId != nil && initialContent == nil
-        self._editedTitle = State(initialValue: title)
-        self._editedContent = State(initialValue: content)
-        self._noteBodyState = State(initialValue: NoteBodyState(content: content, source: note.source))
+        self._editorSession = State(initialValue: NoteDetailEditorSession(title: title, content: content, bodyState: NoteBodyState(content: content, source: note.source)))
         self._contentFocused = State(initialValue: false)
         self._activeRewriteId = State(initialValue: note.activeRewriteId)
         self._rewriteLabelFallback = State(initialValue: opensOnUnresolvedRewrite ? "Rewrite" : nil)
         self._rewriteLabelOpacity = State(initialValue: (note.originalContent != nil || note.activeRewriteId != nil) ? 1 : 0)
-        self._titleBaseline = State(initialValue: title)
-        self._contentBaseline = State(initialValue: content)
         self._contentOpacity = State(initialValue: willSwitch ? 0 : 1)
     }
 
@@ -177,66 +169,48 @@ struct NoteDetailView: View {
     }
 
 
+    var editedTitle: String {
+        get { editorSession.title }
+        nonmutating set { editorSession.title = newValue }
+    }
+
+    var editedContent: String {
+        get { editorSession.content }
+        nonmutating set { editorSession.content = newValue }
+    }
+
+    var noteBodyState: NoteBodyState {
+        get { editorSession.bodyState }
+        nonmutating set { editorSession.bodyState = newValue }
+    }
+
+    var titleBaseline: String {
+        get { editorSession.titleBaseline }
+        nonmutating set { editorSession.titleBaseline = newValue }
+    }
+
+    var contentBaseline: String {
+        get { editorSession.contentBaseline }
+        nonmutating set { editorSession.contentBaseline = newValue }
+    }
+
+    var editedTitleBinding: Binding<String> {
+        Binding(get: { editedTitle }, set: { editedTitle = $0 })
+    }
+
+    var editedContentBinding: Binding<String> {
+        Binding(get: { editedContent }, set: { editedContent = $0 })
+    }
+
+
     var persistedEditedContent: String {
         NoteAppendPlaceholderEditor.strippedContent(from: editedContent, placeholder: appendPlaceholder)
     }
 
 
     /// Unique speaker display names in order of first appearance.
-    /// For transcript notes, follow the currently visible transcript structure first so
-    /// speaker chips and inline styling stay aligned with the text the user is seeing.
-    /// Fall back to persisted metadata only when the content itself does not expose
-    /// speaker lines clearly.
     var detectedSpeakers: [String] {
-        let lines = editedContent.components(separatedBy: "\n")
-        var seen: [String] = []
-
-        if let names = note.speakerNames, !names.isEmpty {
-            for index in lines.indices {
-                let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty else { continue }
-                if isTranscriptSpeakerLine(in: lines, index: index), !seen.contains(trimmed) {
-                    seen.append(trimmed)
-                }
-            }
-            if !seen.isEmpty { return seen }
-            return names.keys.sorted().map { names[$0] ?? $0 }
-        }
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            if trimmed.range(of: #"^Speaker \d+$"#, options: .regularExpression) != nil,
-               !seen.contains(trimmed) {
-                seen.append(trimmed)
-            }
-        }
-        if !seen.isEmpty { return seen }
-
-        let pattern = /\[([^\]]+)\]:/
-        for match in editedContent.matches(of: pattern) {
-            let key = String(match.output.1)
-            if !seen.contains(key) { seen.append(key) }
-        }
-        return seen
-    }
-
-    func isTranscriptSpeakerLine(in lines: [String], index: Int) -> Bool {
-        let current = lines[index].trimmingCharacters(in: .whitespaces)
-        guard !current.isEmpty else { return false }
-
-        let previousIsSeparator = index == 0 || lines[index - 1].trimmingCharacters(in: .whitespaces).isEmpty
-        guard previousIsSeparator else { return false }
-
-        guard index + 1 < lines.count else { return false }
-        let next = lines[index + 1].trimmingCharacters(in: .whitespaces)
-        guard !next.isEmpty else { return false }
-
-        if current.hasPrefix("• ") || current.hasPrefix("☐ ") || current.hasPrefix("☑ ") || current.hasPrefix("[") {
-            return false
-        }
-
-        return true
+        TranscriptSpeakerDetector.detectedSpeakers(in: editedContent, speakerNames: note.speakerNames)
     }
 
     func speakerColor(for key: String) -> Color {

@@ -92,6 +92,9 @@ extension ExpandingTextView {
             }
         }
 
+        let resolvedBrandColor = Self.brandColor.resolvedColor(with: tv.traitCollection)
+        let resolvedUncheckedCheckboxColor = Self.uncheckedCheckboxColor.resolvedColor(with: tv.traitCollection)
+
         // Replace ☐/☑ with SF Symbol attachments + style checked lines
         let lines = nsText.components(separatedBy: .newlines)
         var lineOffset = 0
@@ -105,7 +108,7 @@ extension ExpandingTextView {
                 let isUnchecked = firstScalar == 0x2610 // ☐
                 let isChecked = firstScalar == 0x2611   // ☑
                 if isUnchecked || isChecked {
-                    let color: UIColor = isChecked ? Self.brandColor : .secondaryLabel
+                    let color: UIColor = isChecked ? resolvedBrandColor : resolvedUncheckedCheckboxColor
                     let attachment = CheckboxAttachment(checked: isChecked, font: font, color: color)
                     // Replace checkbox + space (2 chars) so no stray space precedes the text on line 1
                     let replaceLen = (lineLen > 1 && lineNS.character(at: 1) == 0x0020) ? 2 : 1
