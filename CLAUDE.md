@@ -79,6 +79,24 @@ codesign --force --deep --sign "Apple Development: Alfredo Gutierrez (GZDD4Q4Q2C
 xcrun devicectl device install app --device 00008110-001E156C3C89A01E /tmp/Talkdraft-resigned.app
 ```
 
+## Parallel Workflow (Claude + Codex)
+
+Two AI tools work on this project simultaneously using git worktrees:
+
+| Tool | Worktree |
+|------|----------|
+| **Claude** | `talkdraft-ios-claude/` |
+| **Codex** | `talkdraft-ios-codex/` |
+| **Main** | `talkdraft-ios/` — user's checkout, source of truth |
+
+**Rules:**
+- Always work in your assigned worktree — never touch the other worktrees
+- Branch from latest `main` before starting any task: `git fetch origin && git checkout main && git pull && git checkout -b <tool>/task-name`
+- Push your branch and open a PR to `main` when done
+- After a PR is merged, sync your worktree before starting the next task
+- If your PR has merge conflicts, rebase onto `main` and resolve them
+- **Cross-review**: whoever didn't write the code reviews the PR. If asked to review, read the diff and leave comments on the PR
+
 ## Key Config
 
 - Bundle ID: `com.pleymob.talkdraft`
