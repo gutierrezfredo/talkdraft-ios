@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
+    @Environment(\.scenePhase) private var scenePhase
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
@@ -51,29 +52,58 @@ struct ContentView: View {
         }
         .preferredColorScheme(colorScheme)
         .task {
-            await authStore.initialize(settingsStore: settingsStore)
-            // Belt-and-suspenders: if onChange didn't fire or refresh hasn't run yet, do it here.
-            if authStore.isAuthenticated && !noteStore.hasInitiallyLoaded {
-                await noteStore.refresh()
+            await authStore.initialize(settingsStore: settingsStore, noteStore: noteStore)
+            // Belt-and-suspenders: if startup auth state was already available before onChange
+            // hooks settled, initialize the user session here too.
+            if authStore.isAuthenticated, let userId = authStore.userId {
+                noteStore.beginSession(userId: userId)
+                if !subscriptionStore.entitlementChecked {
+                    await subscriptionStore.login(userId: userId)
+                }
+                if !noteStore.hasInitiallyLoaded {
+                    await noteStore.refresh()
+                }
             }
         }
         .onChange(of: authStore.isAuthenticated) { _, authenticated in
             if authenticated {
-                Task { await noteStore.refresh() }
                 if let userId = authStore.userId {
+                    noteStore.beginSession(userId: userId)
+                    Task { await noteStore.refresh() }
                     Task { await subscriptionStore.login(userId: userId) }
                 }
             } else {
+                noteStore.resetSession()
+                settingsStore.resetSession()
                 Task { await subscriptionStore.logout() }
             }
+        }
+        .onChange(of: authStore.userId) { oldValue, newValue in
+            guard authStore.isAuthenticated,
+                  let oldValue,
+                  let newValue,
+                  oldValue != newValue
+            else { return }
+
+            noteStore.resetSession()
+            noteStore.beginSession(userId: newValue)
+            Task { await noteStore.refresh() }
+            Task { await subscriptionStore.login(userId: newValue) }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task {
                 // Wait for connectivity to stabilize after coming from airplane mode
                 try? await Task.sleep(for: .seconds(3))
                 noteStore.repairOrphanedTranscriptions()
+                noteStore.retryPendingNoteUpserts()
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 noteStore.retryWaitingNotes(language: language, userId: authStore.userId, customDictionary: settingsStore.customDictionary)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .background else { return }
+            Task {
+                await noteStore.flushPendingNoteUpserts()
             }
         }
     }

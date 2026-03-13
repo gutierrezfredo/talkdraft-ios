@@ -1,10 +1,12 @@
 import Foundation
+import AVFoundation
 import Observation
 import os
 import Supabase
 import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
+typealias NoteUpsertExecutor = @MainActor (Note) async throws -> Void
 
 private enum TranscriptionWorkflowError: LocalizedError {
     case timedOut(seconds: TimeInterval)
@@ -17,7 +19,21 @@ private enum TranscriptionWorkflowError: LocalizedError {
     }
 }
 
-private struct NoteUpdate: Encodable {
+private enum ImportedAudioNoteError: LocalizedError {
+    case accessDenied
+    case copyFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied, .copyFailed:
+            "Failed to import audio file"
+        }
+    }
+}
+
+private struct NoteSyncPayload: Encodable {
+    let id: UUID
+    let userId: UUID?
     var categoryId: UUID?
     var title: String?
     var content: String
@@ -28,9 +44,13 @@ private struct NoteUpdate: Encodable {
     var audioUrl: String?
     var durationSeconds: Int?
     var speakerNames: [String: String]?
+    let createdAt: Date
     var updatedAt: Date
+    var deletedAt: Date?
 
     enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
         case categoryId = "category_id"
         case title, content
         case originalContent = "original_content"
@@ -39,10 +59,14 @@ private struct NoteUpdate: Encodable {
         case audioUrl = "audio_url"
         case durationSeconds = "duration_seconds"
         case speakerNames = "speaker_names"
+        case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case deletedAt = "deleted_at"
     }
 
     init(from note: Note) {
+        self.id = note.id
+        self.userId = note.userId
         self.categoryId = note.categoryId
         self.title = note.title
         self.content = note.content
@@ -50,10 +74,12 @@ private struct NoteUpdate: Encodable {
         self.activeRewriteId = note.activeRewriteId
         self.source = note.source
         self.language = note.language
-        self.audioUrl = note.audioUrl
+        self.audioUrl = NoteStore.remoteAudioURL(for: note.audioUrl)
         self.durationSeconds = note.durationSeconds
         self.speakerNames = note.speakerNames
+        self.createdAt = note.createdAt
         self.updatedAt = note.updatedAt
+        self.deletedAt = note.deletedAt
     }
 }
 
@@ -71,11 +97,36 @@ final class NoteStore {
     var generatingTitleIds: Set<UUID> = []
     var activeTranscriptionIds: Set<UUID> = []
     var localVoiceBodyStates: [UUID: NoteBodyState]
+    var pendingNoteUpserts: [UUID: Note]
     let persistsLocalVoiceBodyStates: Bool
+    let persistsPendingNoteUpserts: Bool
+    @ObservationIgnored private let noteSyncDebounceDuration: Duration
+    @ObservationIgnored private let noteUpsertExecutor: NoteUpsertExecutor
+    @ObservationIgnored private var pendingNoteSyncTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var pendingNoteSyncTokens: [UUID: UUID] = [:]
+    private var currentSessionUserId: UUID?
+    private var noteSyncRevisions: [UUID: Int] = [:]
+    private var categorySyncRevisions: [UUID: Int] = [:]
 
-    init(localVoiceBodyStates: [UUID: NoteBodyState]? = nil, persistsLocalVoiceBodyStates: Bool = true) {
+    init(
+        localVoiceBodyStates: [UUID: NoteBodyState]? = nil,
+        persistsLocalVoiceBodyStates: Bool = true,
+        pendingNoteUpserts: [UUID: Note]? = nil,
+        persistsPendingNoteUpserts: Bool = true,
+        noteSyncDebounceDuration: Duration = .milliseconds(700),
+        noteUpsertExecutor: NoteUpsertExecutor? = nil
+    ) {
         self.persistsLocalVoiceBodyStates = persistsLocalVoiceBodyStates
-        self.localVoiceBodyStates = localVoiceBodyStates ?? (persistsLocalVoiceBodyStates ? Self.loadLocalVoiceBodyStates() : [:])
+        self.persistsPendingNoteUpserts = persistsPendingNoteUpserts
+        self.noteSyncDebounceDuration = noteSyncDebounceDuration
+        self.noteUpsertExecutor = noteUpsertExecutor ?? { note in
+            try await supabase
+                .from("notes")
+                .upsert(NoteSyncPayload(from: note))
+                .execute()
+        }
+        self.localVoiceBodyStates = localVoiceBodyStates ?? [:]
+        self.pendingNoteUpserts = pendingNoteUpserts ?? [:]
     }
 
     // MARK: - Multi-Speaker Format
@@ -110,9 +161,19 @@ final class NoteStore {
 
     private static let localAudioKey = "localAudioPaths"
     private static let localVoiceBodyStateKey = "localVoiceBodyStates"
+    private static let pendingNoteUpsertsKey = "pendingNoteUpserts"
 
-    private static func loadLocalVoiceBodyStates() -> [UUID: NoteBodyState] {
-        let raw = (UserDefaults.standard.dictionary(forKey: Self.localVoiceBodyStateKey) as? [String: String]) ?? [:]
+    private static func scopedKey(_ base: String, userId: UUID?) -> String {
+        "\(base).\(userId?.uuidString ?? "anonymous")"
+    }
+
+    private static func loadLocalVoiceBodyStates(for userId: UUID?) -> [UUID: NoteBodyState] {
+        let scopedKey = scopedKey(Self.localVoiceBodyStateKey, userId: userId)
+        let raw = (
+            UserDefaults.standard.dictionary(forKey: scopedKey) as? [String: String]
+        ) ?? (
+            UserDefaults.standard.dictionary(forKey: Self.localVoiceBodyStateKey) as? [String: String]
+        ) ?? [:]
         return raw.reduce(into: [:]) { result, item in
             guard let id = UUID(uuidString: item.key), let state = NoteBodyState(storageKey: item.value) else { return }
             result[id] = state
@@ -125,7 +186,28 @@ final class NoteStore {
             guard let key = item.value.storageKey else { return }
             result[item.key.uuidString] = key
         }
-        UserDefaults.standard.set(raw, forKey: Self.localVoiceBodyStateKey)
+        UserDefaults.standard.set(raw, forKey: Self.scopedKey(Self.localVoiceBodyStateKey, userId: currentSessionUserId))
+    }
+
+    private static func loadPendingNoteUpserts(for userId: UUID?) -> [UUID: Note] {
+        guard let data = UserDefaults.standard.data(forKey: scopedKey(Self.pendingNoteUpsertsKey, userId: userId)),
+              let notes = try? JSONDecoder().decode([Note].self, from: data)
+        else {
+            return [:]
+        }
+        return Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+    }
+
+    private func persistPendingNoteUpserts() {
+        guard persistsPendingNoteUpserts else { return }
+        let notes = pendingNoteUpserts.values.sorted { $0.createdAt > $1.createdAt }
+        let key = Self.scopedKey(Self.pendingNoteUpsertsKey, userId: currentSessionUserId)
+        if notes.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(notes) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 
     private func setLocalVoiceBodyState(_ state: NoteBodyState?, for noteId: UUID) {
@@ -145,31 +227,51 @@ final class NoteStore {
     }
 
     private func registerLocalAudio(_ url: URL, for noteId: UUID) {
-        var index = (UserDefaults.standard.dictionary(forKey: Self.localAudioKey) as? [String: String]) ?? [:]
-        index[noteId.uuidString] = url.path
-        UserDefaults.standard.set(index, forKey: Self.localAudioKey)
+        let key = Self.scopedKey(Self.localAudioKey, userId: currentSessionUserId)
+        var index = (
+            UserDefaults.standard.dictionary(forKey: key) as? [String: String]
+        ) ?? (
+            UserDefaults.standard.dictionary(forKey: Self.localAudioKey) as? [String: String]
+        ) ?? [:]
+        index[noteId.uuidString] = url.absoluteString
+        UserDefaults.standard.set(index, forKey: key)
     }
 
     private func unregisterLocalAudio(for noteId: UUID) {
-        var index = (UserDefaults.standard.dictionary(forKey: Self.localAudioKey) as? [String: String]) ?? [:]
+        let key = Self.scopedKey(Self.localAudioKey, userId: currentSessionUserId)
+        var index = (UserDefaults.standard.dictionary(forKey: key) as? [String: String]) ?? [:]
         index.removeValue(forKey: noteId.uuidString)
-        UserDefaults.standard.set(index, forKey: Self.localAudioKey)
+        UserDefaults.standard.set(index, forKey: key)
     }
 
     /// Returns the local audio file URL for a note, checking note.audioUrl first,
     /// then falling back to the persisted UserDefaults index.
     func localAudioFileURL(for noteId: UUID, audioUrl: String?) -> URL? {
         // Primary: note's own audioUrl (only valid if it's a local file)
-        if let urlString = audioUrl,
-           let url = URL(string: urlString),
-           url.isFileURL,
-           FileManager.default.fileExists(atPath: url.path) {
-            return url
+        if let urlString = audioUrl {
+            if let url = URL(string: urlString), url.isFileURL, FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+            if urlString.hasPrefix("/") {
+                let url = URL(fileURLWithPath: urlString)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    return url
+                }
+            }
         }
         // Fallback: persisted index (survives app restart after failed transcription)
-        if let index = UserDefaults.standard.dictionary(forKey: Self.localAudioKey) as? [String: String],
-           let path = index[noteId.uuidString] {
-            let url = URL(fileURLWithPath: path)
+        let key = Self.scopedKey(Self.localAudioKey, userId: currentSessionUserId)
+        if let index = (
+            UserDefaults.standard.dictionary(forKey: key) as? [String: String]
+        ) ?? (
+            UserDefaults.standard.dictionary(forKey: Self.localAudioKey) as? [String: String]
+        ),
+           let storedPath = index[noteId.uuidString] {
+            let url = if let fileURL = URL(string: storedPath), fileURL.isFileURL {
+                fileURL
+            } else {
+                URL(fileURLWithPath: storedPath)
+            }
             if FileManager.default.fileExists(atPath: url.path) {
                 return url
             }
@@ -177,6 +279,53 @@ final class NoteStore {
             unregisterLocalAudio(for: noteId)
         }
         return nil
+    }
+
+    nonisolated fileprivate static func remoteAudioURL(for audioUrl: String?) -> String? {
+        guard let audioUrl else { return nil }
+        if audioUrl.hasPrefix("/") {
+            return nil
+        }
+        if let url = URL(string: audioUrl), url.isFileURL {
+            return nil
+        }
+        return audioUrl
+    }
+
+    func beginSession(userId: UUID) {
+        guard currentSessionUserId != userId else { return }
+        cancelAllPendingNoteSyncTasks()
+        currentSessionUserId = userId
+        localVoiceBodyStates = persistsLocalVoiceBodyStates ? Self.loadLocalVoiceBodyStates(for: userId) : localVoiceBodyStates
+        pendingNoteUpserts = persistsPendingNoteUpserts ? Self.loadPendingNoteUpserts(for: userId) : pendingNoteUpserts
+        noteSyncRevisions = [:]
+        categorySyncRevisions = [:]
+        notes = mergedPendingNotes(with: [])
+        deletedNotes = []
+        categories = []
+        rewritesCache = [:]
+        selectedCategoryId = nil
+        lastError = nil
+        hasInitiallyLoaded = false
+    }
+
+    func resetSession() {
+        cancelAllPendingNoteSyncTasks()
+        notes = []
+        deletedNotes = []
+        categories = []
+        rewritesCache = [:]
+        selectedCategoryId = nil
+        isLoading = false
+        hasInitiallyLoaded = false
+        lastError = nil
+        generatingTitleIds = []
+        activeTranscriptionIds = []
+        localVoiceBodyStates = [:]
+        pendingNoteUpserts = [:]
+        noteSyncRevisions = [:]
+        categorySyncRevisions = [:]
+        currentSessionUserId = nil
     }
 
     func activeRewrite(for note: Note) -> NoteRewrite? {
@@ -274,7 +423,191 @@ final class NoteStore {
         return notes.filter { $0.categoryId == categoryId }
     }
 
+    private func mergedPendingNotes(with remoteNotes: [Note]) -> [Note] {
+        var merged = Dictionary(uniqueKeysWithValues: remoteNotes.map { ($0.id, normalizeLocalVoiceNote($0)) })
+        for note in pendingNoteUpserts.values {
+            merged[note.id] = normalizeLocalVoiceNote(note)
+        }
+        return merged.values.sorted { lhs, rhs in
+            if lhs.updatedAt != rhs.updatedAt {
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            return lhs.createdAt > rhs.createdAt
+        }
+    }
+
+    private func queuePendingNoteUpsert(_ note: Note) {
+        pendingNoteUpserts[note.id] = note
+        persistPendingNoteUpserts()
+    }
+
+    private func clearPendingNoteUpsert(id: UUID, expectedRevision: Int?) {
+        guard pendingNoteUpserts[id] != nil else { return }
+        if let expectedRevision, (noteSyncRevisions[id] ?? 0) != expectedRevision {
+            return
+        }
+        pendingNoteUpserts.removeValue(forKey: id)
+        persistPendingNoteUpserts()
+    }
+
+    @discardableResult
+    private func bumpNoteSyncRevision(for noteId: UUID) -> Int {
+        let next = (noteSyncRevisions[noteId] ?? 0) + 1
+        noteSyncRevisions[noteId] = next
+        return next
+    }
+
+    @discardableResult
+    private func bumpCategorySyncRevision(for categoryId: UUID) -> Int {
+        let next = (categorySyncRevisions[categoryId] ?? 0) + 1
+        categorySyncRevisions[categoryId] = next
+        return next
+    }
+
+    private func clearPendingNoteSyncTask(id: UUID, token: UUID? = nil) {
+        guard token == nil || pendingNoteSyncTokens[id] == token else { return }
+        pendingNoteSyncTasks[id] = nil
+        pendingNoteSyncTokens[id] = nil
+    }
+
+    private func cancelPendingNoteSyncTask(id: UUID) {
+        pendingNoteSyncTasks[id]?.cancel()
+        clearPendingNoteSyncTask(id: id)
+    }
+
+    private func cancelAllPendingNoteSyncTasks() {
+        for task in pendingNoteSyncTasks.values {
+            task.cancel()
+        }
+        pendingNoteSyncTasks = [:]
+        pendingNoteSyncTokens = [:]
+    }
+
+    private func schedulePendingNoteUpsertSync(id: UUID, expectedRevision: Int, delay: Duration) {
+        cancelPendingNoteSyncTask(id: id)
+        let token = UUID()
+        pendingNoteSyncTokens[id] = token
+        pendingNoteSyncTasks[id] = Task { [weak self] in
+            guard let self else { return }
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
+            guard !Task.isCancelled else { return }
+            await self.syncPendingNoteUpsert(id: id, expectedRevision: expectedRevision, token: token)
+        }
+    }
+
+    func flushPendingNoteUpsert(id: UUID) async {
+        cancelPendingNoteSyncTask(id: id)
+        let expectedRevision = noteSyncRevisions[id] ?? 0
+        await syncPendingNoteUpsert(id: id, expectedRevision: expectedRevision)
+    }
+
+    func flushPendingNoteUpserts() async {
+        let ids = pendingNoteUpserts.values
+            .sorted(by: { $0.updatedAt < $1.updatedAt })
+            .map(\.id)
+        for id in ids {
+            await flushPendingNoteUpsert(id: id)
+        }
+    }
+
+    func retryPendingNoteUpserts() {
+        guard !pendingNoteUpserts.isEmpty else { return }
+        for note in pendingNoteUpserts.values.sorted(by: { $0.updatedAt < $1.updatedAt }) {
+            let revision = noteSyncRevisions[note.id] ?? 0
+            schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
+        }
+    }
+
+    private func syncPendingNoteUpsert(id: UUID, expectedRevision: Int, token: UUID? = nil) async {
+        guard let note = pendingNoteUpserts[id] else {
+            clearPendingNoteSyncTask(id: id, token: token)
+            return
+        }
+
+        do {
+            try await noteUpsertExecutor(note)
+            clearPendingNoteSyncTask(id: id, token: token)
+            clearPendingNoteUpsert(id: id, expectedRevision: expectedRevision)
+        } catch {
+            clearPendingNoteSyncTask(id: id, token: token)
+            logger.error("note upsert failed for \(id): \(error)")
+        }
+    }
+
     // MARK: - Fetch
+
+    private static func importedAudioDurationSeconds(for url: URL) async -> Int? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            return seconds.isFinite ? Int(seconds) : nil
+        } catch {
+            return nil
+        }
+    }
+
+    private static func copyImportedAudio(from sourceURL: URL) throws -> URL {
+        let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Recordings", isDirectory: true)
+        try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+
+        let fileName = if sourceURL.pathExtension.isEmpty {
+            UUID().uuidString
+        } else {
+            "\(UUID().uuidString).\(sourceURL.pathExtension)"
+        }
+        let destinationURL = recordingsDir.appendingPathComponent(fileName)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
+
+    func importAudioNote(
+        from sourceURL: URL,
+        userId: UUID?,
+        categoryId: UUID?,
+        language: String?,
+        customDictionary: [String]
+    ) async throws -> Note {
+        guard sourceURL.startAccessingSecurityScopedResource() else {
+            throw ImportedAudioNoteError.accessDenied
+        }
+        defer { sourceURL.stopAccessingSecurityScopedResource() }
+
+        let destinationURL: URL
+        do {
+            destinationURL = try Self.copyImportedAudio(from: sourceURL)
+        } catch {
+            throw ImportedAudioNoteError.copyFailed
+        }
+
+        let noteId = UUID()
+        let note = Note(
+            id: noteId,
+            userId: userId,
+            categoryId: categoryId,
+            title: sourceURL.deletingPathExtension().lastPathComponent,
+            content: "",
+            source: .voice,
+            audioUrl: destinationURL.absoluteString,
+            durationSeconds: await Self.importedAudioDurationSeconds(for: destinationURL),
+            createdAt: .now,
+            updatedAt: .now
+        )
+
+        addNote(note)
+        setNoteBodyState(id: noteId, state: .transcribing)
+        transcribeNote(
+            id: noteId,
+            audioFileURL: destinationURL,
+            language: language,
+            userId: userId,
+            customDictionary: customDictionary
+        )
+        return note
+    }
 
     func refresh() async {
         isLoading = true
@@ -300,7 +633,7 @@ final class NoteStore {
             .execute()
             .value
         pruneLocalVoiceBodyStates(validNoteIds: Set(fetched.map(\.id)))
-        notes = fetched.map(normalizeLocalVoiceNote)
+        notes = mergedPendingNotes(with: fetched)
         repairOrphanedTranscriptions()
 
         let deleted: [Note] = try await supabase
@@ -314,6 +647,7 @@ final class NoteStore {
 
         // Auto-purge notes deleted more than 30 days ago
         await purgeExpiredNotes()
+        retryPendingNoteUpserts()
     }
 
     func fetchCategories() async throws {
@@ -331,15 +665,16 @@ final class NoteStore {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[index].content = content
         notes[index].updatedAt = Date()
-        guard notes[index].source == .voice else { return }
-
-        let inferredState = NoteBodyState(content: content, source: notes[index].source)
-        if inferredState.isTransientTranscriptionState {
-            notes[index].content = ""
-            setLocalVoiceBodyState(inferredState, for: id)
-        } else {
-            setLocalVoiceBodyState(nil, for: id)
+        if notes[index].source == .voice {
+            let inferredState = NoteBodyState(content: content, source: notes[index].source)
+            if inferredState.isTransientTranscriptionState {
+                notes[index].content = ""
+                setLocalVoiceBodyState(inferredState, for: id)
+            } else {
+                setLocalVoiceBodyState(nil, for: id)
+            }
         }
+        queuePendingNoteUpsert(notes[index])
     }
 
     // MARK: - Note CRUD
@@ -347,42 +682,18 @@ final class NoteStore {
     func addNote(_ note: Note) {
         let localNote = normalizeLocalVoiceNote(note)
         notes.insert(localNote, at: 0)
-
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .insert(note)
-                    .execute()
-            } catch {
-                logger.error("addNote sync failed (note saved locally): \(error)")
-            }
-        }
+        queuePendingNoteUpsert(localNote)
+        let revision = bumpNoteSyncRevision(for: note.id)
+        schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
     }
 
     func updateNote(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        let previous = notes[index]
-        let previousBodyState = localVoiceBodyStates[note.id]
         let localNote = normalizeLocalVoiceNote(note)
         notes[index] = localNote
-
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .update(NoteUpdate(from: note))
-                    .eq("id", value: note.id)
-                    .execute()
-            } catch {
-                logger.error("updateNote failed: \(error)")
-                // Rollback on failure
-                if let i = notes.firstIndex(where: { $0.id == note.id }) {
-                    notes[i] = previous
-                }
-                setLocalVoiceBodyState(previousBodyState, for: note.id)
-            }
-        }
+        queuePendingNoteUpsert(localNote)
+        let revision = bumpNoteSyncRevision(for: note.id)
+        schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: noteSyncDebounceDuration)
     }
 
     func removeNote(id: UUID) {
@@ -391,6 +702,8 @@ final class NoteStore {
         removed.deletedAt = Date()
         deletedNotes.insert(removed, at: 0)
         setLocalVoiceBodyState(nil, for: id)
+        pendingNoteUpserts.removeValue(forKey: id)
+        persistPendingNoteUpserts()
 
         Task {
             do {
@@ -413,6 +726,8 @@ final class NoteStore {
         for i in removed.indices { removed[i].deletedAt = now }
         deletedNotes.insert(contentsOf: removed, at: 0)
         ids.forEach { setLocalVoiceBodyState(nil, for: $0) }
+        ids.forEach { pendingNoteUpserts.removeValue(forKey: $0) }
+        persistPendingNoteUpserts()
 
         Task {
             // Batch in chunks of 20 to avoid oversized IN clauses
@@ -443,26 +758,15 @@ final class NoteStore {
         restored.updatedAt = Date()
         notes.insert(restored, at: 0)
         notes.sort { $0.createdAt > $1.createdAt }
-
-        Task {
-            do {
-                let update = SoftDeleteUpdate(deletedAt: nil)
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .eq("id", value: id)
-                    .execute()
-            } catch {
-                // Rollback on failure
-                notes.removeAll { $0.id == id }
-                restored.deletedAt = Date()
-                deletedNotes.insert(restored, at: min(index, deletedNotes.count))
-            }
-        }
+        queuePendingNoteUpsert(restored)
+        let revision = bumpNoteSyncRevision(for: id)
+        schedulePendingNoteUpsertSync(id: id, expectedRevision: revision, delay: .zero)
     }
 
     func permanentlyDeleteNote(id: UUID) {
         deletedNotes.removeAll { $0.id == id }
+        pendingNoteUpserts.removeValue(forKey: id)
+        persistPendingNoteUpserts()
 
         Task {
             do {
@@ -500,29 +804,18 @@ final class NoteStore {
     }
 
     func moveNotes(ids: Set<UUID>, toCategoryId categoryId: UUID?) {
-        var previousValues: [(UUID, UUID?)] = []
-        for i in notes.indices where ids.contains(notes[i].id) {
-            previousValues.append((notes[i].id, notes[i].categoryId))
-            notes[i].categoryId = categoryId
-            notes[i].updatedAt = Date()
-        }
-
-        Task {
-            do {
-                let update = NoteCategoryUpdate(categoryId: categoryId, updatedAt: Date())
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .in("id", values: ids.map(\.uuidString))
-                    .execute()
-            } catch {
-                // Rollback on failure
-                for (noteId, prevCategoryId) in previousValues {
-                    if let i = notes.firstIndex(where: { $0.id == noteId }) {
-                        notes[i].categoryId = prevCategoryId
-                    }
-                }
+        let now = Date()
+        let movedNotes = notes
+            .filter { ids.contains($0.id) && $0.categoryId != categoryId }
+            .map { note -> Note in
+                var updated = note
+                updated.categoryId = categoryId
+                updated.updatedAt = now
+                return updated
             }
+
+        for note in movedNotes {
+            updateNote(note)
         }
     }
 
@@ -894,6 +1187,7 @@ final class NoteStore {
         guard let index = categories.firstIndex(where: { $0.id == category.id }) else { return }
         let previous = categories[index]
         categories[index] = category
+        let revision = bumpCategorySyncRevision(for: category.id)
 
         Task {
             do {
@@ -903,6 +1197,7 @@ final class NoteStore {
                     .eq("id", value: category.id)
                     .execute()
             } catch {
+                guard categorySyncRevisions[category.id] == revision else { return }
                 if let i = categories.firstIndex(where: { $0.id == category.id }) {
                     categories[i] = previous
                 }
@@ -913,10 +1208,18 @@ final class NoteStore {
     func removeCategory(id: UUID) {
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let removed = categories.remove(at: index)
+        let now = Date()
+        let affectedNotes = notes
+            .filter { $0.categoryId == id }
+            .map { note -> Note in
+                var updated = note
+                updated.categoryId = nil
+                updated.updatedAt = now
+                return updated
+            }
 
-        // Unassign notes locally
-        for i in notes.indices where notes[i].categoryId == id {
-            notes[i].categoryId = nil
+        for note in affectedNotes {
+            updateNote(note)
         }
 
         Task {
@@ -954,16 +1257,6 @@ final class NoteStore {
 }
 
 // MARK: - Partial Update Models
-
-private struct NoteCategoryUpdate: Encodable {
-    let categoryId: UUID?
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case categoryId = "category_id"
-        case updatedAt = "updated_at"
-    }
-}
 
 private struct SoftDeleteUpdate: Encodable {
     let deletedAt: Date?

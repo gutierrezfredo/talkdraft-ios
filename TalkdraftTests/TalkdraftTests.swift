@@ -175,6 +175,16 @@ import UIKit
     ))
 }
 
+@Test func noteEditorRulesDoNotAutoConvertBracketPairMidParagraph() {
+    let mutation = NoteEditorRules.mutation(
+        for: "Papi [",
+        range: NSRange(location: 6, length: 0),
+        replacementText: "]"
+    )
+
+    #expect(mutation == .allowSystem)
+}
+
 @Test func noteEditorRulesAutoConvertDashToBullet() {
     let mutation = NoteEditorRules.mutation(
         for: "-",
@@ -248,6 +258,19 @@ import UIKit
     )
 
     #expect(mutation == .reject)
+}
+
+@Test func noteEditorRulesRemoveCheckboxPrefixFromNonEmptyLineOnDelete() {
+    let mutation = NoteEditorRules.mutation(
+        for: "☐ Task",
+        range: NSRange(location: 0, length: 2),
+        replacementText: ""
+    )
+
+    #expect(mutation == .apply(
+        updatedText: "Task",
+        selectedRange: NSRange(location: 0, length: 0)
+    ))
 }
 
 @Test func noteEditorRulesRejectEditsOnProtectedSpeakerLines() {
@@ -613,6 +636,104 @@ import UIKit
     )
 
     #expect(targetOffsetY == 170)
+}
+
+actor NoteUpsertRecorder {
+    private(set) var syncedNoteIds: [UUID] = []
+
+    func record(_ noteId: UUID) {
+        syncedNoteIds.append(noteId)
+    }
+}
+
+@MainActor
+@Test func noteStoreUpdateNoteDebouncesPerNoteSync() async {
+    let recorder = NoteUpsertRecorder()
+    let note = makeNote(content: "Original")
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        noteSyncDebounceDuration: .milliseconds(50),
+        noteUpsertExecutor: { note in
+            await recorder.record(note.id)
+        }
+    )
+    store.notes = [note]
+
+    var updated = note
+    updated.content = "First edit"
+    updated.updatedAt = .now
+    store.updateNote(updated)
+
+    updated.content = "Second edit"
+    updated.updatedAt = .now.addingTimeInterval(1)
+    store.updateNote(updated)
+
+    try? await Task.sleep(for: .milliseconds(150))
+
+    #expect(store.pendingNoteUpserts.isEmpty)
+    #expect(await recorder.syncedNoteIds == [note.id])
+}
+
+@MainActor
+@Test func noteStoreFlushPendingUpsertsUsesZeroRevisionFallback() async {
+    let recorder = NoteUpsertRecorder()
+    let note = makeNote(content: "Queued")
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        pendingNoteUpserts: [note.id: note],
+        persistsPendingNoteUpserts: false,
+        noteSyncDebounceDuration: .milliseconds(50),
+        noteUpsertExecutor: { note in
+            await recorder.record(note.id)
+        }
+    )
+
+    await store.flushPendingNoteUpserts()
+
+    #expect(store.pendingNoteUpserts.isEmpty)
+    #expect(await recorder.syncedNoteIds == [note.id])
+}
+
+@MainActor
+@Test func noteStoreMoveNotesQueuesEachChangedNoteForSync() {
+    let originalCategory = UUID()
+    let targetCategory = UUID()
+    let first = makeNote(content: "First")
+    var second = makeNote(content: "Second")
+    var third = makeNote(content: "Third")
+    second.categoryId = originalCategory
+    third.categoryId = originalCategory
+
+    let store = NoteStore(persistsLocalVoiceBodyStates: false, persistsPendingNoteUpserts: false)
+    store.notes = [first, second, third]
+
+    store.moveNotes(ids: [second.id, third.id], toCategoryId: targetCategory)
+
+    #expect(store.notes.first(where: { $0.id == first.id })?.categoryId == nil)
+    #expect(store.notes.first(where: { $0.id == second.id })?.categoryId == targetCategory)
+    #expect(store.notes.first(where: { $0.id == third.id })?.categoryId == targetCategory)
+    #expect(Set(store.pendingNoteUpserts.keys) == Set([second.id, third.id]))
+}
+
+@MainActor
+@Test func noteStoreRemovingCategoryQueuesAffectedNotesForSync() {
+    let categoryId = UUID()
+    let category = Category(id: categoryId, name: "Work", color: "#FFAA00", sortOrder: 0, createdAt: .now)
+    let unaffected = makeNote(content: "Unaffected")
+    var affected = makeNote(content: "Affected")
+    affected.categoryId = categoryId
+
+    let store = NoteStore(persistsLocalVoiceBodyStates: false, persistsPendingNoteUpserts: false)
+    store.categories = [category]
+    store.notes = [affected, unaffected]
+
+    store.removeCategory(id: categoryId)
+
+    #expect(store.categories.isEmpty)
+    #expect(store.notes.first(where: { $0.id == affected.id })?.categoryId == nil)
+    #expect(store.notes.first(where: { $0.id == unaffected.id })?.categoryId == nil)
+    #expect(Set(store.pendingNoteUpserts.keys) == Set([affected.id]))
 }
 
 @MainActor
