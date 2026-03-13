@@ -962,6 +962,95 @@ actor HardDeleteRecorder {
     #expect(Set(store.pendingNoteUpserts.keys) == Set([second.id, third.id]))
 }
 
+@Test func homeNoteQueryFiltersBySelectedCategoryAndSearchesResolvedContent() {
+    let categoryId = UUID()
+    let otherCategoryId = UUID()
+    var matching = makeNote(content: "Original")
+    matching.categoryId = categoryId
+    matching.title = "Irrelevant"
+    var otherInCategory = makeNote(content: "Nothing here")
+    otherInCategory.categoryId = categoryId
+    var otherCategory = makeNote(content: "needle")
+    otherCategory.categoryId = otherCategoryId
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [matching, otherInCategory, otherCategory],
+        selectedCategory: categoryId,
+        query: "needle",
+        sortOrder: .updatedAt,
+        resolvedContent: { note in note.id == matching.id ? "Hidden needle" : note.content }
+    )
+
+    #expect(filtered.map(\.id) == [matching.id])
+}
+
+@Test func homeNoteQueryMatchesTitleSearch() {
+    var titled = makeNote(content: "Body")
+    titled.title = "Project Apollo"
+    let untitled = makeNote(content: "Project body")
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [titled, untitled],
+        selectedCategory: nil,
+        query: "apollo",
+        sortOrder: .updatedAt,
+        resolvedContent: { $0.content }
+    )
+
+    #expect(filtered.map(\.id) == [titled.id])
+}
+
+@Test func homeNoteQuerySortsUncategorizedFirst() {
+    let now = Date()
+    let categoryId = UUID()
+    var uncategorized = makeNote(content: "A", updatedAt: now)
+    var categorized = makeNote(content: "B", updatedAt: now.addingTimeInterval(10))
+    categorized.categoryId = categoryId
+    uncategorized.title = "Uncategorized"
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [categorized, uncategorized],
+        selectedCategory: nil,
+        query: "",
+        sortOrder: .uncategorized,
+        resolvedContent: { $0.content }
+    )
+
+    #expect(filtered.map(\.id) == [uncategorized.id, categorized.id])
+}
+
+@Test func homeNoteQuerySortsActionItemsFirstUsingResolvedContent() {
+    let now = Date()
+    let plain = makeNote(content: "Plain", updatedAt: now.addingTimeInterval(20))
+    let actionable = makeNote(content: "Original", updatedAt: now)
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [plain, actionable],
+        selectedCategory: nil,
+        query: "",
+        sortOrder: .actionItems,
+        resolvedContent: { note in note.id == actionable.id ? "☐ Task" : note.content }
+    )
+
+    #expect(filtered.map(\.id) == [actionable.id, plain.id])
+}
+
+@Test func homeNoteQueryUsesCreatedAtSortWhenRequested() {
+    let older = makeNote(content: "Older", createdAt: .now.addingTimeInterval(-100), updatedAt: .now)
+    let newer = makeNote(content: "Newer", createdAt: .now, updatedAt: .now.addingTimeInterval(-200))
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [older, newer],
+        selectedCategory: nil,
+        query: "",
+        sortOrder: .createdAt,
+        resolvedContent: { $0.content }
+    )
+
+    #expect(filtered.map(\.id) == [newer.id, older.id])
+}
+
+
 @MainActor
 @Test func noteStoreRemovingCategoryQueuesAffectedNotesForSync() {
     let categoryId = UUID()

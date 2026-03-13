@@ -113,35 +113,12 @@ extension HomeView {
     }
 
     var filteredNotes: [Note] {
-        var notes = selectedCategory == nil
-            ? noteStore.notes
-            : noteStore.notes.filter { $0.categoryId == selectedCategory }
-
-        if isSearching && !query.isEmpty {
-            let lowered = query.lowercased()
-            notes = notes.filter { note in
-                (note.title?.lowercased().contains(lowered) ?? false)
-                    || noteStore.resolvedContent(for: note).lowercased().contains(lowered)
-            }
-        }
-
-        return notes.sorted {
-            switch sortOrder {
-            case .updatedAt: return $0.updatedAt > $1.updatedAt
-            case .createdAt: return $0.createdAt > $1.createdAt
-            case .uncategorized:
-                if ($0.categoryId == nil) != ($1.categoryId == nil) {
-                    return $0.categoryId == nil
-                }
-                return $0.updatedAt > $1.updatedAt
-            case .actionItems:
-                let aContent = noteStore.resolvedContent(for: $0)
-                let bContent = noteStore.resolvedContent(for: $1)
-                let aHas = aContent.contains("☐") || aContent.contains("☑")
-                let bHas = bContent.contains("☐") || bContent.contains("☑")
-                if aHas != bHas { return aHas }
-                return $0.updatedAt > $1.updatedAt
-            }
-        }
+        HomeNoteQuery.filteredNotes(
+            notes: noteStore.notes,
+            selectedCategory: selectedCategory,
+            query: isSearching ? query : "",
+            sortOrder: sortOrder,
+            resolvedContent: noteStore.resolvedContent(for:)
+        )
     }
 }
