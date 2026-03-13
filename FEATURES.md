@@ -18,7 +18,7 @@
 |------|----------|--------|
 | HomeView | `Views/Home/HomeView.swift` | Built — category chips, notes grid, search, bulk select, sort options |
 | LoginView | `Views/Auth/LoginView.swift` | Built — Apple, Google, Email/Password, Anonymous sign-in |
-| PaywallView | `Views/Paywall/PaywallView.swift` | Built — trial-aware messaging, feature list, monthly/yearly selection, purchase, restore |
+| PaywallView | `Views/Paywall/PaywallView.swift` | Built — StoreKit intro offer trial, feature list, monthly/yearly selection, purchase, restore |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
@@ -49,15 +49,15 @@
 |-------|----------|-------------|
 | AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple/Google/Email/Anonymous sign-in, account deletion |
 | NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen, soft delete with 30-day auto-purge, restore |
-| SettingsStore | `Stores/SettingsStore.swift` | Language + theme preferences |
-| SubscriptionStore | `Stores/SubscriptionStore.swift` | 7-day free trial (UserDefaults), read-only after expiry, StoreKit2 purchases, RevenueCat entitlements |
+| SettingsStore | `Stores/SettingsStore.swift` | Language + theme + custom dictionary preferences |
+| SubscriptionStore | `Stores/SubscriptionStore.swift` | StoreKit2 purchases, RevenueCat entitlements, intro offer trial eligibility, entitlement gate for mandatory paywall |
 
 ### Services
 
 | Service | Location | Description |
 |---------|----------|-------------|
 | SupabaseClient | `Services/SupabaseClient.swift` | Supabase connection |
-| TranscriptionService | `Services/TranscriptionService.swift` | Groq Whisper via multipart upload to edge function |
+| TranscriptionService | `Services/TranscriptionService.swift` | Groq Whisper (single-speaker) + Deepgram nova-2 (multi-speaker) via multipart upload to edge functions |
 | AIService | `Services/AIService.swift` | Rewrite + title gen via Supabase edge functions (Gemini Flash) |
 | AudioRecorder | `Services/AudioRecorder.swift` | AVAudioEngine recording + real-time FFT visualization |
 | AudioPlayer | `Services/AudioPlayer.swift` | AVPlayer playback with seek, speaker routing |
@@ -88,12 +88,46 @@
 - [x] Delete category from edit sheet
 - [x] App icon with 3D variants (default, dark, tinted — Apple HIG compliant)
 - [x] RevenueCat subscription integration (SubscriptionStore, PaywallView)
-- [x] 7-day free trial with read-only mode after expiry (replaced feature-gating limits)
+- [x] StoreKit introductory offer trial (7-day free via App Store Connect, replaces custom UserDefaults trial)
+- [x] Mandatory paywall gate after sign-in (subscription-only, no free tier)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
 - [x] Feedback & support in Settings (sentiment gate → App Store review, pre-filled support email)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-03-09 (Session 14)
+- Multi-speaker recording: toggle in RecordView routes to `transcribe-diarized` Supabase edge function
+- Deepgram nova-2 with `diarize=true` produces `[Speaker 1]: ...` / `[Speaker 2]: ...` labeled output
+- AudioCompressor: `shouldOptimizeForNetworkUse = true` moves M4A moov atom to file start (required for streaming decoders)
+- Deepgram edge function: `detect_language=true` for auto-detection, respects explicit language setting
+- Deepgram edge function: `Content-Type: audio/mp4` (correct MIME for M4A; `audio/m4a` is non-standard)
+- Edge function errors surfaced as note content (200 response) instead of HTTP 500 for better debugging
+- Empty states: custom SVG images for Home (notes-empty) and Categories (category-empty)
+- HomeView: search always enabled regardless of note count; scroll always bounces
+- NoteDetailView: title-cased menu items, keyboard dismissed before presenting sheets, rewrite tones reordered
+- Paywall disabled in ContentView for testing (`showMandatoryPaywall` returns false)
+
+### 2026-03-04 (Session 13)
+- Mandatory paywall gate: fullScreenCover paywall after sign-in for non-Pro users, blocks all access until subscribed/trial started
+- SubscriptionStore: `entitlementChecked` flag gates UI until RevenueCat responds (eliminates race condition)
+- PaywallView: `mandatory` mode (no dismiss button, non-interactive dismiss disabled)
+- ContentView: three-state auth flow (loading → entitlement check → HomeView + mandatory paywall)
+- Removed scattered `isReadOnly`/`showPaywall` checks from HomeView, NoteDetailView, CategoriesView, SettingsView
+- Home empty state redesign: "Your voice, turned into words" with hand-drawn SVG arrow pointing to mic button
+- Rewrite presets: increased card title font to `.callout`, clock emoji on all recents (pin icon overlay only)
+- Note detail: rubber-band scroll on short notes, tap-to-edit on full body area, cursor position fix for append recording
+- Search button disabled when no notes exist
+- Scroll disabled on empty category states (with keyboard exception for dismiss)
+
+### 2026-03-03 (Session 12)
+- App Store readiness: added `PrivacyInfo.xcprivacy` (UserDefaults CA92.1, file timestamp DDA9.1)
+- Replaced custom UserDefaults trial with StoreKit introductory offer (Guideline 3.1.1 compliance)
+- PaywallView: "Start Free Trial" button when eligible, trial terms text, updated messaging
+- Removed trial countdown badge from HomeView, simplified subscription status in SettingsView
+- Custom Dictionary: user-managed word list passed as Whisper prompt to bias transcription spelling
+- CustomDictionaryView in Settings (General section) with add/delete, stored in UserDefaults
+- Increased uncategorized card border visibility (dark: 0.08→0.15, light: added 0.08 black border)
 
 ### 2026-03-02 (Session 11)
 - 7-day free trial: replaced feature-gating with `isReadOnly` gate, trial countdown badge (last 3 days)

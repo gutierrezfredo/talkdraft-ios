@@ -10,11 +10,12 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 
 ## Rules
 
-- Read `DESIGN_RULES.md` before any UI work
-- Read `PRODUCT.md` before any product/feature work
-- Read `FEATURES.md` before adding or modifying features
-- Build and test on physical device, not just simulator
-- **Code like a pro Apple engineer**: Write code the way Apple's own teams would. Prefer Apple's first-party frameworks and APIs over third-party or manual solutions. Use proper Swift concurrency (`Sendable`, actors, structured concurrency) — avoid `@unchecked Sendable` when real conformance is possible. No unnecessary `NSObject` inheritance, no force unwraps, no redundant pipelines. Favor single-responsibility classes, clean encapsulation, and pre-computed/pre-allocated data. Every architectural decision should reflect what a senior Apple engineer would ship.
+- Read `DESIGN_RULES.md` before any UI change. Do not write UI code without it.
+- Read `PRODUCT.md` before any product or feature work. Use its terminology exactly.
+- Update `FEATURES.md` after adding, changing, or removing any feature. Do not commit without it.
+- Build and test on a physical device, not just the simulator.
+- Every data-fetching view needs loading, error, and empty states.
+- Code like a senior Apple engineer. Prefer first-party frameworks over third-party. Use proper Swift concurrency (`Sendable`, actors, structured concurrency) — avoid `@unchecked Sendable` when real conformance is possible. No unnecessary `NSObject` inheritance, no force unwraps, no redundant pipelines. Favor single-responsibility, clean encapsulation, and pre-computed data.
 
 ## Tech Stack
 
@@ -57,6 +58,25 @@ xcodebuild -project Talkdraft.xcodeproj -scheme Talkdraft \
 # Build for device
 xcodebuild -project Talkdraft.xcodeproj -scheme Talkdraft \
   -destination 'platform=iOS,id=DEVICE_ID' -allowProvisioningUpdates build
+```
+
+## PPQ Trust Fix (renew every 7 days)
+
+If app shows "Unable to Verify App" / `Profile Needs Network Validation` in Console:
+- Cause: Xcode auto profiles have `PPQCheck: true`, requiring `ppq.apple.com` on first launch
+- Fix: create a **Development - Offline** profile on developer.apple.com (Offline support: Yes), then re-sign:
+
+```bash
+# 1. Download new offline profile, then:
+cp ~/Downloads/Talkdraft_Dev_Offline.mobileprovision /tmp/clean.mobileprovision
+xattr -c /tmp/clean.mobileprovision
+ditto --norsrc <built.app> /tmp/Talkdraft-resigned.app
+find /tmp/Talkdraft-resigned.app -exec xattr -c {} \; && xattr -cr /tmp/Talkdraft-resigned.app
+cp /tmp/clean.mobileprovision /tmp/Talkdraft-resigned.app/embedded.mobileprovision
+codesign -d --entitlements :- <built.app> > /tmp/entitlements.plist
+codesign --force --deep --sign "Apple Development: Alfredo Gutierrez (GZDD4Q4Q2C)" \
+  --entitlements /tmp/entitlements.plist /tmp/Talkdraft-resigned.app
+xcrun devicectl device install app --device 00008110-001E156C3C89A01E /tmp/Talkdraft-resigned.app
 ```
 
 ## Key Config

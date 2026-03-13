@@ -2,6 +2,8 @@ import StoreKit
 import SwiftUI
 
 struct PaywallView: View {
+    var mandatory: Bool = false
+
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
@@ -50,18 +52,21 @@ struct PaywallView: View {
                 .padding(.top, 8)
             }
             .background(backgroundColor.ignoresSafeArea())
-            .navigationTitle(subscriptionStore.isTrialActive ? "Go Pro" : "Subscribe to Continue")
+            .navigationTitle(subscriptionStore.isTrialEligible ? "Start my free week" : "Go Pro")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .fontWeight(.semibold)
+                if !mandatory {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .fontWeight(.semibold)
+                        }
                     }
                 }
             }
+            .interactiveDismissDisabled(mandatory)
             .alert("Error", isPresented: .init(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
@@ -85,14 +90,13 @@ struct PaywallView: View {
                 .foregroundStyle(Color.brand)
                 .padding(.top, 16)
 
-            Text(subscriptionStore.isTrialActive ? "Enjoying Talkdraft?" : "Your free trial has ended")
-                .font(.title3)
-                .fontWeight(.bold)
+            Text("Unlock Full Access")
+                .font(.brandTitle2)
                 .multilineTextAlignment(.center)
 
-            Text(subscriptionStore.isTrialActive
-                 ? "Subscribe to keep full access after your trial."
-                 : "Subscribe to continue creating notes and recordings.")
+            Text(subscriptionStore.isTrialEligible
+                 ? "Start your free trial to create notes, record, and use AI features."
+                 : "Subscribe to create notes, record, and use AI features.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -219,43 +223,66 @@ struct PaywallView: View {
     // MARK: - Subscribe Button
 
     private var subscribeButton: some View {
-        Button {
-            Task {
-                let product: StoreKit.Product? = switch selectedPlan {
-                case .monthly: subscriptionStore.monthlyProduct
-                case .yearly: subscriptionStore.yearlyProduct
-                }
-                guard let product else {
-                    errorMessage = "Products not available. Please try again later."
-                    return
-                }
-                do {
-                    try await subscriptionStore.purchase(product)
-                    if subscriptionStore.isPro {
-                        dismiss()
+        VStack(spacing: 8) {
+            Button {
+                Task {
+                    let product: StoreKit.Product? = switch selectedPlan {
+                    case .monthly: subscriptionStore.monthlyProduct
+                    case .yearly: subscriptionStore.yearlyProduct
                     }
-                } catch {
-                    errorMessage = "Purchase failed: \(error.localizedDescription)"
+                    guard let product else {
+                        errorMessage = "Products not available. Please try again later."
+                        return
+                    }
+                    do {
+                        try await subscriptionStore.purchase(product)
+                        if subscriptionStore.isPro {
+                            dismiss()
+                        }
+                    } catch {
+                        errorMessage = "Purchase failed: \(error.localizedDescription)"
+                    }
                 }
-            }
-        } label: {
-            Group {
-                if subscriptionStore.isLoading {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Text("Subscribe")
-                        .fontWeight(.bold)
+            } label: {
+                Group {
+                    if subscriptionStore.isLoading {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text(subscriptionStore.isTrialEligible ? "Start my free week" : "Subscribe now")
+                            .fontWeight(.bold)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .foregroundStyle(.white)
+                .background(Color.brand)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .foregroundStyle(.white)
-            .background(Color.brand)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .buttonStyle(.plain)
+            .disabled(subscriptionStore.isLoading)
+
+            if subscriptionStore.isTrialEligible {
+                Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(subscriptionStore.isLoading)
+    }
+
+    private var selectedPlanPrice: String {
+        switch selectedPlan {
+        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? "$5.99"
+        case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99"
+        }
+    }
+
+    private var selectedPlanPeriod: String {
+        switch selectedPlan {
+        case .monthly: "month"
+        case .yearly: "year"
+        }
     }
 }
 

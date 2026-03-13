@@ -1,6 +1,14 @@
 import SwiftUI
 
 extension NoteDetailView {
+    @ViewBuilder
+    func deadZone(height: CGFloat) -> some View {
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+            .contentShape(Rectangle())
+            .onTapGesture {}
+    }
+
     var metadataRow: some View {
         HStack(spacing: 12) {
             if let duration = note.durationSeconds, note.audioUrl != nil {
@@ -27,12 +35,20 @@ extension NoteDetailView {
                 .buttonStyle(.plain)
             }
 
-            Text(note.createdAt, format: .dateTime.month(.wide).day().year())
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 0) {
+                Text(note.createdAt, format: .dateTime.month(.wide).day().year())
+                Text(" · ")
+                    .foregroundStyle(.tertiary)
+                Text(note.createdAt, format: .dateTime.hour().minute())
+            }
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {}
     }
 
     var audioPlayerView: some View {
@@ -41,12 +57,20 @@ extension NoteDetailView {
                 guard let url = audioURL else { return }
                 player.togglePlayback(url: url)
             } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.body)
-                    .foregroundStyle(Color.brand)
-                    .frame(width: 36, height: 36)
+                ZStack {
+                    if player.isBuffering {
+                        ProgressView()
+                            .tint(Color.brand)
+                    } else {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.body)
+                            .foregroundStyle(Color.brand)
+                    }
+                }
+                .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
+            .disabled(player.isBuffering)
 
             GeometryReader { geo in
                 let progress = player.duration > 0
@@ -89,18 +113,345 @@ extension NoteDetailView {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
+    func shimmerLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .fontWeight(.medium)
+            .hidden()
+            .overlay {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Color.primary.opacity(0.35)
+                        LinearGradient(
+                            colors: [.clear, Color.primary.opacity(0.95), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: geo.size.width * 0.55)
+                        .offset(
+                            x: rewriteSweep * (geo.size.width + geo.size.width * 0.55)
+                                - geo.size.width * 0.55
+                        )
+                    }
+                }
+                .mask(
+                    Text(text)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                )
+            }
+            .onAppear {
+                rewriteSweep = 0
+                withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
+                    rewriteSweep = 1
+                }
+            }
+            .onDisappear { rewriteSweep = 0 }
+    }
+
+    var bottomFade: some View {
+        let bg = colorScheme == .dark ? Color.darkBackground : Color.warmBackground
+        return VStack {
+            Spacer()
+            LinearGradient(colors: [.clear, bg], startPoint: .top, endPoint: .bottom)
+                .frame(height: 160)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    var bottomBarContainer: some View {
+        let bg = colorScheme == .dark ? Color.darkBackground : Color.warmBackground
+        return VStack(spacing: 0) {
+            LinearGradient(
+                colors: [.clear, bg.opacity(0.5)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 50)
+
+            bottomBar
+                .padding(.vertical, keyboardVisible ? 4 : 0)
+                .padding(.bottom, keyboardVisible ? 0 : 12)
+                .frame(maxWidth: .infinity)
+                .background(bg.opacity(0.5))
+        }
+    }
+
+    var rewriteToolbarState: RewriteToolbarState {
+        RewriteToolbarState(
+            isRewriting: isRewriting,
+            activeRewriteId: activeRewriteId,
+            originalContent: note.originalContent,
+            persistedContent: persistedEditedContent,
+            rewrites: rewrites,
+            fallbackLabel: rewriteLabelFallback
+        )
+    }
+
+    var showsRewriteToolbarLabel: Bool {
+        rewriteToolbarState.showsLabel
+    }
+
+    var inferredVisibleRewrite: NoteRewrite? {
+        rewriteToolbarState.inferredVisibleRewrite
+    }
+
+    var effectiveRewriteSelectionId: UUID? {
+        rewriteToolbarState.effectiveSelectionId
+    }
+
+    var rewriteToolbarLabelText: String {
+        rewriteToolbarState.labelText
+    }
+
+    func repairMissingActiveRewriteSelection() {
+        guard activeRewriteId == nil,
+              note.activeRewriteId == nil,
+              let inferredVisibleRewrite else {
+            return
+        }
+
+        activeRewriteId = inferredVisibleRewrite.id
+        rewriteLabelFallback = nil
+
+        var updated = note
+        updated.activeRewriteId = inferredVisibleRewrite.id
+        noteStore.updateNote(updated)
+    }
+
+    @ViewBuilder
+    func rewriteToolbarLabelView(_ label: String, showsChevron: Bool) -> some View {
+        let chevron = Image(systemName: "chevron.up.chevron.down")
+            .font(.system(size: 9))
+            .fontWeight(.regular)
+            .foregroundStyle(.tertiary)
+
+        HStack(spacing: 2) {
+            Text(label)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if showsChevron {
+                chevron
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(width: 240, alignment: .center)
+        .layoutPriority(1)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+        .foregroundStyle(Color.primary)
+    }
+
+    @ToolbarContentBuilder
+    func toolbarContent() -> some ToolbarContent {
+        if showsRewriteToolbarLabel {
+            ToolbarItem(placement: .principal) {
+                let selectionId = effectiveRewriteSelectionId
+                let label = rewriteToolbarLabelText
+                ZStack {
+                    if isRewriting {
+                        shimmerLabel(rewritingLabel.isEmpty ? label : rewritingLabel)
+                    } else {
+                        Menu {
+                            Section {
+                                Button {
+                                    switchToOriginal()
+                                } label: {
+                                    if selectionId == nil {
+                                        Label("Original", systemImage: "checkmark")
+                                    } else {
+                                        Text("Original")
+                                    }
+                                }
+                            }
+
+                            if rewrites.isEmpty {
+                                Section {
+                                    Button {
+                                    } label: {
+                                        Label("Loading rewrites…", systemImage: "ellipsis")
+                                    }
+                                    .disabled(true)
+                                }
+                            } else {
+                                Section {
+                                    ForEach(rewrites) { rewrite in
+                                        Button {
+                                            switchToRewrite(rewrite)
+                                        } label: {
+                                            if rewrite.id == selectionId {
+                                                Label(rewrite.displayLabel, systemImage: "checkmark")
+                                            } else {
+                                                Text(rewrite.displayLabel)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            rewriteToolbarLabelView(label, showsChevron: true)
+                        }
+                        .menuIndicator(.hidden)
+                    }
+                }
+                .opacity(rewriteLabelOpacity)
+            }
+        }
+
+        if !isTranscribing {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        startAppendRecording(scrollToBottom: true)
+                    } label: {
+                        Label("Record More", systemImage: "mic")
+                    }
+                    .disabled(isAppendRecording || isAppendTranscribing || isRewriting)
+
+                    if note.audioUrl != nil {
+                        Button {
+                            downloadAudio()
+                        } label: {
+                            if isDownloadingAudio {
+                                Label { Text("Downloading…") } icon: { ProgressView() }
+                            } else {
+                                Label("Download Audio", systemImage: "arrow.down.circle")
+                            }
+                        }
+                        .disabled(isDownloadingAudio)
+                    }
+
+                    if let rewriteId = activeRewriteId,
+                       let rewrite = rewrites.first(where: { $0.id == rewriteId }) {
+                        Button(role: .destructive) {
+                            pendingDeleteRewrite = rewrite
+                        } label: {
+                            Label("Delete This Rewrite", systemImage: "wand.and.sparkles")
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Note", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .fontWeight(.medium)
+                        .frame(width: 36, height: 36)
+                }
+            }
+        }
+    }
+
+    var scrollContent: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 0).id("scrollTop")
+
+            if !isTranscribing {
+                deadZone(height: 12)
+                metadataRow
+
+                if audioExpanded, audioURL != nil {
+                    deadZone(height: 12)
+                    audioPlayerView
+                        .padding(.horizontal, 24)
+                }
+
+                deadZone(height: 20)
+                titleField
+            }
+
+            if showsTranscribingIndicator {
+                transcribingIndicator
+            } else if isTranscribing {
+                transcribingPlaceholderView
+            } else if isWaitingForConnection {
+                waitingForConnectionView
+                    .padding(.top, 40)
+            } else if isTranscriptionFailed {
+                transcriptionFailedView
+                    .padding(.top, 40)
+            } else {
+                if !detectedSpeakers.isEmpty {
+                    speakerChipsRow
+                        .padding(.top, 28)
+                        .padding(.horizontal, 24)
+                }
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+                    .contentShape(Rectangle())
+                    .onTapGesture {}
+                contentField
+            }
+        }
+    }
+
     var titleField: some View {
-        TextField("Untitled", text: $editedTitle, axis: .vertical)
-            .font(.system(size: 28, weight: .bold))
-            .multilineTextAlignment(.center)
-            .autocorrectionDisabled()
-            .contentTransition(.opacity)
-            .disabled(subscriptionStore.isReadOnly)
+        Group {
+            if isGeneratingTitle {
+                Text(titlePhrases[titlePhraseIndex])
+                    .font(.brandTitle)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 24)
+            } else {
+                TextField("Untitled", text: editedTitleBinding, axis: .vertical)
+                    .font(.brandTitle)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+                    .focused($titleFocused)
+                    .padding(.horizontal, 24)
+            }
+        }
+    }
+
+    var speakerChipsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(detectedSpeakers, id: \.self) { key in
+                    let color = speakerColor(for: key)
+
+                    Button {
+                        renamingSpeaker = key
+                        renameText = ""
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(color)
+                                .frame(width: 8, height: 8)
+                            Text(key)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(color)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(color.opacity(colorScheme == .dark ? 0.15 : 0.1))
+                        )
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(color.opacity(0.25), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     var contentField: some View {
         ExpandingTextView(
-            text: $editedContent,
+            text: editedContentBinding,
             isFocused: $contentFocused,
             cursorPosition: $cursorPosition,
             highlightRange: $highlightRange,
@@ -108,10 +459,12 @@ extension NoteDetailView {
             isEditable: !isAppendRecording && !isAppendTranscribing,
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
-            placeholder: "Start typing..."
+            placeholder: "Start typing...",
+            speakerColors: speakerColorMap,
+            horizontalPadding: 24,
+            moveCursorToEnd: $moveCursorToEnd
         )
         .opacity(contentOpacity)
-        .disabled(subscriptionStore.isReadOnly)
     }
 
     var keyboardVisible: Bool { contentFocused }
@@ -119,184 +472,27 @@ extension NoteDetailView {
     var bottomBar: some View {
         Group {
             if isAppendRecording {
-                appendRecordingControls
+                NoteDetailAppendRecordingControls(
+                    isTranscribing: isAppendTranscribing,
+                    isPaused: appendRecorder.isPaused,
+                    remainingSeconds: max(0, 900 - Int(appendRecorder.elapsedSeconds)),
+                    onCancel: cancelAppendRecording,
+                    onRestart: restartAppendRecording,
+                    onStop: stopAppendRecording,
+                    onTogglePause: toggleAppendPause
+                )
             } else {
-                normalBottomBar
+                NoteDetailNormalBottomBar(
+                    keyboardVisible: keyboardVisible,
+                    categoryColor: category.map { Color.categoryColor(hex: $0.color) },
+                    isAppendTranscribing: isAppendTranscribing,
+                    onShowCategoryPicker: presentCategoryPicker,
+                    onShowRewriteSheet: presentRewriteSheet,
+                    onShare: presentTextShareSheet,
+                    onStartAppendRecording: { startAppendRecording() },
+                    onDismissKeyboard: { contentFocused = false }
+                )
             }
         }
-    }
-
-    var normalBottomBar: some View {
-        HStack(spacing: keyboardVisible ? 12 : 40) {
-            Button {
-                if !subscriptionStore.isReadOnly {
-                    showCategoryPicker = true
-                }
-            } label: {
-                Image(systemName: "tag")
-                    .font(keyboardVisible ? .callout : .title3)
-                    .foregroundStyle(
-                        category.map { Color.categoryColor(hex: $0.color) } ?? .secondary
-                    )
-                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-            .sensoryFeedback(.selection, trigger: showCategoryPicker)
-
-            if !subscriptionStore.isReadOnly {
-                Button {
-                    showRewriteSheet = true
-                } label: {
-                    if keyboardVisible {
-                        Image(systemName: "wand.and.stars")
-                            .font(.callout)
-                            .foregroundStyle(Color.brand)
-                            .frame(width: 40, height: 40)
-                            .glassEffect(.regular.interactive(), in: .circle)
-                    } else {
-                        Image(systemName: "wand.and.stars")
-                            .font(.title)
-                            .foregroundStyle(.white)
-                            .frame(width: 72, height: 72)
-                            .background(Circle().fill(Color.brand))
-                            .glassEffect(.regular.interactive(), in: .circle)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                textShareItem = buildShareText()
-            } label: {
-                Image(systemName: "arrowshape.turn.up.right")
-                    .font(keyboardVisible ? .callout : .title3)
-                    .foregroundStyle(.primary)
-                    .frame(width: keyboardVisible ? 40 : 56, height: keyboardVisible ? 40 : 56)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            if keyboardVisible && !subscriptionStore.isReadOnly {
-                Spacer()
-
-                Button {
-                    startAppendRecording()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mic")
-                            .font(.callout)
-                        Text("Append")
-                            .font(.callout)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(Color.brand)
-                    .padding(.horizontal, 14)
-                    .frame(height: 40)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .disabled(isAppendTranscribing)
-                .opacity(isAppendTranscribing ? 0.5 : 1)
-
-                Button {
-                    contentFocused = false
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 40, height: 40)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, keyboardVisible ? 16 : 20)
-        .contentShape(Rectangle())
-    }
-
-    var appendRecordingControls: some View {
-        HStack(spacing: 20) {
-            Button {
-                cancelAppendRecording()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                restartAppendRecording()
-            } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                stopAppendRecording()
-            } label: {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(.red)
-                    .frame(width: 22, height: 22)
-                    .frame(width: 56, height: 56)
-                    .background(Circle().fill(colorScheme == .dark ? Color.darkSurface : .white))
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                toggleAppendPause()
-            } label: {
-                Image(systemName: appendRecorder.isPaused ? "play.fill" : "pause.fill")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 20)
-    }
-
-    var appendRecordingPill: some View {
-        HStack(spacing: 8) {
-            if isAppendTranscribing {
-                ProgressView()
-                    .tint(.white)
-                    .controlSize(.small)
-                Text("Transcribing…")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.white)
-            } else {
-                Circle()
-                    .fill(.red)
-                    .frame(width: 8, height: 8)
-                Text(formattedDuration(Int(appendRecorder.elapsedSeconds)))
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .monospacedDigit()
-                    .foregroundStyle(.white)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 36)
-        .background(Capsule().fill(Color(white: 0.1)))
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    func formattedDuration(_ totalSeconds: Int) -> String {
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
     }
 }

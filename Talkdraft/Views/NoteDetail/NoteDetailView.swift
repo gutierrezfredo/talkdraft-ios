@@ -1,29 +1,59 @@
+import AVFoundation
 import SwiftUI
+
+/// Walks up from a SwiftUI scroll content view to find the parent UIScrollView
+/// and configures it for native interactive keyboard dismissal.
+private struct ScrollViewKeyboardDismissSetup: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView()
+        v.isUserInteractionEnabled = false
+        return v
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            var view: UIView? = uiView.superview
+            while let v = view {
+                if let sv = v as? UIScrollView {
+                    sv.keyboardDismissMode = .interactive
+                    sv.alwaysBounceVertical = true
+                    return
+                }
+                view = v.superview
+            }
+        }
+    }
+}
 
 struct NoteDetailView: View {
     @Environment(NoteStore.self) var noteStore
     @Environment(AuthStore.self) var authStore
     @Environment(SettingsStore.self) var settingsStore
-    @Environment(SubscriptionStore.self) var subscriptionStore
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
     let noteId: UUID
     let initialNote: Note
 
-    @State var editedTitle: String
-    @State var editedContent: String
+    @State var editorSession: NoteDetailEditorSession
     @State var showDeleteConfirmation = false
+    @State var pendingDeleteRewrite: NoteRewrite?
+    @State var didDelete = false
     @State var showCategoryPicker = false
     @State var showRewriteSheet = false
-    @State var showRestoreConfirmation = false
-    @State var pendingRewrite: (tone: String?, instructions: String?)?
+    @State var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
     @State var isRewriting = false
+    @State var rewritingLabel: String = ""
+    @State var rewrites: [NoteRewrite] = []
+    @State var activeRewriteId: UUID?
+    @State var rewriteLabelFallback: String?
+    @State var rewriteLabelOpacity: Double = 0
     @State var audioExpanded = false
     @State var player = AudioPlayer()
     @State var typewriterTask: Task<Void, Never>?
     @State var scrollProxy: ScrollViewProxy?
     @State var contentFocused = false
+    @State var moveCursorToEnd = false
+    @FocusState var titleFocused: Bool
     @State var contentOpacity: Double = 1
     @State var errorMessage: String?
     @State var isDownloadingAudio = false
@@ -32,20 +62,98 @@ struct NoteDetailView: View {
     @State var appendRecorder = AudioRecorder()
     @State var isAppendRecording = false
     @State var isAppendTranscribing = false
+    @State var appendPlaceholder: NoteAppendPlaceholderState?
     @State var cursorPosition: Int = 0
+    @State var lastKnownCursorPosition: Int = 0
+    @State var isCursorReady = false
     @State var appendInsertPosition: Int = 0
     @State var highlightRange: NSRange?
     @State var preserveScroll = false
     @State var autosaveTask: Task<Void, Never>?
 
-    static let recordingPlaceholder = "Recording…"
-    static let transcribingPlaceholder = "Transcribing…"
+    @State var transcribingVideoPlayer: AVQueuePlayer?
+    @State var transcribingPresentationTask: Task<Void, Never>?
+    @State var showTranscribingIndicator = false
+    @State var transcribingPlayerLooper: AVPlayerLooper?
+    @State var transcribingPhraseIndex = 0
+    @State var transcribingIsLong = false
+    @State var whileIndex = 0
+    @State var renamingSpeaker: String? = nil
+    @State var renameText: String = ""
+    @State var rewriteSweep: CGFloat = 0
 
-    init(note: Note) {
+    static let speakerColors: [Color] = [
+        Color(hex: "#7C3AED"), // violet (brand)
+        Color(hex: "#0284C7"), // sky blue
+        Color(hex: "#D97706"), // amber
+        Color(hex: "#059669"), // emerald
+        Color(hex: "#DC2626"), // red
+        Color(hex: "#DB2777"), // pink
+        Color(hex: "#7C3AED"), // wrap
+    ]
+
+    static let speakerUIColors: [UIColor] = [
+        UIColor(red: 0x7C/255, green: 0x3A/255, blue: 0xED/255, alpha: 1),
+        UIColor(red: 0x02/255, green: 0x84/255, blue: 0xC7/255, alpha: 1),
+        UIColor(red: 0xD9/255, green: 0x77/255, blue: 0x06/255, alpha: 1),
+        UIColor(red: 0x05/255, green: 0x96/255, blue: 0x69/255, alpha: 1),
+        UIColor(red: 0xDC/255, green: 0x26/255, blue: 0x26/255, alpha: 1),
+        UIColor(red: 0xDB/255, green: 0x27/255, blue: 0x77/255, alpha: 1),
+    ]
+
+    var speakerColorMap: [String: UIColor] {
+        Dictionary(uniqueKeysWithValues: detectedSpeakers.enumerated().map { index, key in
+            (key, Self.speakerUIColors[index % Self.speakerUIColors.count])
+        })
+    }
+
+    let transcribingPhrases: [String] = [
+        "Feel free to leave — your note will be waiting for you",
+        "Safe to navigate away — we'll finish in the background",
+        "Nothing will be lost if you leave — come back when you're ready",
+        "You're free to go. We'll finish this in the background",
+    ]
+
+    let whilePhrases: [(video: String, subtitle: String)] = [
+        ("while-binge", "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
+        ("while-hobby", "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
+        ("while-read", "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
+        ("while-snack", "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
+        ("while-work", "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
+        ("while-rest", "This one might take a bit — maybe take a little rest? Your note will be waiting when you wake up"),
+    ]
+    @State var titlePhraseIndex = 0
+    @State var titleTypewriterTask: Task<Void, Never>?
+
+    let titlePhrases = [
+        "Naming this masterpiece…",
+        "Cooking up a title…",
+
+        "Consulting the title gods…",
+        "Squeezing out a title…",
+    ]
+
+    var isGeneratingTitle: Bool {
+        noteStore.generatingTitleIds.contains(noteId)
+    }
+
+    init(note: Note, initialContent: String? = nil) {
         self.noteId = note.id
         self.initialNote = note
-        self._editedTitle = State(initialValue: note.title ?? "")
-        self._editedContent = State(initialValue: note.content)
+        let title = note.title ?? ""
+        let content = initialContent ?? note.content
+        let opensOnUnresolvedRewrite = note.activeRewriteId == nil
+            && note.originalContent != nil
+            && content != note.originalContent
+        // If the note has an active rewrite but no cached content yet, the task will
+        // switch content after fetching — start invisible to prevent the flash.
+        let willSwitch = note.activeRewriteId != nil && initialContent == nil
+        self._editorSession = State(initialValue: NoteDetailEditorSession(title: title, content: content, bodyState: NoteBodyState(content: content, source: note.source)))
+        self._contentFocused = State(initialValue: false)
+        self._activeRewriteId = State(initialValue: note.activeRewriteId)
+        self._rewriteLabelFallback = State(initialValue: opensOnUnresolvedRewrite ? "Rewrite" : nil)
+        self._rewriteLabelOpacity = State(initialValue: (note.originalContent != nil || note.activeRewriteId != nil) ? 1 : 0)
+        self._contentOpacity = State(initialValue: willSwitch ? 0 : 1)
     }
 
     var note: Note {
@@ -56,204 +164,161 @@ struct NoteDetailView: View {
         noteStore.notes.contains { $0.id == noteId }
     }
 
-    var hasChanges: Bool {
-        typewriterTask == nil
-            && !isRewriting
-            && (editedTitle != (note.title ?? "") || editedContent != note.content)
-    }
-
     var category: Category? {
         noteStore.categories.first { $0.id == note.categoryId }
     }
 
-    var audioURL: URL? {
-        guard let urlString = note.audioUrl else { return nil }
-        return URL(string: urlString)
+
+    var editedTitle: String {
+        get { editorSession.title }
+        nonmutating set { editorSession.title = newValue }
     }
+
+    var editedContent: String {
+        get { editorSession.content }
+        nonmutating set { editorSession.content = newValue }
+    }
+
+    var noteBodyState: NoteBodyState {
+        get { editorSession.bodyState }
+        nonmutating set { editorSession.bodyState = newValue }
+    }
+
+    var titleBaseline: String {
+        get { editorSession.titleBaseline }
+        nonmutating set { editorSession.titleBaseline = newValue }
+    }
+
+    var contentBaseline: String {
+        get { editorSession.contentBaseline }
+        nonmutating set { editorSession.contentBaseline = newValue }
+    }
+
+    var editedTitleBinding: Binding<String> {
+        Binding(get: { editedTitle }, set: { editedTitle = $0 })
+    }
+
+    var editedContentBinding: Binding<String> {
+        Binding(get: { editedContent }, set: { editedContent = $0 })
+    }
+
+
+    var persistedEditedContent: String {
+        NoteAppendPlaceholderEditor.strippedContent(from: editedContent, placeholder: appendPlaceholder)
+    }
+
+
+    /// Unique speaker display names in order of first appearance.
+    var detectedSpeakers: [String] {
+        TranscriptSpeakerDetector.detectedSpeakers(in: editedContent, speakerNames: note.speakerNames)
+    }
+
+    func speakerColor(for key: String) -> Color {
+        let index = detectedSpeakers.firstIndex(of: key) ?? 0
+        return Self.speakerColors[index % Self.speakerColors.count]
+    }
+
 
     var body: some View {
         ZStack(alignment: .bottom) {
             (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
+            GeometryReader { geo in
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
-                    Color.clear.frame(height: 0).id("scrollTop")
-
-                    metadataRow
-                        .padding(.top, 12)
-
-                    if audioExpanded, audioURL != nil {
-                        audioPlayerView
-                            .padding(.top, 12)
-                            .padding(.horizontal, 24)
-                    }
-
-                    titleField
-                        .padding(.top, 20)
-                        .padding(.horizontal, 24)
-
-                    // Rewriting indicator
-                    if isRewriting {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(Color.brand)
-                            Text("Rewriting…")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 20)
-                        .transition(.opacity)
-                    }
-
-                    if isTranscribing {
-                        transcribingIndicator
-                            .padding(.top, 40)
-                    } else if isWaitingForConnection {
-                        waitingForConnectionView
-                            .padding(.top, 40)
-                    } else if isTranscriptionFailed {
-                        transcriptionFailedView
-                            .padding(.top, 40)
-                    } else {
-                        contentField
-                            .padding(.top, 28)
-                            .padding(.horizontal, 24)
-
-                        // Tap zone below content to focus editor
-                        Color.clear
-                            .frame(minHeight: 500)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if !subscriptionStore.isReadOnly { contentFocused = true }
-                            }
-                    }
+                    scrollContent
+                    Color.clear
+                        .frame(maxWidth: .infinity, minHeight: 500, maxHeight: geo.size.height)
+                        .contentShape(Rectangle())
+                        .onTapGesture { contentFocused = true; moveCursorToEnd = true }
                 }
-                .padding(.bottom, 120)
+                .frame(minHeight: geo.size.height, alignment: .top)
+                .background(ScrollViewKeyboardDismissSetup())
+                Color.clear.frame(height: 0).id("scrollBottom")
             }
-            .scrollDismissesKeyboard(.interactively)
+            .ignoresSafeArea(.all, edges: .bottom)
             .onAppear { scrollProxy = proxy }
             } // ScrollViewReader
+            } // GeometryReader
 
-            // Bottom fade
-            VStack {
-                Spacer()
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        colorScheme == .dark ? Color.darkBackground : Color.warmBackground,
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 90)
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-
-            // Bottom bar
-            if keyboardVisible {
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 32)
-
-                    bottomBar
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9))
-                }
-            } else {
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 32)
-
-                    bottomBar
-                        .padding(.bottom, 12)
-                        .frame(maxWidth: .infinity)
-                        .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.9))
-                }
+            bottomFade
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !titleFocused && bodyState == .content && renamingSpeaker == nil {
+                bottomBarContainer
+                    .transition(.opacity)
+                    .id(contentFocused)
             }
         }
+        .animation(.easeOut(duration: 0.2), value: contentFocused)
+        .animation(.easeInOut(duration: 0.4), value: isRewriting)
+        .animation(.easeOut(duration: 0.25), value: renamingSpeaker == nil)
+        .animation(.easeOut(duration: 0.2), value: bodyState)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if note.originalContent != nil {
-                ToolbarItem(placement: .principal) {
-                    Button {
-                        showRestoreConfirmation = true
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.caption2)
-                            Text("Restore Original")
-                                .font(.caption)
-                        }
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .sensoryFeedback(.impact(weight: .light), trigger: note.originalContent == nil)
-                }
+        .task {
+            rewrites = noteStore.rewritesCache[noteId] ?? []
+            activeRewriteId = note.activeRewriteId
+            if activeRewriteId != nil {
+                rewriteLabelFallback = nil
             }
+            repairMissingActiveRewriteSelection()
 
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if note.audioUrl != nil {
-                        Button {
-                            downloadAudio()
-                        } label: {
-                            if isDownloadingAudio {
-                                Label { Text("Downloading…") } icon: { ProgressView() }
-                            } else {
-                                Label("Download Audio", systemImage: "arrow.down.circle")
-                            }
-                        }
-                        .disabled(isDownloadingAudio)
-                    }
-
-                    Button(role: .destructive) {
-                        showDeleteConfirmation = true
-                    } label: {
-                        Label("Delete Note", systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .fontWeight(.medium)
-                        .frame(width: 36, height: 36)
-                }
+            await noteStore.fetchRewrites(for: noteId)
+            rewrites = noteStore.rewritesCache[noteId] ?? []
+            activeRewriteId = note.activeRewriteId
+            if activeRewriteId != nil {
+                rewriteLabelFallback = nil
             }
-
+            repairMissingActiveRewriteSelection()
+            let displayContent = noteStore.displayContent(for: note)
+            if editedContent != displayContent {
+                acceptResolvedNoteContent(displayContent)
+            } else if contentOpacity == 0 {
+                withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
+            }
+            if showsRewriteToolbarLabel, rewriteLabelOpacity == 0 {
+                rewriteLabelOpacity = 1
+            }
         }
-        .confirmationDialog(
-            "Delete this note?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
+        .task {
+            // Auto-focus for new text notes — delay lets the view hierarchy and trait
+            // collection fully settle before the keyboard appears, preventing a color flash.
+            guard initialNote.source == .text && initialNote.content.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(450))
+            contentFocused = true
+            moveCursorToEnd = true
+        }
+        .toolbar { toolbarContent() }
+        .alert("Delete this note?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
+                didDelete = true
                 noteStore.removeNote(id: note.id)
                 dismiss()
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
+        }
+        .alert("Delete this rewrite?", isPresented: .init(
+            get: { pendingDeleteRewrite != nil },
+            set: { if !$0 { pendingDeleteRewrite = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let rewrite = pendingDeleteRewrite {
+                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                    deleteActiveRewrite(rewrite)
+                    pendingDeleteRewrite = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This action cannot be undone.")
         }
         .sheet(isPresented: $showCategoryPicker) {
             CategoryPickerSheet(
-                note: note,
-                categories: noteStore.categories
+                note: note
             )
             .presentationDetents([.medium, .large])
             .presentationBackground {
@@ -263,36 +328,36 @@ struct NoteDetailView: View {
         .sheet(isPresented: $showRewriteSheet, onDismiss: {
             guard let rewrite = pendingRewrite else { return }
             pendingRewrite = nil
-            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions)
+            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions, toneLabel: rewrite.toneLabel, toneEmoji: rewrite.toneEmoji)
         }) {
-            RewriteSheet { tone, instructions in
-                pendingRewrite = (tone, instructions)
+            RewriteSheet { tone, instructions, toneLabel, toneEmoji in
+                pendingRewrite = (tone, instructions, toneLabel, toneEmoji)
             }
             .presentationDetents([.large])
+            .presentationContentInteraction(.scrolls)
             .presentationBackground {
                 SheetBackground()
             }
         }
         .onDisappear {
             player.stop()
-            if isAppendRecording || isAppendTranscribing {
-                appendRecorder.cancelRecording()
-                removePlaceholder()
-                isAppendRecording = false
-                isAppendTranscribing = false
+            if isAppendRecording {
+                if appendRecorder.elapsedSeconds >= 1 {
+                    // Stop and transcribe in background — don't discard what was recorded
+                    stopAppendRecording()
+                } else {
+                    appendRecorder.cancelRecording()
+                    removeAppendPlaceholder()
+                    isAppendRecording = false
+                }
             }
             autosaveTask?.cancel()
+            guard !didDelete else { return }
             let hasContent = !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !editedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !persistedEditedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             if hasContent && (hasChanges || !isInStore) {
                 saveChanges()
             }
-        }
-        .alert("Restore Original?", isPresented: $showRestoreConfirmation) {
-            Button("Restore", role: .destructive) { restoreOriginal() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This will discard all rewrites and restore the original content.")
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -302,6 +367,7 @@ struct NoteDetailView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+
         .sheet(isPresented: .init(
             get: { audioShareItem != nil },
             set: { if !$0 { audioShareItem = nil } }
@@ -321,360 +387,77 @@ struct NoteDetailView: View {
             }
         }
         .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
-        .onChange(of: note.content) { oldValue, newValue in
-            if editedContent == oldValue {
-                let isPlaceholder = oldValue == "Transcribing…"
-                    || oldValue == "Waiting for connection…"
-                    || oldValue == "Transcription failed — tap to edit"
+        .onChange(of: audioExpanded) { _, expanded in
+            if expanded, let url = audioURL {
+                player.preload(url: url)
+            }
+        }
+        .onChange(of: noteStore.displayContent(for: note)) { oldValue, newValue in
+            if editedContent == oldValue || persistedEditedContent == oldValue {
+                let oldState = resolvedBodyState(for: oldValue)
+                let isPlaceholder = oldState.isTransientTranscriptionState
                 if isPlaceholder && newValue != oldValue {
-                    revealContent(newValue)
+                    acceptStoreDrivenContent(newValue, revealIfNeeded: true)
                 } else {
-                    withAnimation(.easeOut(duration: 0.4)) {
-                        editedContent = newValue
-                    }
+                    acceptStoreDrivenContent(newValue)
                 }
             }
         }
         .onChange(of: note.title) { oldValue, newValue in
             if editedTitle == (oldValue ?? "") {
-                withAnimation(.easeOut(duration: 0.4)) {
-                    editedTitle = newValue ?? ""
-                }
+                syncStoreTitle(newValue ?? "")
             }
+        }
+        .onChange(of: note.activeRewriteId) { _, newValue in
+            activeRewriteId = newValue
+            if newValue != nil || note.originalContent == nil || noteStore.displayContent(for: note) == note.originalContent {
+                rewriteLabelFallback = nil
+            }
+        }
+        .onChange(of: isGeneratingTitle) { _, generating in
+            guard generating else { return }
+            titlePhraseIndex = Int.random(in: 0..<titlePhrases.count)
+        }
+        .onAppear {
+            updateTranscribingPresentation(for: bodyState)
+        }
+        .renameSpeakerAlert(
+            renamingSpeaker: $renamingSpeaker,
+            renameText: $renameText,
+            onConfirm: renameSpeaker
+        )
+        .onChange(of: bodyState) { _, state in
+            updateTranscribingPresentation(for: state)
         }
         .onChange(of: contentFocused) { _, focused in
             if focused, typewriterTask != nil {
-                typewriterTask?.cancel()
-                typewriterTask = nil
-                editedContent = note.content
+                cancelContentTypewriterAndRestoreFromStore()
             }
+            if !focused { isCursorReady = false }
         }
         .onDisappear {
             typewriterTask?.cancel()
+            titleTypewriterTask?.cancel()
+            transcribingPresentationTask?.cancel()
         }
         .onChange(of: editedTitle) {
             scheduleAutosave()
         }
-        .onChange(of: editedContent) {
+        .onChange(of: editedContent) { _, newValue in
+            syncBodyState(with: newValue)
             scheduleAutosave()
         }
+        .onChange(of: cursorPosition) { _, newPos in
+            if contentFocused {
+                lastKnownCursorPosition = newPos
+                isCursorReady = true
+            }
+        }
         .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
-            if Int(elapsed) >= 3600 && appendRecorder.isRecording {
+            if Int(elapsed) >= 900 && appendRecorder.isRecording {
                 stopAppendRecording()
             }
         }
     }
 
-}
-
-// MARK: - Category Picker Sheet
-
-private struct CategoryPickerSheet: View {
-    @Environment(NoteStore.self) private var noteStore
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-
-    let note: Note
-    let categories: [Category]
-
-    @State private var selectedCategoryId: UUID?
-    @State private var showAddCategory = false
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Category grid
-                    FlowLayout(spacing: 8) {
-                        ForEach(categories) { cat in
-                            let isSelected = selectedCategoryId == cat.id
-                            Button {
-                                selectedCategoryId = cat.id
-                                var updated = note
-                                updated.categoryId = cat.id
-                                updated.updatedAt = Date()
-                                noteStore.updateNote(updated)
-                                dismiss()
-                            } label: {
-                                Text(cat.name)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(Color.categoryColor(hex: cat.color))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: 200)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
-                                    .background(
-                                        Capsule()
-                                            .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                    )
-                                    .overlay(
-                                        Capsule()
-                                            .strokeBorder(
-                                                isSelected ? Color.categoryColor(hex: cat.color) : .clear,
-                                                lineWidth: 2
-                                            )
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        // Add category button
-                        Button {
-                            showAddCategory = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(
-                                    Capsule()
-                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-
-                    // Remove category
-                    if selectedCategoryId != nil {
-                        Button {
-                            selectedCategoryId = nil
-                            var updated = note
-                            updated.categoryId = nil
-                            updated.updatedAt = Date()
-                            noteStore.updateNote(updated)
-                            dismiss()
-                        } label: {
-                            Text("Remove category")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.top, 20)
-            }
-            .navigationTitle("Move to category")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .fontWeight(.semibold)
-                    }
-                }
-            }
-            .sensoryFeedback(.selection, trigger: selectedCategoryId)
-        }
-        .sheet(isPresented: $showAddCategory) {
-            CategoryFormSheet(mode: .add) { newCategory in
-                selectedCategoryId = newCategory.id
-                var updated = note
-                updated.categoryId = newCategory.id
-                updated.updatedAt = Date()
-                noteStore.updateNote(updated)
-                dismiss()
-            }
-        }
-        .onAppear {
-            selectedCategoryId = note.categoryId
-        }
-    }
-}
-
-// MARK: - Rewrite Sheet
-
-private struct RewriteTone: Identifiable {
-    let id: String
-    let label: String
-    let emoji: String
-}
-
-private struct ToneGroup: Identifiable {
-    let id: String
-    let label: String
-    let tones: [RewriteTone]
-}
-
-private let toneGroups: [ToneGroup] = [
-    ToneGroup(id: "practical", label: "Practical", tones: [
-        RewriteTone(id: "clean-up", label: "Clean up", emoji: "✨"),
-        RewriteTone(id: "sharpen", label: "Sharpen", emoji: "⚡"),
-        RewriteTone(id: "structure", label: "Structure", emoji: "📋"),
-        RewriteTone(id: "formalize", label: "Formalize", emoji: "👔"),
-        RewriteTone(id: "action-items", label: "Action Items", emoji: "☑️"),
-    ]),
-    ToneGroup(id: "playful", label: "Playful", tones: [
-        RewriteTone(id: "flirty", label: "Flirty", emoji: "😘"),
-        RewriteTone(id: "for-kids", label: "For kids", emoji: "🧒"),
-        RewriteTone(id: "hype", label: "Hype", emoji: "🔥"),
-        RewriteTone(id: "poetic", label: "Poetic", emoji: "🍃"),
-        RewriteTone(id: "sarcastic", label: "Sarcastic", emoji: "😏"),
-    ]),
-    ToneGroup(id: "occasions", label: "Occasions", tones: [
-        RewriteTone(id: "birthday", label: "Birthday", emoji: "🎂"),
-        RewriteTone(id: "holiday", label: "Holiday", emoji: "❄️"),
-        RewriteTone(id: "thank-you", label: "Thank you", emoji: "🙏"),
-        RewriteTone(id: "congratulations", label: "Congrats", emoji: "🏆"),
-        RewriteTone(id: "apology", label: "Apology", emoji: "💐"),
-        RewriteTone(id: "love-letter", label: "Love letter", emoji: "💌"),
-        RewriteTone(id: "wedding-toast", label: "Wedding toast", emoji: "🥂"),
-    ]),
-]
-
-private struct RewriteSheet: View {
-    let onSelect: (String?, String?) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-
-    @State private var selectedTab = 0
-    @State private var customInstructions = ""
-    @FocusState private var customFocused: Bool
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("", selection: $selectedTab) {
-                    Text("Presets").tag(0)
-                    Text("Custom").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-
-                if selectedTab == 0 {
-                    presetsView
-                } else {
-                    customView
-                }
-            }
-            .navigationTitle("Rewrite")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .fontWeight(.semibold)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Presets
-
-    private var presetsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                ForEach(toneGroups) { group in
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(group.label.uppercased())
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 20)
-
-                        FlowLayout(spacing: 8) {
-                            ForEach(group.tones) { tone in
-                                tonePill(tone)
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                }
-            }
-            .padding(.top, 20)
-            .padding(.bottom, 40)
-        }
-    }
-
-    private func tonePill(_ tone: RewriteTone) -> some View {
-        Button {
-            onSelect(tone.id, nil)
-            dismiss()
-        } label: {
-            HStack(spacing: 6) {
-                Text(tone.emoji)
-                    .font(.caption)
-                Text(tone.label)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                Capsule()
-                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Custom
-
-    private var customView: some View {
-        VStack(spacing: 20) {
-            TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
-                .font(.body)
-                .lineLimit(3...8)
-                .focused($customFocused)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                )
-                .padding(.horizontal, 20)
-
-            Button {
-                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces))
-                dismiss()
-            } label: {
-                Text("Rewrite")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Capsule().fill(Color.brand))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .disabled(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
-
-            Spacer()
-        }
-        .padding(.top, 20)
-        .onAppear { customFocused = true }
-    }
-}
-
-// MARK: - Sheet Background
-
-struct SheetBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        ZStack {
-            Rectangle().fill(.ultraThinMaterial)
-            (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
-                .opacity(colorScheme == .dark ? 0.85 : 0.55)
-        }
-        .ignoresSafeArea()
-    }
 }

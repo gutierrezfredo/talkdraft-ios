@@ -13,7 +13,9 @@ extension NoteDetailView {
         typewriterTask?.cancel()
         typewriterTask = nil
         contentOpacity = 0
+        appendPlaceholder = nil
         editedContent = text
+        syncBodyState(with: text)
         scrollToTop()
         withAnimation(.easeIn(duration: 0.5)) {
             contentOpacity = 1

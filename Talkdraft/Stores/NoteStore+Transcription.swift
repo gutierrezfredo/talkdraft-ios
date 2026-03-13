@@ -1,163 +1,105 @@
-import AVFoundation
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 
 extension NoteStore {
-    func retryWaitingNotes(language: String?, userId: UUID?) {
-        let waiting = notes.filter {
-            $0.content == "Waiting for connection…" || $0.content == "Transcription failed — tap to edit"
-        }
-        guard !waiting.isEmpty else { return }
+    // MARK: - Transcription
 
-        for note in waiting {
-            guard let urlString = note.audioUrl,
-                  let url = if let fileURL = URL(string: urlString), fileURL.isFileURL {
-                      fileURL
-                  } else if urlString.hasPrefix("/") {
-                      URL(fileURLWithPath: urlString)
-                  } else {
-                      nil
-                  },
-                  FileManager.default.fileExists(atPath: url.path)
-            else { continue }
-
-            setNoteContent(id: note.id, content: "Transcribing…")
-            transcribeNote(id: note.id, audioFileURL: url, language: language, userId: userId)
-        }
-    }
-
-    func importAudioNote(
-        from sourceURL: URL,
-        userId: UUID?,
-        categoryId: UUID?,
-        language: String?,
-        requiresSecurityScopedAccess: Bool = true
-    ) async throws -> Note {
-        let destinationURL: URL
-        if requiresSecurityScopedAccess {
-            guard sourceURL.startAccessingSecurityScopedResource() else {
-                throw ImportedAudioNoteError.accessDenied
-            }
-            do {
-                defer { sourceURL.stopAccessingSecurityScopedResource() }
-                destinationURL = try Self.copyImportedAudio(from: sourceURL)
-            } catch {
-                throw ImportedAudioNoteError.copyFailed
-            }
-        } else {
-            do {
-                destinationURL = try Self.copyImportedAudio(from: sourceURL)
-            } catch {
-                throw ImportedAudioNoteError.copyFailed
-            }
+    func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?, customDictionary: [String] = [], multiSpeaker: Bool = false) {
+        guard activeTranscriptionIds.insert(id).inserted else {
+            logger.info("Skipping duplicate transcription start for \(id)")
+            return
         }
 
-        let noteId = UUID()
-        let note = Note(
-            id: noteId,
-            userId: userId,
-            categoryId: categoryId,
-            title: sourceURL.deletingPathExtension().lastPathComponent,
-            content: "Transcribing…",
-            source: .voice,
-            audioUrl: destinationURL.absoluteString,
-            durationSeconds: await Self.importedAudioDurationSeconds(for: destinationURL),
-            createdAt: .now,
-            updatedAt: .now
-        )
+        // Persist the local file path so it survives app restarts
+        registerLocalAudio(audioFileURL, for: id)
+        setNoteBodyState(id: id, state: .transcribing)
 
-        addNote(note)
-        transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
-        return note
-    }
-
-    static func importedAudioDurationSeconds(for url: URL) async -> Int? {
-        let asset = AVURLAsset(url: url)
-        do {
-            let duration = try await asset.load(.duration)
-            let seconds = CMTimeGetSeconds(duration)
-            return seconds.isFinite ? Int(seconds) : nil
-        } catch {
-            return nil
-        }
-    }
-
-    static func copyImportedAudio(from sourceURL: URL) throws -> URL {
-        let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Recordings", isDirectory: true)
-        try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
-
-        let fileName = if sourceURL.pathExtension.isEmpty {
-            UUID().uuidString
-        } else {
-            "\(UUID().uuidString).\(sourceURL.pathExtension)"
-        }
-        let destinationURL = recordingsDir.appendingPathComponent(fileName)
-        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-        return destinationURL
-    }
-
-    func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?) {
         Task {
+            defer { self.activeTranscriptionIds.remove(id) }
             var compressedURL: URL?
-            defer {
-                if let compressedURL {
-                    AudioCompressor.cleanup(compressedURL)
-                }
-            }
+            defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
 
             do {
+                // Validate audio file before processing
                 guard FileManager.default.fileExists(atPath: audioFileURL.path),
                       let attrs = try? FileManager.default.attributesOfItem(atPath: audioFileURL.path),
-                      let fileSize = attrs[.size] as? Int,
-                      fileSize > 0
+                      let fileSize = attrs[.size] as? Int, fileSize > 0
                 else {
-                    noteStoreLogger.error("transcribeNote: audio file missing or empty at \(audioFileURL.path)")
-                    setNoteContent(id: id, content: "Transcription failed — tap to edit")
+                    logger.error("transcribeNote: audio file missing or empty at \(audioFileURL.path)")
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
+                    ErrorLogger.shared.log(
+                        type: "transcription_failed",
+                        message: "Audio file missing or empty",
+                        context: ["note_id": id.uuidString, "path": audioFileURL.lastPathComponent],
+                        userId: userId
+                    )
                     return
                 }
 
+                // Connectivity probe — quick request to verify network before heavy upload
                 do {
                     try await transcriptionConnectivityProbe()
                 } catch {
-                    noteStoreLogger.info("Connectivity probe failed — device appears offline: \(error)")
-                    setNoteContent(id: id, content: "Waiting for connection…")
+                    logger.info("Connectivity probe failed — device appears offline: \(error)")
+                    setNoteBodyState(id: id, state: .waitingForConnection)
                     return
                 }
 
-                let uploadURL: URL
+                // Always upload original for storage quality; compress separately for Whisper
+                let audioData = try Data(contentsOf: audioFileURL)
+                let fileName = audioFileURL.lastPathComponent
+
+                var whisperData: Data? = nil
+                var whisperFileName: String? = nil
                 do {
                     let compressed = try await AudioCompressor.compress(sourceURL: audioFileURL)
                     compressedURL = compressed
-                    uploadURL = compressed
+                    whisperData = try Data(contentsOf: compressed)
+                    whisperFileName = compressed.lastPathComponent
                 } catch {
-                    noteStoreLogger.warning("Compression failed, using original: \(error)")
-                    uploadURL = audioFileURL
+                    logger.warning("Compression failed, Whisper will use original: \(error)")
                 }
 
-                let audioData = try Data(contentsOf: uploadURL)
-                let fileName = uploadURL.lastPathComponent
-
-                let result = try await transcriptionUploadExecutor(
-                    TranscriptionUploadRequest(
-                        audioData: audioData,
-                        fileName: fileName,
-                        language: language,
-                        userId: userId
-                    )
+                let timeoutSeconds = transcriptionTimeoutSeconds(for: id)
+                let request = TranscriptionUploadRequest(
+                    audioData: audioData,
+                    fileName: fileName,
+                    language: language,
+                    userId: userId,
+                    customDictionary: customDictionary,
+                    whisperData: whisperData,
+                    whisperFileName: whisperFileName,
+                    multiSpeaker: multiSpeaker
                 )
+                let result = try await performTranscriptionWithTimeout(seconds: timeoutSeconds) {
+                    try await self.transcriptionUploadExecutor(request)
+                }
 
+                // Guard against empty transcription
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
-                    noteStoreLogger.warning("transcribeNote: received empty transcription for \(id)")
-                    setNoteContent(id: id, content: "Transcription failed — tap to edit")
+                    logger.warning("transcribeNote: received empty transcription for \(id)")
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
+                    ErrorLogger.shared.log(
+                        type: "transcription_empty",
+                        message: "Whisper returned empty text",
+                        context: ["note_id": id.uuidString, "language": language ?? "auto"],
+                        userId: userId
+                    )
                     return
                 }
 
+                // Update note with transcription
                 guard var note = notes.first(where: { $0.id == id }) else {
-                    noteStoreLogger.error("transcribeNote: note \(id) not found in local store after transcription")
+                    logger.error("transcribeNote: note \(id) not found in local store after transcription")
                     return
                 }
-                note.content = transcribedText
+                let (formattedContent, initialSpeakerNames) = Self.formatMultiSpeakerTranscript(transcribedText)
+                setLocalVoiceBodyState(nil, for: id)
+                note.content = formattedContent
+                if let initialSpeakerNames { note.speakerNames = initialSpeakerNames }
                 note.language = result.language
                 if let audioUrl = result.audioUrl {
                     note.audioUrl = audioUrl
@@ -168,40 +110,88 @@ extension NoteStore {
                 note.updatedAt = Date()
                 updateNote(note)
 
+                // Clean up local audio file after remote URL confirmed
                 if result.audioUrl != nil {
+                    unregisterLocalAudio(for: id)
                     try? FileManager.default.removeItem(at: audioFileURL)
                 }
 
+                // Generate AI title in background
                 generateTitle(for: id, content: transcribedText, language: result.language)
             } catch {
-                noteStoreLogger.error("transcribeNote failed for \(id): \(error)")
-                guard let noteIndex = notes.firstIndex(where: { $0.id == id }) else {
-                    noteStoreLogger.error("transcribeNote: note \(id) not found in local store after failure")
+                logger.error("transcribeNote failed for \(id): \(error)")
+                guard notes.contains(where: { $0.id == id }) else {
+                    logger.error("transcribeNote: note \(id) not found in local store after failure")
                     return
                 }
 
+                let fileSizeMB = (try? FileManager.default.attributesOfItem(atPath: audioFileURL.path)[.size] as? Int)
+                    .map { String(format: "%.1f", Double($0) / 1_048_576.0) } ?? "?"
+
                 if error is URLError {
-                    notes[noteIndex].content = "Waiting for connection…"
-                    notes[noteIndex].updatedAt = Date()
+                    setNoteBodyState(id: id, state: .waitingForConnection)
+                    ErrorLogger.shared.log(
+                        type: "transcription_offline",
+                        message: "Network unavailable during transcription",
+                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB],
+                        userId: userId
+                    )
+                } else if let timeoutError = error as? TranscriptionWorkflowError {
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
+                    ErrorLogger.shared.log(
+                        type: "transcription_timeout",
+                        message: timeoutError.localizedDescription,
+                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB, "language": language ?? "auto"],
+                        userId: userId
+                    )
                 } else {
-                    notes[noteIndex].content = "Transcription failed — tap to edit"
-                    notes[noteIndex].updatedAt = Date()
+                    setNoteBodyState(id: id, state: .transcriptionFailed)
+                    ErrorLogger.shared.log(
+                        type: "transcription_failed",
+                        message: error.localizedDescription,
+                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB, "language": language ?? "auto"],
+                        userId: userId
+                    )
                 }
             }
         }
     }
 
-    func generateTitle(for noteId: UUID, content: String, language: String?) {
-        Task {
-            do {
-                let aiTitle = try await aiTitleExecutor(content, language)
-                guard var note = notes.first(where: { $0.id == noteId }) else { return }
-                note.title = aiTitle
-                note.updatedAt = Date()
-                updateNote(note)
-            } catch {
-                // AI title failed — keep the quick title, no big deal
+    func transcriptionRepairThresholdSeconds(for note: Note) -> TimeInterval {
+        transcriptionTimeoutSeconds(for: note.durationSeconds) + 30
+    }
+
+    private func transcriptionTimeoutSeconds(for noteId: UUID) -> TimeInterval {
+        transcriptionTimeoutSeconds(for: notes.first(where: { $0.id == noteId })?.durationSeconds)
+    }
+
+    private func transcriptionTimeoutSeconds(for durationSeconds: Int?) -> TimeInterval {
+        switch durationSeconds ?? 0 {
+        case 900...:
+            return 420
+        case 300...:
+            return 300
+        default:
+            return 180
+        }
+    }
+
+    private func performTranscriptionWithTimeout(
+        seconds: TimeInterval,
+        operation: @escaping @Sendable () async throws -> TranscriptionResult
+    ) async throws -> TranscriptionResult {
+        try await withThrowingTaskGroup(of: TranscriptionResult.self) { group in
+            group.addTask {
+                try await operation()
             }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw TranscriptionWorkflowError.timedOut(seconds: seconds)
+            }
+
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
         }
     }
 }

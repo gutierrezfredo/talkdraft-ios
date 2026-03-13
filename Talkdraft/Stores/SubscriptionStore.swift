@@ -10,51 +10,19 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Subsc
 final class SubscriptionStore {
     var isPro = false
     var isLoading = false
+    var entitlementChecked = false
 
     // StoreKit2 products fetched directly (RevenueCat offerings fallback)
     var monthlyProduct: StoreKit.Product?
     var yearlyProduct: StoreKit.Product?
 
-    // MARK: - Trial
+    // MARK: - Access
 
-    private static let trialStartKey = "talkdraft.trialStartDate"
-    private static let trialDurationDays: Int = 7
-
-    /// Observation trigger for UserDefaults-backed trial date.
-    private var _trialStartDateLoaded: Bool = UserDefaults.standard.object(forKey: trialStartKey) != nil
-
-    var isTrialActive: Bool {
-        _ = _trialStartDateLoaded
-        guard !isPro else { return false }
-        guard let start = UserDefaults.standard.object(forKey: Self.trialStartKey) as? Date else {
-            return false
-        }
-        let elapsed = Calendar.current.dateComponents([.day], from: start, to: .now).day ?? 0
-        return elapsed < Self.trialDurationDays
-    }
-
-    var trialDaysRemaining: Int {
-        _ = _trialStartDateLoaded
-        guard let start = UserDefaults.standard.object(forKey: Self.trialStartKey) as? Date else {
-            return 0
-        }
-        let elapsed = Calendar.current.dateComponents([.day], from: start, to: .now).day ?? 0
-        return max(0, Self.trialDurationDays - elapsed)
-    }
+    /// Whether the user can start a free trial via StoreKit introductory offer.
+    var isTrialEligible = false
 
     /// Single gate for all write-action enforcement points.
-    var isReadOnly: Bool {
-        !isPro && !isTrialActive
-    }
-
-    /// Call once after successful login. Only sets date if not already stored.
-    func activateTrialIfNeeded() {
-        guard UserDefaults.standard.object(forKey: Self.trialStartKey) == nil else { return }
-        let now = Date()
-        UserDefaults.standard.set(now, forKey: Self.trialStartKey)
-        _trialStartDateLoaded = true
-        logger.info("Trial started: \(now)")
-    }
+    var isReadOnly: Bool { !isPro }
 
     var hasProducts: Bool { monthlyProduct != nil || yearlyProduct != nil }
 
@@ -77,6 +45,7 @@ final class SubscriptionStore {
         } catch {
             // Non-fatal — entitlement will be checked on next app launch
         }
+        entitlementChecked = true
     }
 
     func logout() async {
@@ -86,6 +55,7 @@ final class SubscriptionStore {
         } catch {
             isPro = false
         }
+        entitlementChecked = false
     }
 
     // MARK: - Entitlement
@@ -97,6 +67,7 @@ final class SubscriptionStore {
         } catch {
             // Keep current state on failure
         }
+        entitlementChecked = true
     }
 
     // MARK: - Products
@@ -115,9 +86,19 @@ final class SubscriptionStore {
                 }
             }
             logger.info("Fetched \(products.count) products from StoreKit2")
+            await checkTrialEligibility()
         } catch {
             logger.error("StoreKit2 product fetch failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Trial Eligibility
+
+    /// Check whether the user is eligible for a StoreKit introductory offer (free trial).
+    private func checkTrialEligibility() async {
+        guard let product = monthlyProduct ?? yearlyProduct,
+              let subscription = product.subscription else { return }
+        isTrialEligible = await subscription.isEligibleForIntroOffer
     }
 
     // MARK: - Purchase
@@ -192,6 +173,7 @@ private final class DelegateAdapter: NSObject, PurchasesDelegate, Sendable {
         self.onUpdate = { [weak store] customerInfo in
             Task { @MainActor in
                 store?.isPro = customerInfo.entitlements["spiritnotes Pro"]?.isActive == true
+                store?.entitlementChecked = true
             }
         }
     }
