@@ -9,7 +9,7 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteS
 typealias NoteUpsertExecutor = @MainActor (Note) async throws -> Void
 typealias NoteHardDeleteExecutor = @MainActor (UUID) async throws -> Void
 
-private enum TranscriptionWorkflowError: LocalizedError {
+enum TranscriptionWorkflowError: LocalizedError {
     case timedOut(seconds: TimeInterval)
 
     var errorDescription: String? {
@@ -20,7 +20,7 @@ private enum TranscriptionWorkflowError: LocalizedError {
     }
 }
 
-private enum ImportedAudioNoteError: LocalizedError {
+enum ImportedAudioNoteError: LocalizedError {
     case accessDenied
     case copyFailed
 
@@ -348,7 +348,7 @@ final class NoteStore {
 
     // MARK: - Fetch
 
-    private static func importedAudioDurationSeconds(for url: URL) async -> Int? {
+    static func importedAudioDurationSeconds(for url: URL) async -> Int? {
         let asset = AVURLAsset(url: url)
         do {
             let duration = try await asset.load(.duration)
@@ -359,7 +359,7 @@ final class NoteStore {
         }
     }
 
-    private static func copyImportedAudio(from sourceURL: URL) throws -> URL {
+    static func copyImportedAudio(from sourceURL: URL) throws -> URL {
         let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Recordings", isDirectory: true)
         try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
@@ -372,51 +372,6 @@ final class NoteStore {
         let destinationURL = recordingsDir.appendingPathComponent(fileName)
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
         return destinationURL
-    }
-
-    func importAudioNote(
-        from sourceURL: URL,
-        userId: UUID?,
-        categoryId: UUID?,
-        language: String?,
-        customDictionary: [String]
-    ) async throws -> Note {
-        guard sourceURL.startAccessingSecurityScopedResource() else {
-            throw ImportedAudioNoteError.accessDenied
-        }
-        defer { sourceURL.stopAccessingSecurityScopedResource() }
-
-        let destinationURL: URL
-        do {
-            destinationURL = try Self.copyImportedAudio(from: sourceURL)
-        } catch {
-            throw ImportedAudioNoteError.copyFailed
-        }
-
-        let noteId = UUID()
-        let note = Note(
-            id: noteId,
-            userId: userId,
-            categoryId: categoryId,
-            title: sourceURL.deletingPathExtension().lastPathComponent,
-            content: "",
-            source: .voice,
-            audioUrl: destinationURL.absoluteString,
-            durationSeconds: await Self.importedAudioDurationSeconds(for: destinationURL),
-            createdAt: .now,
-            updatedAt: .now
-        )
-
-        addNote(note)
-        setNoteBodyState(id: noteId, state: .transcribing)
-        transcribeNote(
-            id: noteId,
-            audioFileURL: destinationURL,
-            language: language,
-            userId: userId,
-            customDictionary: customDictionary
-        )
-        return note
     }
 
     func refresh() async {
@@ -489,333 +444,5 @@ final class NoteStore {
         categories = fetched
     }
 
-    /// Update note content locally without syncing to server.
-    func setNoteContent(id: UUID, content: String) {
-        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
-        notes[index].content = content
-        notes[index].updatedAt = Date()
-        if notes[index].source == .voice {
-            let inferredState = NoteBodyState(content: content, source: notes[index].source)
-            if inferredState.isTransientTranscriptionState {
-                notes[index].content = ""
-                setLocalVoiceBodyState(inferredState, for: id)
-            } else {
-                setLocalVoiceBodyState(nil, for: id)
-            }
-        }
-        queuePendingNoteUpsert(notes[index])
-    }
-
-    // MARK: - Note CRUD
-
-    func addNote(_ note: Note) {
-        let localNote = normalizeLocalVoiceNote(note)
-        notes.insert(localNote, at: 0)
-        queuePendingNoteUpsert(localNote)
-        let revision = bumpNoteSyncRevision(for: note.id)
-        schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
-    }
-
-    func updateNote(_ note: Note) {
-        guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        let localNote = normalizeLocalVoiceNote(note)
-        notes[index] = localNote
-        queuePendingNoteUpsert(localNote)
-        let revision = bumpNoteSyncRevision(for: note.id)
-        schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: noteSyncDebounceDuration)
-    }
-
-    func removeNote(id: UUID) {
-        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
-        var removed = notes.remove(at: index)
-        removed.deletedAt = Date()
-        deletedNotes.insert(removed, at: 0)
-        setLocalVoiceBodyState(nil, for: id)
-        queuePendingNoteUpsert(removed)
-        let revision = bumpNoteSyncRevision(for: id)
-        schedulePendingNoteUpsertSync(id: id, expectedRevision: revision, delay: .zero)
-    }
-
-    func removeNotes(ids: Set<UUID>) {
-        let now = Date()
-        var removed = notes.filter { ids.contains($0.id) }
-        notes.removeAll { ids.contains($0.id) }
-        for i in removed.indices { removed[i].deletedAt = now }
-        deletedNotes.insert(contentsOf: removed, at: 0)
-        for note in removed {
-            setLocalVoiceBodyState(nil, for: note.id)
-            queuePendingNoteUpsert(note)
-            let revision = bumpNoteSyncRevision(for: note.id)
-            schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
-        }
-    }
-
-    // MARK: - Restore & Purge
-
-    func restoreNote(id: UUID) {
-        guard let index = deletedNotes.firstIndex(where: { $0.id == id }) else { return }
-        var restored = deletedNotes.remove(at: index)
-        restored.deletedAt = nil
-        restored.updatedAt = Date()
-        notes.insert(restored, at: 0)
-        notes.sort { $0.createdAt > $1.createdAt }
-        queuePendingNoteUpsert(restored)
-        let revision = bumpNoteSyncRevision(for: id)
-        schedulePendingNoteUpsertSync(id: id, expectedRevision: revision, delay: .zero)
-    }
-
-    func permanentlyDeleteNote(id: UUID) {
-        let deletedNote = deletedNotes.first(where: { $0.id == id })
-        deletedNotes.removeAll { $0.id == id }
-        cancelPendingNoteSyncTask(id: id)
-        pendingNoteUpserts.removeValue(forKey: id)
-        persistPendingNoteUpserts()
-        noteSyncRevisions[id] = nil
-        setLocalVoiceBodyState(nil, for: id)
-        if let audioURL = localAudioFileURL(for: id, audioUrl: deletedNote?.audioUrl) {
-            unregisterLocalAudio(for: id)
-            try? FileManager.default.removeItem(at: audioURL)
-        } else {
-            unregisterLocalAudio(for: id)
-        }
-        queuePendingHardDelete(id)
-        schedulePendingHardDelete(id: id)
-    }
-
-    private func purgeExpiredNotes() async {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-        let expired = deletedNotes.filter { note in
-            guard let deletedAt = note.deletedAt else { return false }
-            return deletedAt < cutoff
-        }
-        guard !expired.isEmpty else { return }
-
-        for note in expired {
-            permanentlyDeleteNote(id: note.id)
-        }
-    }
-
-    func moveNotes(ids: Set<UUID>, toCategoryId categoryId: UUID?) {
-        let now = Date()
-        let movedNotes = notes
-            .filter { ids.contains($0.id) && $0.categoryId != categoryId }
-            .map { note -> Note in
-                var updated = note
-                updated.categoryId = categoryId
-                updated.updatedAt = now
-                return updated
-            }
-
-        for note in movedNotes {
-            updateNote(note)
-        }
-    }
-
-    // MARK: - Transcription
-
-    func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?, customDictionary: [String] = [], multiSpeaker: Bool = false) {
-        guard activeTranscriptionIds.insert(id).inserted else {
-            logger.info("Skipping duplicate transcription start for \(id)")
-            return
-        }
-
-        // Persist the local file path so it survives app restarts
-        registerLocalAudio(audioFileURL, for: id)
-        setNoteBodyState(id: id, state: .transcribing)
-
-        Task {
-            defer { self.activeTranscriptionIds.remove(id) }
-            var compressedURL: URL?
-            defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
-
-            do {
-                // Validate audio file before processing
-                guard FileManager.default.fileExists(atPath: audioFileURL.path),
-                      let attrs = try? FileManager.default.attributesOfItem(atPath: audioFileURL.path),
-                      let fileSize = attrs[.size] as? Int, fileSize > 0
-                else {
-                    logger.error("transcribeNote: audio file missing or empty at \(audioFileURL.path)")
-                    setNoteBodyState(id: id, state: .transcriptionFailed)
-                    ErrorLogger.shared.log(
-                        type: "transcription_failed",
-                        message: "Audio file missing or empty",
-                        context: ["note_id": id.uuidString, "path": audioFileURL.lastPathComponent],
-                        userId: userId
-                    )
-                    return
-                }
-
-                // Connectivity probe — quick request to verify network before heavy upload
-                do {
-                    var probe = URLRequest(url: AppConfig.supabaseUrl.appendingPathComponent("rest/v1/"))
-                    probe.httpMethod = "GET"
-                    probe.timeoutInterval = 15
-                    probe.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-                    probe.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-                    let (_, response) = try await URLSession.shared.data(for: probe)
-                    guard let http = response as? HTTPURLResponse, http.statusCode < 500 else {
-                        throw URLError(.cannotConnectToHost)
-                    }
-                } catch {
-                    logger.info("Connectivity probe failed — device appears offline: \(error)")
-                    setNoteBodyState(id: id, state: .waitingForConnection)
-                    return
-                }
-
-                // Always upload original for storage quality; compress separately for Whisper
-                let audioData = try Data(contentsOf: audioFileURL)
-                let fileName = audioFileURL.lastPathComponent
-
-                var whisperData: Data? = nil
-                var whisperFileName: String? = nil
-                do {
-                    let compressed = try await AudioCompressor.compress(sourceURL: audioFileURL)
-                    compressedURL = compressed
-                    whisperData = try Data(contentsOf: compressed)
-                    whisperFileName = compressed.lastPathComponent
-                } catch {
-                    logger.warning("Compression failed, Whisper will use original: \(error)")
-                }
-
-                let service = TranscriptionService()
-                let timeoutSeconds = transcriptionTimeoutSeconds(for: id)
-                let requestAudioData = audioData
-                let requestFileName = fileName
-                let requestLanguage = language
-                let requestUserId = userId
-                let requestDictionary = customDictionary
-                let requestWhisperData = whisperData
-                let requestWhisperFileName = whisperFileName
-                let requestMultiSpeaker = multiSpeaker
-                let result = try await performTranscriptionWithTimeout(seconds: timeoutSeconds) {
-                    try await service.transcribe(
-                        audioData: requestAudioData,
-                        fileName: requestFileName,
-                        language: requestLanguage,
-                        userId: requestUserId,
-                        customDictionary: requestDictionary,
-                        whisperData: requestWhisperData,
-                        whisperFileName: requestWhisperFileName,
-                        multiSpeaker: requestMultiSpeaker
-                    )
-                }
-
-                // Guard against empty transcription
-                let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !transcribedText.isEmpty else {
-                    logger.warning("transcribeNote: received empty transcription for \(id)")
-                    setNoteBodyState(id: id, state: .transcriptionFailed)
-                    ErrorLogger.shared.log(
-                        type: "transcription_empty",
-                        message: "Whisper returned empty text",
-                        context: ["note_id": id.uuidString, "language": language ?? "auto"],
-                        userId: userId
-                    )
-                    return
-                }
-
-                // Update note with transcription
-                guard var note = notes.first(where: { $0.id == id }) else {
-                    logger.error("transcribeNote: note \(id) not found in local store after transcription")
-                    return
-                }
-                let (formattedContent, initialSpeakerNames) = Self.formatMultiSpeakerTranscript(transcribedText)
-                setLocalVoiceBodyState(nil, for: id)
-                note.content = formattedContent
-                if let initialSpeakerNames { note.speakerNames = initialSpeakerNames }
-                note.language = result.language
-                if let audioUrl = result.audioUrl {
-                    note.audioUrl = audioUrl
-                }
-                if let duration = result.durationSeconds {
-                    note.durationSeconds = duration
-                }
-                note.updatedAt = Date()
-                updateNote(note)
-
-                // Clean up local audio file after remote URL confirmed
-                if result.audioUrl != nil {
-                    unregisterLocalAudio(for: id)
-                    try? FileManager.default.removeItem(at: audioFileURL)
-                }
-
-                // Generate AI title in background
-                generateTitle(for: id, content: transcribedText, language: result.language)
-            } catch {
-                logger.error("transcribeNote failed for \(id): \(error)")
-                guard notes.contains(where: { $0.id == id }) else {
-                    logger.error("transcribeNote: note \(id) not found in local store after failure")
-                    return
-                }
-
-                let fileSizeMB = (try? FileManager.default.attributesOfItem(atPath: audioFileURL.path)[.size] as? Int)
-                    .map { String(format: "%.1f", Double($0) / 1_048_576.0) } ?? "?"
-
-                if error is URLError {
-                    setNoteBodyState(id: id, state: .waitingForConnection)
-                    ErrorLogger.shared.log(
-                        type: "transcription_offline",
-                        message: "Network unavailable during transcription",
-                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB],
-                        userId: userId
-                    )
-                } else if let timeoutError = error as? TranscriptionWorkflowError {
-                    setNoteBodyState(id: id, state: .transcriptionFailed)
-                    ErrorLogger.shared.log(
-                        type: "transcription_timeout",
-                        message: timeoutError.localizedDescription,
-                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB, "language": language ?? "auto"],
-                        userId: userId
-                    )
-                } else {
-                    setNoteBodyState(id: id, state: .transcriptionFailed)
-                    ErrorLogger.shared.log(
-                        type: "transcription_failed",
-                        message: error.localizedDescription,
-                        context: ["note_id": id.uuidString, "file_size_mb": fileSizeMB, "language": language ?? "auto"],
-                        userId: userId
-                    )
-                }
-            }
-        }
-    }
-
-    private func transcriptionRepairThresholdSeconds(for note: Note) -> TimeInterval {
-        transcriptionTimeoutSeconds(for: note.durationSeconds) + 30
-    }
-
-    private func transcriptionTimeoutSeconds(for noteId: UUID) -> TimeInterval {
-        transcriptionTimeoutSeconds(for: notes.first(where: { $0.id == noteId })?.durationSeconds)
-    }
-
-    private func transcriptionTimeoutSeconds(for durationSeconds: Int?) -> TimeInterval {
-        switch durationSeconds ?? 0 {
-        case 900...:
-            return 420
-        case 300...:
-            return 300
-        default:
-            return 180
-        }
-    }
-
-    private func performTranscriptionWithTimeout(
-        seconds: TimeInterval,
-        operation: @escaping @Sendable () async throws -> TranscriptionResult
-    ) async throws -> TranscriptionResult {
-        try await withThrowingTaskGroup(of: TranscriptionResult.self) { group in
-            group.addTask {
-                try await operation()
-            }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw TranscriptionWorkflowError.timedOut(seconds: seconds)
-            }
-
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
-        }
-    }
 
 }
