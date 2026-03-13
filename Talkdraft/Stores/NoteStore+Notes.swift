@@ -1,77 +1,97 @@
 import Foundation
 
 extension NoteStore {
-    func refresh() async {
-        isLoading = true
-        defer { isLoading = false }
+    func importAudioNote(
+        from sourceURL: URL,
+        userId: UUID?,
+        categoryId: UUID?,
+        language: String?,
+        customDictionary: [String],
+        requiresSecurityScopedAccess: Bool = true
+    ) async throws -> Note {
+        if requiresSecurityScopedAccess {
+            guard sourceURL.startAccessingSecurityScopedResource() else {
+                throw ImportedAudioNoteError.accessDenied
+            }
+            defer { sourceURL.stopAccessingSecurityScopedResource() }
 
-        async let fetchedNotes: () = fetchNotes()
-        async let fetchedCategories: () = fetchCategories()
-        _ = try? await (fetchedNotes, fetchedCategories)
+            return try await importAudioNote(
+                from: sourceURL,
+                userId: userId,
+                categoryId: categoryId,
+                language: language,
+                customDictionary: customDictionary,
+                requiresSecurityScopedAccess: false
+            )
+        }
+
+        let destinationURL: URL
+        do {
+            destinationURL = try Self.copyImportedAudio(from: sourceURL)
+        } catch {
+            throw ImportedAudioNoteError.copyFailed
+        }
+
+        let noteId = UUID()
+        let note = Note(
+            id: noteId,
+            userId: userId,
+            categoryId: categoryId,
+            title: sourceURL.deletingPathExtension().lastPathComponent,
+            content: "",
+            source: .voice,
+            audioUrl: destinationURL.absoluteString,
+            durationSeconds: await Self.importedAudioDurationSeconds(for: destinationURL),
+            createdAt: .now,
+            updatedAt: .now
+        )
+
+        addNote(note)
+        setNoteBodyState(id: noteId, state: .transcribing)
+        transcribeNote(
+            id: noteId,
+            audioFileURL: destinationURL,
+            language: language,
+            userId: userId,
+            customDictionary: customDictionary
+        )
+        return note
     }
 
-    func fetchNotes() async throws {
-        let fetched: [Note] = try await supabase
-            .from("notes")
-            .select()
-            .is("deleted_at", value: nil)
-            .order("created_at", ascending: false)
-            .execute()
-            .value
-        notes = fetched
-
-        let deleted: [Note] = try await supabase
-            .from("notes")
-            .select()
-            .not("deleted_at", operator: .is, value: Bool?.none)
-            .order("deleted_at", ascending: false)
-            .execute()
-            .value
-        deletedNotes = deleted
-
-        await purgeExpiredNotes()
-    }
-
+    /// Update note content locally without syncing to server.
     func setNoteContent(id: UUID, content: String) {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[index].content = content
         notes[index].updatedAt = Date()
-    }
-
-    func addNote(_ note: Note) {
-        notes.insert(note, at: 0)
-
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .insert(note)
-                    .execute()
-            } catch {
-                noteStoreLogger.error("addNote sync failed (note saved locally): \(error)")
+        if notes[index].source == .voice {
+            let inferredState = NoteBodyState(content: content, source: notes[index].source)
+            if inferredState.isTransientTranscriptionState {
+                notes[index].content = ""
+                setLocalVoiceBodyState(inferredState, for: id)
+            } else {
+                setLocalVoiceBodyState(nil, for: id)
             }
         }
+        queuePendingNoteUpsert(notes[index])
+    }
+
+    // MARK: - Note CRUD
+
+    func addNote(_ note: Note) {
+        let localNote = normalizeLocalVoiceNote(note)
+        notes.insert(localNote, at: 0)
+        queuePendingNoteUpsert(localNote)
+        let revision = bumpNoteSyncRevision(for: note.id)
+        schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
     }
 
     func updateNote(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        let previous = notes[index]
-        notes[index] = note
-
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .update(NoteUpdate(from: note))
-                    .eq("id", value: note.id)
-                    .execute()
-            } catch {
-                noteStoreLogger.error("updateNote failed: \(error)")
-                if let i = notes.firstIndex(where: { $0.id == note.id }) {
-                    notes[i] = previous
-                }
-            }
-        }
+        let localNote = normalizeLocalVoiceNote(note)
+        notes[index] = localNote
+        queuePendingNoteUpsert(localNote)
+        let revision = bumpNoteSyncRevision(for: note.id)
+        schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: noteSyncDebounceDuration)
     }
 
     func removeNote(id: UUID) {
@@ -79,50 +99,27 @@ extension NoteStore {
         var removed = notes.remove(at: index)
         removed.deletedAt = Date()
         deletedNotes.insert(removed, at: 0)
-
-        Task {
-            do {
-                let update = SoftDeleteUpdate(deletedAt: removed.deletedAt)
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .eq("id", value: id)
-                    .execute()
-            } catch {
-                removed.deletedAt = nil
-                deletedNotes.removeAll { $0.id == id }
-                notes.insert(removed, at: min(index, notes.count))
-            }
-        }
+        setLocalVoiceBodyState(nil, for: id)
+        queuePendingNoteUpsert(removed)
+        let revision = bumpNoteSyncRevision(for: id)
+        schedulePendingNoteUpsertSync(id: id, expectedRevision: revision, delay: .zero)
     }
 
     func removeNotes(ids: Set<UUID>) {
         let now = Date()
         var removed = notes.filter { ids.contains($0.id) }
         notes.removeAll { ids.contains($0.id) }
-        for i in removed.indices {
-            removed[i].deletedAt = now
-        }
+        for i in removed.indices { removed[i].deletedAt = now }
         deletedNotes.insert(contentsOf: removed, at: 0)
-
-        Task {
-            do {
-                let update = SoftDeleteUpdate(deletedAt: now)
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .in("id", values: ids.map(\.uuidString))
-                    .execute()
-            } catch {
-                for i in removed.indices {
-                    removed[i].deletedAt = nil
-                }
-                deletedNotes.removeAll { ids.contains($0.id) }
-                notes.append(contentsOf: removed)
-                notes.sort { $0.createdAt > $1.createdAt }
-            }
+        for note in removed {
+            setLocalVoiceBodyState(nil, for: note.id)
+            queuePendingNoteUpsert(note)
+            let revision = bumpNoteSyncRevision(for: note.id)
+            schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
         }
     }
+
+    // MARK: - Restore & Purge
 
     func restoreNote(id: UUID) {
         guard let index = deletedNotes.firstIndex(where: { $0.id == id }) else { return }
@@ -131,66 +128,30 @@ extension NoteStore {
         restored.updatedAt = Date()
         notes.insert(restored, at: 0)
         notes.sort { $0.createdAt > $1.createdAt }
-
-        Task {
-            do {
-                let update = SoftDeleteUpdate(deletedAt: nil)
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .eq("id", value: id)
-                    .execute()
-            } catch {
-                notes.removeAll { $0.id == id }
-                restored.deletedAt = Date()
-                deletedNotes.insert(restored, at: min(index, deletedNotes.count))
-            }
-        }
+        queuePendingNoteUpsert(restored)
+        let revision = bumpNoteSyncRevision(for: id)
+        schedulePendingNoteUpsertSync(id: id, expectedRevision: revision, delay: .zero)
     }
 
     func permanentlyDeleteNote(id: UUID) {
+        let deletedNote = deletedNotes.first(where: { $0.id == id })
         deletedNotes.removeAll { $0.id == id }
-
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .delete()
-                    .eq("id", value: id)
-                    .execute()
-            } catch {
-                noteStoreLogger.error("permanentlyDeleteNote failed: \(error)")
-            }
+        cancelPendingNoteSyncTask(id: id)
+        pendingNoteUpserts.removeValue(forKey: id)
+        persistPendingNoteUpserts()
+        noteSyncRevisions[id] = nil
+        setLocalVoiceBodyState(nil, for: id)
+        if let audioURL = localAudioFileURL(for: id, audioUrl: deletedNote?.audioUrl) {
+            unregisterLocalAudio(for: id)
+            try? FileManager.default.removeItem(at: audioURL)
+        } else {
+            unregisterLocalAudio(for: id)
         }
+        queuePendingHardDelete(id)
+        schedulePendingHardDelete(id: id)
     }
 
-    func moveNotes(ids: Set<UUID>, toCategoryId categoryId: UUID?) {
-        var previousValues: [(UUID, UUID?)] = []
-        for i in notes.indices where ids.contains(notes[i].id) {
-            previousValues.append((notes[i].id, notes[i].categoryId))
-            notes[i].categoryId = categoryId
-            notes[i].updatedAt = Date()
-        }
-
-        Task {
-            do {
-                let update = NoteCategoryUpdate(categoryId: categoryId, updatedAt: Date())
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .in("id", values: ids.map(\.uuidString))
-                    .execute()
-            } catch {
-                for (noteId, prevCategoryId) in previousValues {
-                    if let i = notes.firstIndex(where: { $0.id == noteId }) {
-                        notes[i].categoryId = prevCategoryId
-                    }
-                }
-            }
-        }
-    }
-
-    private func purgeExpiredNotes() async {
+    func purgeExpiredNotes() async {
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
         let expired = deletedNotes.filter { note in
             guard let deletedAt = note.deletedAt else { return false }
@@ -198,17 +159,25 @@ extension NoteStore {
         }
         guard !expired.isEmpty else { return }
 
-        let expiredIds = expired.map(\.id)
-        deletedNotes.removeAll { expiredIds.contains($0.id) }
-
-        do {
-            try await supabase
-                .from("notes")
-                .delete()
-                .in("id", values: expiredIds.map(\.uuidString))
-                .execute()
-        } catch {
-            noteStoreLogger.error("purgeExpiredNotes failed: \(error)")
+        for note in expired {
+            permanentlyDeleteNote(id: note.id)
         }
     }
+
+    func moveNotes(ids: Set<UUID>, toCategoryId categoryId: UUID?) {
+        let now = Date()
+        let movedNotes = notes
+            .filter { ids.contains($0.id) && $0.categoryId != categoryId }
+            .map { note -> Note in
+                var updated = note
+                updated.categoryId = categoryId
+                updated.updatedAt = now
+                return updated
+            }
+
+        for note in movedNotes {
+            updateNote(note)
+        }
+    }
+
 }

@@ -5,11 +5,9 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Categ
 
 struct CategoriesView: View {
     @Environment(NoteStore.self) private var noteStore
-    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var editingCategory: Category?
     @State private var showAddSheet = false
-    @State private var showPaywall = false
     @State private var categoryToDelete: Category?
     @State private var editMode: EditMode = .inactive
 
@@ -78,18 +76,11 @@ struct CategoriesView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    if subscriptionStore.isReadOnly {
-                        showPaywall = true
-                    } else {
-                        showAddSheet = true
-                    }
+                    showAddSheet = true
                 } label: {
                     Image(systemName: "plus")
                 }
             }
-        }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
         }
         .sheet(isPresented: $showAddSheet) {
             CategoryFormSheet(mode: .add)
@@ -97,14 +88,10 @@ struct CategoriesView: View {
         .sheet(item: $editingCategory) { category in
             CategoryFormSheet(mode: .edit(category))
         }
-        .confirmationDialog(
-            "Delete Category",
-            isPresented: .init(
-                get: { categoryToDelete != nil },
-                set: { if !$0 { categoryToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
+        .alert("Delete Category?", isPresented: .init(
+            get: { categoryToDelete != nil },
+            set: { if !$0 { categoryToDelete = nil } }
+        )) {
             if let category = categoryToDelete {
                 Button("Delete", role: .destructive) {
                     withAnimation(.snappy) {
@@ -113,6 +100,7 @@ struct CategoriesView: View {
                     categoryToDelete = nil
                 }
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             let count = noteStore.notes.filter { $0.categoryId == categoryToDelete?.id }.count
             Text("This will unassign \(count) note\(count == 1 ? "" : "s") from this category. Notes won't be deleted.")
@@ -122,12 +110,23 @@ struct CategoriesView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No Categories", systemImage: "folder")
-        } description: {
+        VStack(spacing: 12) {
+            Image("category-empty")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 60)
+                .foregroundStyle(.secondary)
+
+            Text("No Categories")
+                .font(.brandTitle2)
+
             Text("Tap + to create your first category.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, minHeight: 300)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     }
 }
 
@@ -266,17 +265,14 @@ struct CategoryFormSheet: View {
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
-                        .confirmationDialog(
-                            "Delete Category",
-                            isPresented: $showDeleteConfirmation,
-                            titleVisibility: .visible
-                        ) {
+                        .alert("Delete Category?", isPresented: $showDeleteConfirmation) {
                             Button("Delete", role: .destructive) {
                                 withAnimation(.snappy) {
                                     noteStore.removeCategory(id: category.id)
                                 }
                                 dismiss()
                             }
+                            Button("Cancel", role: .cancel) {}
                         } message: {
                             let count = noteStore.notes.filter { $0.categoryId == category.id }.count
                             Text("This will unassign \(count) note\(count == 1 ? "" : "s") from this category. Notes won't be deleted.")

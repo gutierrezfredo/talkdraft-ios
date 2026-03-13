@@ -1,51 +1,172 @@
 import SwiftUI
 
+enum NoteAppendPlaceholderPhase: Equatable {
+    case recording
+    case transcribing
+
+    var text: String {
+        switch self {
+        case .recording:
+            return NoteBodyState.recordingPlaceholder
+        case .transcribing:
+            return NoteBodyState.transcribingPlaceholder
+        }
+    }
+}
+
+struct NoteAppendPlaceholderState: Equatable {
+    var phase: NoteAppendPlaceholderPhase
+    var fullRange: NSRange
+    var placeholderRange: NSRange
+}
+
+enum NoteAppendPlaceholderEditor {
+    static func insert(
+        _ phase: NoteAppendPlaceholderPhase,
+        into content: String,
+        at position: Int
+    ) -> (content: String, placeholder: NoteAppendPlaceholderState) {
+        let nsContent = content as NSString
+        let safePosition = max(0, min(position, nsContent.length))
+        let leading = safePosition > 0 && !isWhitespace(nsContent.character(at: safePosition - 1)) ? " " : ""
+        let trailing = safePosition < nsContent.length && !isWhitespace(nsContent.character(at: safePosition)) ? " " : ""
+        let inserted = leading + phase.text + trailing
+        let updatedContent = nsContent.replacingCharacters(in: NSRange(location: safePosition, length: 0), with: inserted)
+        let fullRange = NSRange(location: safePosition, length: (inserted as NSString).length)
+        let placeholderRange = NSRange(
+            location: safePosition + (leading as NSString).length,
+            length: (phase.text as NSString).length
+        )
+        let placeholder = NoteAppendPlaceholderState(
+            phase: phase,
+            fullRange: fullRange,
+            placeholderRange: placeholderRange
+        )
+        return (updatedContent, placeholder)
+    }
+
+    static func transition(
+        _ placeholder: NoteAppendPlaceholderState,
+        to phase: NoteAppendPlaceholderPhase,
+        in content: String
+    ) -> (content: String, placeholder: NoteAppendPlaceholderState)? {
+        replace(placeholder, in: content, with: phase.text).map { result in
+            (
+                result.content,
+                NoteAppendPlaceholderState(
+                    phase: phase,
+                    fullRange: result.fullRange,
+                    placeholderRange: result.replacementRange
+                )
+            )
+        }
+    }
+
+    static func replace(
+        _ placeholder: NoteAppendPlaceholderState,
+        in content: String,
+        with replacement: String
+    ) -> (content: String, replacementRange: NSRange, fullRange: NSRange)? {
+        let nsContent = content as NSString
+        guard rangeIsValid(placeholder.fullRange, in: nsContent),
+              rangeIsValid(placeholder.placeholderRange, in: nsContent)
+        else { return nil }
+
+        let updatedContent = nsContent.replacingCharacters(in: placeholder.placeholderRange, with: replacement)
+        let leadingLength = placeholder.placeholderRange.location - placeholder.fullRange.location
+        let trailingLength = NSMaxRange(placeholder.fullRange) - NSMaxRange(placeholder.placeholderRange)
+        let replacementRange = NSRange(
+            location: placeholder.fullRange.location + leadingLength,
+            length: (replacement as NSString).length
+        )
+        let fullRange = NSRange(
+            location: placeholder.fullRange.location,
+            length: leadingLength + replacementRange.length + trailingLength
+        )
+        return (updatedContent, replacementRange, fullRange)
+    }
+
+    static func remove(_ placeholder: NoteAppendPlaceholderState, from content: String) -> String {
+        let nsContent = content as NSString
+        guard rangeIsValid(placeholder.fullRange, in: nsContent) else { return content }
+        return nsContent.replacingCharacters(in: placeholder.fullRange, with: "")
+    }
+
+    static func strippedContent(from content: String, placeholder: NoteAppendPlaceholderState?) -> String {
+        guard let placeholder else { return content }
+        return remove(placeholder, from: content)
+    }
+
+    private static func rangeIsValid(_ range: NSRange, in content: NSString) -> Bool {
+        range.location != NSNotFound && range.length >= 0 && NSMaxRange(range) <= content.length
+    }
+
+    private static func isWhitespace(_ unit: unichar) -> Bool {
+        switch unit {
+        case 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 extension NoteDetailView {
-    func startAppendRecording() {
-        appendInsertPosition = min(cursorPosition, editedContent.count)
+    // MARK: - Append Recording Actions
+
+    func startAppendRecording(scrollToBottom: Bool = false) {
+        // Use last known cursor position, or end of content if cursor was never placed
+        let contentLength = (editedContent as NSString).length
+        let position = scrollToBottom ? contentLength : (contentFocused && isCursorReady ? cursorPosition : (lastKnownCursorPosition > 0 ? lastKnownCursorPosition : contentLength))
+        appendInsertPosition = min(position, contentLength)
         contentFocused = false
-        insertPlaceholder(Self.recordingPlaceholder)
+        insertAppendPlaceholder(.recording)
         do {
             try appendRecorder.startRecording()
             isAppendRecording = true
+            if scrollToBottom {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
+                    }
+                }
+            }
         } catch {
-            removePlaceholder()
+            removeAppendPlaceholder()
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
         }
     }
 
-    func insertPlaceholder(_ placeholder: String) {
+    func insertAppendPlaceholder(_ phase: NoteAppendPlaceholderPhase) {
         preserveScroll = true
-        let pos = min(appendInsertPosition, editedContent.count)
-        let index = editedContent.index(editedContent.startIndex, offsetBy: pos)
-        let before = editedContent[..<index]
-        let after = editedContent[index...]
-
-        let leading = !before.isEmpty && !before.last!.isWhitespace ? " " : ""
-        let trailing = !after.isEmpty && !after.first!.isWhitespace ? " " : ""
-
-        editedContent = before + leading + placeholder + trailing + after
+        let inserted = NoteAppendPlaceholderEditor.insert(phase, into: editedContent, at: appendInsertPosition)
+        editedContent = inserted.content
+        appendPlaceholder = inserted.placeholder
     }
 
-    func removePlaceholder() {
-        for placeholder in [Self.recordingPlaceholder, Self.transcribingPlaceholder] {
-            editedContent = editedContent
-                .replacingOccurrences(of: " " + placeholder + " ", with: " ")
-                .replacingOccurrences(of: placeholder + " ", with: "")
-                .replacingOccurrences(of: " " + placeholder, with: "")
-                .replacingOccurrences(of: placeholder, with: "")
-        }
+    func removeAppendPlaceholder() {
+        preserveScroll = true
+        guard let appendPlaceholder else { return }
+        editedContent = NoteAppendPlaceholderEditor.remove(appendPlaceholder, from: editedContent)
+        self.appendPlaceholder = nil
     }
 
-    func replacePlaceholder(with text: String) {
+    func transitionAppendPlaceholder(to phase: NoteAppendPlaceholderPhase) {
         preserveScroll = true
-        for placeholder in [Self.transcribingPlaceholder, Self.recordingPlaceholder] {
-            let nsContent = editedContent as NSString
-            let placeholderRange = nsContent.range(of: placeholder)
-            guard placeholderRange.location != NSNotFound else { continue }
+        guard let appendPlaceholder,
+              let result = NoteAppendPlaceholderEditor.transition(appendPlaceholder, to: phase, in: editedContent)
+        else { return }
+        editedContent = result.content
+        self.appendPlaceholder = result.placeholder
+    }
 
-            editedContent = editedContent.replacingOccurrences(of: placeholder, with: text)
-            highlightRange = NSRange(location: placeholderRange.location, length: (text as NSString).length)
+    func replaceAppendPlaceholder(with text: String) {
+        preserveScroll = true
+        if let appendPlaceholder,
+           let result = NoteAppendPlaceholderEditor.replace(appendPlaceholder, in: editedContent, with: text) {
+            editedContent = result.content
+            highlightRange = result.replacementRange
+            self.appendPlaceholder = nil
             return
         }
 
@@ -58,25 +179,22 @@ extension NoteDetailView {
     func stopAppendRecording() {
         guard let audioFileURL = appendRecorder.stopRecording() else {
             isAppendRecording = false
-            removePlaceholder()
+            removeAppendPlaceholder()
             return
         }
 
         isAppendRecording = false
         isAppendTranscribing = true
 
-        preserveScroll = true
-        if editedContent.contains(Self.recordingPlaceholder) {
-            editedContent = editedContent.replacingOccurrences(
-                of: Self.recordingPlaceholder,
-                with: Self.transcribingPlaceholder
-            )
-        }
+        transitionAppendPlaceholder(to: .transcribing)
 
         Task {
             do {
-                let audioData = try Data(contentsOf: audioFileURL)
-                let fileName = audioFileURL.lastPathComponent
+                let uploadURL = (try? await AudioCompressor.compress(sourceURL: audioFileURL)) ?? audioFileURL
+                defer { if uploadURL != audioFileURL { AudioCompressor.cleanup(uploadURL) } }
+
+                let audioData = try Data(contentsOf: uploadURL)
+                let fileName = uploadURL.lastPathComponent
 
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 let service = TranscriptionService()
@@ -84,28 +202,33 @@ extension NoteDetailView {
                     audioData: audioData,
                     fileName: fileName,
                     language: language,
-                    userId: authStore.userId
+                    userId: authStore.userId,
+                    customDictionary: settingsStore.customDictionary
                 )
 
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
-                    removePlaceholder()
+                    removeAppendPlaceholder()
                     errorMessage = "Could not transcribe the recording."
                     isAppendTranscribing = false
                     return
                 }
 
-                replacePlaceholder(with: transcribedText)
+                // Replace placeholder with transcribed text
+                replaceAppendPlaceholder(with: transcribedText)
 
+                // Save to store + server
                 var updated = note
-                updated.content = editedContent
+                updated.content = persistedEditedContent
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
+                markCurrentStateAsSaved()
             } catch {
-                removePlaceholder()
+                removeAppendPlaceholder()
                 errorMessage = "Transcription failed: \(error.localizedDescription)"
             }
+            // Clean up local audio — append recordings don't need to be kept
             try? FileManager.default.removeItem(at: audioFileURL)
             isAppendTranscribing = false
         }
@@ -113,7 +236,7 @@ extension NoteDetailView {
 
     func cancelAppendRecording() {
         appendRecorder.cancelRecording()
-        removePlaceholder()
+        removeAppendPlaceholder()
         isAppendRecording = false
     }
 
@@ -134,4 +257,11 @@ extension NoteDetailView {
             appendRecorder.pauseRecording()
         }
     }
+
+    func formattedDuration(_ totalSeconds: Int) -> String {
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
 }

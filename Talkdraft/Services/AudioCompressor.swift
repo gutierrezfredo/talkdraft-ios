@@ -55,7 +55,7 @@ enum AudioCompressor {
 
         // Writer: encode to AAC at 32kbps
         // shouldOptimizeForNetworkUse moves the moov atom to the front of the file,
-        // required for streaming decoders to decode the full file.
+        // required for streaming decoders (Deepgram) to decode the full file.
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
         writer.shouldOptimizeForNetworkUse = true
         let writerSettings: [String: Any] = [
@@ -67,16 +67,18 @@ enum AudioCompressor {
         let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: writerSettings)
         writer.add(writerInput)
 
+        // Process
         reader.startReading()
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
 
         let queue = DispatchQueue(label: "com.pleymob.talkdraft.audiocompress")
+        let hpf = HPFState()
         let state = ProcessingState(
             reader: reader,
             readerOutput: readerOutput,
             writerInput: writerInput,
-            hpf: HPFState()
+            hpf: hpf
         )
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -88,6 +90,7 @@ enum AudioCompressor {
                         continuation.resume()
                         return
                     }
+                    // Apply high-pass filter in-place before encoding
                     state.hpf.process(buffer)
                     state.writerInput.append(buffer)
                 }
@@ -100,6 +103,7 @@ enum AudioCompressor {
             throw CompressionError.writeFailed(writer.error?.localizedDescription ?? "unknown")
         }
 
+        // Log compression ratio
         if let originalSize = try? FileManager.default.attributesOfItem(atPath: sourceURL.path)[.size] as? Int,
            let compressedSize = try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int {
             let ratio = String(format: "%.1fx", Double(originalSize) / Double(compressedSize))
@@ -111,6 +115,7 @@ enum AudioCompressor {
         return outputURL
     }
 
+    /// Cleans up a temporary compressed file.
     static func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
@@ -130,6 +135,11 @@ enum AudioCompressor {
     }
 }
 
+// MARK: - High-Pass Filter
+
+/// First-order IIR high-pass filter, ~100 Hz cutoff at 16 kHz.
+/// Removes low-frequency rumble from handling noise and pocket recording.
+/// α = RC / (RC + dt)  where RC = 1/(2π × 100 Hz), dt = 1/16000
 private final class HPFState: @unchecked Sendable {
     private var prevX: Float = 0
     private var prevY: Float = 0
@@ -139,17 +149,14 @@ private final class HPFState: @unchecked Sendable {
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
         let byteCount = CMBlockBufferGetDataLength(blockBuffer)
         var dataPtr: UnsafeMutablePointer<CChar>?
-        CMBlockBufferGetDataPointer(
-            blockBuffer,
-            atOffset: 0,
-            lengthAtOffsetOut: nil,
-            totalLengthOut: nil,
-            dataPointerOut: &dataPtr
-        )
+        CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0,
+                                    lengthAtOffsetOut: nil,
+                                    totalLengthOut: nil,
+                                    dataPointerOut: &dataPtr)
         guard let ptr = dataPtr else { return }
         let floats = UnsafeMutableRawPointer(ptr).bindMemory(to: Float.self, capacity: byteCount / 4)
         let count = byteCount / 4
-        for i in 0..<count {
+        for i in 0 ..< count {
             let x = floats[i]
             let y = alpha * (prevY + x - prevX)
             prevX = x

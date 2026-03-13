@@ -246,21 +246,12 @@ private final class AudioPipeline: @unchecked Sendable {
             return
 }
 
-        // Target format: mono 16kHz — optimal for Whisper
-        guard let outputFormat = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1) else {
-            throw RecordingError.formatUnavailable
-        }
-
-        guard let converter = AVAudioConverter(from: tapFormat, to: outputFormat) else {
-            throw RecordingError.formatUnavailable
-        }
-
-        // Create M4A file: mono 16kHz AAC
+        // Record at full quality for playback — downsampling happens at upload time
         let fileSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 16_000.0,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 48_000,
+            AVSampleRateKey: tapFormat.sampleRate,
+            AVNumberOfChannelsKey: min(tapFormat.channelCount, 2),
+            AVEncoderBitRateKey: 128_000,
         ]
         let file = try AVAudioFile(
             forWriting: fileURL,
@@ -278,19 +269,7 @@ private final class AudioPipeline: @unchecked Sendable {
             let isPaused = paused.withLock { $0 }
             guard !isPaused else { return }
 
-            // Convert to mono 16kHz before writing
-            let ratio = outputFormat.sampleRate / buffer.format.sampleRate
-            let convertedFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-            guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: convertedFrameCount) else { return }
-
-            var error: NSError?
-            converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-            if error == nil {
-                try? file.write(from: convertedBuffer)
-            }
+            try? file.write(from: buffer)
 
             // FFT uses original buffer for visualization
             let bands = processor.process(buffer: buffer)

@@ -1,108 +1,141 @@
+import AVFoundation
 import SwiftUI
 
 extension NoteDetailView {
+    var audioURL: URL? {
+        guard let urlString = note.audioUrl else { return nil }
+        return URL(string: urlString)
+    }
+
+    var bodyState: NoteBodyState {
+        noteBodyState
+    }
+
     var isTranscribing: Bool {
-        editedContent == "Transcribing…"
+        bodyState == .transcribing
+    }
+
+    var showsTranscribingIndicator: Bool {
+        isTranscribing && showTranscribingIndicator
     }
 
     var isTranscriptionFailed: Bool {
-        editedContent == "Transcription failed — tap to edit"
+        bodyState == .transcriptionFailed
     }
 
     var isWaitingForConnection: Bool {
-        editedContent == "Waiting for connection…"
+        bodyState == .waitingForConnection
     }
 
+    /// Returns the local audio file URL if it still exists on disk,
+    /// falling back to the persisted index in case the app was restarted after a failed transcription.
     var localAudioFileURL: URL? {
-        guard let urlString = note.audioUrl,
-              let url = URL(string: urlString),
-              url.isFileURL,
-              FileManager.default.fileExists(atPath: url.path)
-        else { return nil }
-        return url
+        noteStore.localAudioFileURL(for: noteId, audioUrl: note.audioUrl)
+    }
+
+    var transcribingSubtitle: String {
+        transcribingIsLong
+            ? whilePhrases[whileIndex].subtitle
+            : transcribingPhrases[transcribingPhraseIndex]
     }
 
     var transcribingIndicator: some View {
-        Text("Transcribing…")
-            .font(.body)
-            .foregroundStyle(Color.brand)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .phaseAnimator([false, true]) { content, pulse in
-                content.opacity(pulse ? 0.3 : 1.0)
-            } animation: { _ in
-                .easeInOut(duration: 1.2)
+        NoteDetailTranscribingIndicatorView(
+            videoPlayer: transcribingVideoPlayer,
+            subtitle: transcribingSubtitle,
+            onAppear: setupTranscribingVideo,
+            onDisappear: { transcribingVideoPlayer?.pause() }
+        )
+    }
+
+    var transcribingPlaceholderView: some View {
+        NoteDetailTranscribingIndicatorView(
+            videoPlayer: nil,
+            subtitle: transcribingSubtitle,
+            onAppear: {},
+            onDisappear: {}
+        )
+    }
+
+    func updateTranscribingPresentation(for state: NoteBodyState) {
+        transcribingPresentationTask?.cancel()
+        guard state == .transcribing else {
+            withAnimation(.easeOut(duration: 0.12)) {
+                showTranscribingIndicator = false
             }
+            return
+        }
+
+        setupTranscribingState()
+        showTranscribingIndicator = false
+        transcribingPresentationTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, noteBodyState == .transcribing else { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    showTranscribingIndicator = true
+                }
+            }
+        }
+    }
+
+    func setupTranscribingState() {
+        let duration = note.durationSeconds ?? 0
+        transcribingIsLong = duration >= 300
+        // Derive index from note ID — deterministic per note, no runtime randomness,
+        // prevents ghosting from multiple onAppear calls while still rotating across notes.
+        let hash = abs(noteId.hashValue)
+        if transcribingIsLong {
+            whileIndex = hash % whilePhrases.count
+        } else {
+            transcribingPhraseIndex = hash % transcribingPhrases.count
+        }
+    }
+
+    func setupTranscribingVideo() {
+        guard transcribingVideoPlayer == nil else { return }
+        let name: String
+        if transcribingIsLong {
+            name = whilePhrases[whileIndex].video
+        } else {
+            let shortVideos = ["transcribing-1", "transcribing-2"]
+            name = shortVideos[abs(noteId.hashValue) % shortVideos.count]
+        }
+        guard let url = Bundle.main.url(forResource: name, withExtension: "mp4") else { return }
+        let item = AVPlayerItem(url: url)
+        let player = AVQueuePlayer(playerItem: item)
+        transcribingPlayerLooper = AVPlayerLooper(player: player, templateItem: item)
+        player.isMuted = true
+        player.play()
+        transcribingVideoPlayer = player
     }
 
     var waitingForConnectionView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "wifi.slash")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Text("Waiting for connection…")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-            }
-            .phaseAnimator([false, true]) { content, pulse in
-                content.opacity(pulse ? 0.4 : 1.0)
-            } animation: { _ in
-                .easeInOut(duration: 1.5)
-            }
-
-            Text("Will transcribe automatically when online.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
+        NoteDetailWaitingForConnectionView()
     }
 
     var transcriptionFailedView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Transcription failed")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            if localAudioFileURL != nil {
-                Button {
-                    retryTranscription()
-                } label: {
-                    Label("Retry Transcription", systemImage: "arrow.clockwise")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Capsule().fill(Color.brand))
-                }
-
-                Text("Your audio recording is still saved on this device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            } else {
-                Text("Audio file is no longer available on this device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
+        NoteDetailTranscriptionFailedView(
+            hasLocalAudio: localAudioFileURL != nil,
+            onRetry: retryTranscription
+        )
     }
 
     func retryTranscription() {
         guard let audioFileURL = localAudioFileURL else { return }
 
-        editedContent = "Transcribing…"
-        noteStore.setNoteContent(id: noteId, content: "Transcribing…")
+        // Update local UI only — transcribeNote handles server sync on success
+        editedContent = NoteBodyState.transcribingPlaceholder
+        noteBodyState = .transcribing
+        noteStore.setNoteBodyState(id: noteId, state: .transcribing)
 
         let language = settingsStore.language == "auto" ? nil : settingsStore.language
         noteStore.transcribeNote(
             id: noteId,
             audioFileURL: audioFileURL,
             language: language,
-            userId: authStore.userId
+            userId: authStore.userId,
+            customDictionary: settingsStore.customDictionary
         )
     }
 }

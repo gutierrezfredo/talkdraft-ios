@@ -3,12 +3,16 @@ import SwiftUI
 struct NoteCard: View {
     let note: Note
     let category: Category?
+    var content: String? = nil
     var selectionMode: Bool = false
     var isSelected: Bool = false
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var transcribingPulse = false
 
     private var isDark: Bool { colorScheme == .dark }
+    private var resolvedContent: String { content ?? note.content }
+    private var bodyState: NoteBodyState { NoteBodyState(content: resolvedContent, source: note.source) }
 
     private var cardBackground: Color {
         guard let category else {
@@ -19,8 +23,8 @@ struct NoteCard: View {
     }
 
     private var actionItemCounts: (completed: Int, total: Int)? {
-        let checked = note.content.filter { $0 == "☑" }.count
-        let unchecked = note.content.filter { $0 == "☐" }.count
+        let checked = resolvedContent.filter { $0 == "☑" }.count
+        let unchecked = resolvedContent.filter { $0 == "☐" }.count
         let total = checked + unchecked
         guard total > 0 else { return nil }
         return (checked, total)
@@ -52,16 +56,31 @@ struct NoteCard: View {
             // Title
             if let title = note.title, !title.isEmpty {
                 Text(title)
-                    .font(.headline)
+                    .font(.brandTitle3)
+                    .fontWeight(.regular)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }
 
             // Content preview
-            Text(note.content)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
+            if bodyState == .transcribing {
+                Text(NoteBodyState.transcribingPlaceholder)
+                    .italic()
+                    .font(.caption)
+                    .foregroundStyle(Color.brand)
+                    .opacity(transcribingPulse ? 0.35 : 1.0)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                            transcribingPulse = true
+                        }
+                    }
+                    .onDisappear { transcribingPulse = false }
+            } else {
+                Text(resolvedContent)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
 
             Spacer(minLength: 0)
 
@@ -116,7 +135,7 @@ struct NoteCard: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(
                     isSelected ? Color.brand
-                        : (category == nil && isDark ? Color.white.opacity(0.08) : .clear),
+                        : (category == nil ? (isDark ? Color.white.opacity(0.15) : Color.black.opacity(0.08)) : .clear),
                     lineWidth: isSelected ? 2 : 0.5
                 )
         )
