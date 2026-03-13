@@ -8,7 +8,7 @@ import UIKit
     #expect(true)
 }
 
-@Test func audioCompressorWrites16kMonoOutput() async throws {
+@Test(.serialized) func audioCompressorWrites16kMonoOutput() async throws {
     let sourceURL = try makeSineWaveFile()
     let compressedURL = try await AudioCompressor.compress(sourceURL: sourceURL)
     defer {
@@ -24,7 +24,7 @@ import UIKit
 }
 
 @MainActor
-@Test func audioPlayerPreloadsAndSeeksLocalAudio() async throws {
+@Test(.serialized) func audioPlayerPreloadsAndSeeksLocalAudio() async throws {
     let sourceURL = try makeSineWaveFile(duration: 1.0)
     let player = AudioPlayer()
     defer {
@@ -54,7 +54,7 @@ import UIKit
 }
 
 @MainActor
-@Test func audioRecorderSupportsPauseResumeAndCancel() throws {
+@Test(.serialized) func audioRecorderSupportsPauseResumeAndCancel() throws {
     let recorder = AudioRecorder()
 
     try recorder.startRecording()
@@ -72,6 +72,69 @@ import UIKit
     #expect(!recorder.isRecording)
     #expect(!recorder.isPaused)
     #expect(recorder.elapsedSeconds == 0)
+}
+
+@MainActor
+@Test(.serialized) func noteStoreImportAudioNoteCopiesAndTranscribesImportedAudio() async throws {
+    let sourceURL = try makeSineWaveFile(duration: 0.6)
+    defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        noteUpsertExecutor: { _ in },
+        transcriptionConnectivityProbe: {},
+        transcriptionUploadExecutor: { request in
+            #expect(!request.audioData.isEmpty)
+            #expect(request.fileName.hasSuffix(".caf"))
+            #expect(request.language == "en")
+            #expect(request.customDictionary == ["Talkdraft"])
+            #expect(request.whisperData != nil)
+            #expect(request.whisperFileName?.hasSuffix(".m4a") == true)
+            return TranscriptionResult(
+                text: "Imported transcript",
+                language: "en",
+                audioUrl: "https://example.com/audio/imported.m4a",
+                durationSeconds: 2
+            )
+        },
+        aiTitleExecutor: { _, _ in
+            "Imported title"
+        }
+    )
+
+    let note = try await store.importAudioNote(
+        from: sourceURL,
+        userId: nil,
+        categoryId: nil,
+        language: "en",
+        customDictionary: ["Talkdraft"],
+        requiresSecurityScopedAccess: false
+    )
+
+    for _ in 0..<60 {
+        if let updated = store.notes.first(where: { $0.id == note.id }),
+           updated.content == "Imported transcript",
+           updated.audioUrl == "https://example.com/audio/imported.m4a",
+           updated.title == "Imported title" {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+
+    guard let updated = store.notes.first(where: { $0.id == note.id }) else {
+        Issue.record("Expected imported note to remain in the store")
+        return
+    }
+
+    #expect(updated.source == .voice)
+    #expect(updated.content == "Imported transcript")
+    #expect(updated.language == "en")
+    #expect(updated.audioUrl == "https://example.com/audio/imported.m4a")
+    #expect(updated.durationSeconds == 2)
+    #expect(updated.title == "Imported title")
+    #expect(store.bodyState(for: updated) == .content)
+    #expect(store.localAudioFileURL(for: updated.id, audioUrl: updated.audioUrl) == nil)
 }
 
 @Test func noteBodyStateRecognizesVoiceTranscriptionStates() {
@@ -722,7 +785,7 @@ actor HardDeleteRecorder {
 }
 
 @MainActor
-@Test func noteStoreUpdateNoteDebouncesPerNoteSync() async {
+@Test(.serialized) func noteStoreUpdateNoteDebouncesPerNoteSync() async {
     let recorder = NoteUpsertRecorder()
     let note = makeNote(content: "Original")
     let store = NoteStore(

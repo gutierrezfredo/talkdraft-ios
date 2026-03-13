@@ -6,12 +6,15 @@ extension NoteStore {
         userId: UUID?,
         categoryId: UUID?,
         language: String?,
-        customDictionary: [String]
+        customDictionary: [String],
+        requiresSecurityScopedAccess: Bool = true
     ) async throws -> Note {
-        guard sourceURL.startAccessingSecurityScopedResource() else {
-            throw ImportedAudioNoteError.accessDenied
+        if requiresSecurityScopedAccess {
+            guard sourceURL.startAccessingSecurityScopedResource() else {
+                throw ImportedAudioNoteError.accessDenied
+            }
+            defer { sourceURL.stopAccessingSecurityScopedResource() }
         }
-        defer { sourceURL.stopAccessingSecurityScopedResource() }
 
         let destinationURL: URL
         do {

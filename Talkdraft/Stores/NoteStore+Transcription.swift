@@ -40,15 +40,7 @@ extension NoteStore {
 
                 // Connectivity probe — quick request to verify network before heavy upload
                 do {
-                    var probe = URLRequest(url: AppConfig.supabaseUrl.appendingPathComponent("rest/v1/"))
-                    probe.httpMethod = "GET"
-                    probe.timeoutInterval = 15
-                    probe.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
-                    probe.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
-                    let (_, response) = try await URLSession.shared.data(for: probe)
-                    guard let http = response as? HTTPURLResponse, http.statusCode < 500 else {
-                        throw URLError(.cannotConnectToHost)
-                    }
+                    try await transcriptionConnectivityProbe()
                 } catch {
                     logger.info("Connectivity probe failed — device appears offline: \(error)")
                     setNoteBodyState(id: id, state: .waitingForConnection)
@@ -70,27 +62,19 @@ extension NoteStore {
                     logger.warning("Compression failed, Whisper will use original: \(error)")
                 }
 
-                let service = TranscriptionService()
                 let timeoutSeconds = transcriptionTimeoutSeconds(for: id)
-                let requestAudioData = audioData
-                let requestFileName = fileName
-                let requestLanguage = language
-                let requestUserId = userId
-                let requestDictionary = customDictionary
-                let requestWhisperData = whisperData
-                let requestWhisperFileName = whisperFileName
-                let requestMultiSpeaker = multiSpeaker
+                let request = TranscriptionUploadRequest(
+                    audioData: audioData,
+                    fileName: fileName,
+                    language: language,
+                    userId: userId,
+                    customDictionary: customDictionary,
+                    whisperData: whisperData,
+                    whisperFileName: whisperFileName,
+                    multiSpeaker: multiSpeaker
+                )
                 let result = try await performTranscriptionWithTimeout(seconds: timeoutSeconds) {
-                    try await service.transcribe(
-                        audioData: requestAudioData,
-                        fileName: requestFileName,
-                        language: requestLanguage,
-                        userId: requestUserId,
-                        customDictionary: requestDictionary,
-                        whisperData: requestWhisperData,
-                        whisperFileName: requestWhisperFileName,
-                        multiSpeaker: requestMultiSpeaker
-                    )
+                    try await self.transcriptionUploadExecutor(request)
                 }
 
                 // Guard against empty transcription

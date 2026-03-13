@@ -8,6 +8,20 @@ import UIKit
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 typealias NoteUpsertExecutor = @MainActor (Note) async throws -> Void
 typealias NoteHardDeleteExecutor = @MainActor (UUID) async throws -> Void
+typealias TranscriptionConnectivityProbe = @MainActor () async throws -> Void
+typealias TranscriptionUploadExecutor = @MainActor (TranscriptionUploadRequest) async throws -> TranscriptionResult
+typealias AITitleExecutor = @MainActor (String, String?) async throws -> String
+
+struct TranscriptionUploadRequest: Sendable {
+    let audioData: Data
+    let fileName: String
+    let language: String?
+    let userId: UUID?
+    let customDictionary: [String]
+    let whisperData: Data?
+    let whisperFileName: String?
+    let multiSpeaker: Bool
+}
 
 enum TranscriptionWorkflowError: LocalizedError {
     case timedOut(seconds: TimeInterval)
@@ -106,6 +120,9 @@ final class NoteStore {
     @ObservationIgnored let noteSyncDebounceDuration: Duration
     @ObservationIgnored let noteUpsertExecutor: NoteUpsertExecutor
     @ObservationIgnored let hardDeleteExecutor: NoteHardDeleteExecutor
+    @ObservationIgnored let transcriptionConnectivityProbe: TranscriptionConnectivityProbe
+    @ObservationIgnored let transcriptionUploadExecutor: TranscriptionUploadExecutor
+    @ObservationIgnored let aiTitleExecutor: AITitleExecutor
     @ObservationIgnored var pendingNoteSyncTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored var pendingNoteSyncTokens: [UUID: UUID] = [:]
     @ObservationIgnored var pendingHardDeleteTasks: [UUID: Task<Void, Never>] = [:]
@@ -122,7 +139,10 @@ final class NoteStore {
         persistsPendingHardDeletes: Bool = true,
         noteSyncDebounceDuration: Duration = .milliseconds(700),
         noteUpsertExecutor: NoteUpsertExecutor? = nil,
-        hardDeleteExecutor: NoteHardDeleteExecutor? = nil
+        hardDeleteExecutor: NoteHardDeleteExecutor? = nil,
+        transcriptionConnectivityProbe: TranscriptionConnectivityProbe? = nil,
+        transcriptionUploadExecutor: TranscriptionUploadExecutor? = nil,
+        aiTitleExecutor: AITitleExecutor? = nil
     ) {
         self.persistsLocalVoiceBodyStates = persistsLocalVoiceBodyStates
         self.persistsPendingNoteUpserts = persistsPendingNoteUpserts
@@ -140,6 +160,33 @@ final class NoteStore {
                 .delete()
                 .eq("id", value: id)
                 .execute()
+        }
+        self.transcriptionConnectivityProbe = transcriptionConnectivityProbe ?? {
+            var probe = URLRequest(url: AppConfig.supabaseUrl.appendingPathComponent("rest/v1/"))
+            probe.httpMethod = "GET"
+            probe.timeoutInterval = 15
+            probe.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            probe.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+            let (_, response) = try await URLSession.shared.data(for: probe)
+            guard let http = response as? HTTPURLResponse, http.statusCode < 500 else {
+                throw URLError(.cannotConnectToHost)
+            }
+        }
+        self.transcriptionUploadExecutor = transcriptionUploadExecutor ?? { request in
+            let service = TranscriptionService()
+            return try await service.transcribe(
+                audioData: request.audioData,
+                fileName: request.fileName,
+                language: request.language,
+                userId: request.userId,
+                customDictionary: request.customDictionary,
+                whisperData: request.whisperData,
+                whisperFileName: request.whisperFileName,
+                multiSpeaker: request.multiSpeaker
+            )
+        }
+        self.aiTitleExecutor = aiTitleExecutor ?? { content, language in
+            try await AIService.generateTitle(for: content, language: language)
         }
         self.localVoiceBodyStates = localVoiceBodyStates ?? [:]
         self.pendingNoteUpserts = pendingNoteUpserts ?? [:]

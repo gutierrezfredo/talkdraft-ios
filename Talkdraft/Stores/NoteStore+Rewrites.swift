@@ -11,7 +11,7 @@ extension NoteStore {
         generatingTitleIds.insert(noteId)
         Task {
             do {
-                let aiTitle = try await AIService.generateTitle(for: content, language: language)
+                let aiTitle = try await aiTitleExecutor(content, language)
                 generatingTitleIds.remove(noteId)
                 guard var note = notes.first(where: { $0.id == noteId }) else { return }
                 note.title = aiTitle
