@@ -186,6 +186,7 @@ final class AuthStore {
 
     func signOut() async throws {
         await noteStore?.flushPendingNoteUpserts()
+        await noteStore?.flushPendingHardDeletes()
         try await supabase.auth.signOut()
         isAuthenticated = false
         userId = nil

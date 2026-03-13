@@ -7,6 +7,7 @@ import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 typealias NoteUpsertExecutor = @MainActor (Note) async throws -> Void
+typealias NoteHardDeleteExecutor = @MainActor (UUID) async throws -> Void
 
 private enum TranscriptionWorkflowError: LocalizedError {
     case timedOut(seconds: TimeInterval)
@@ -98,12 +99,16 @@ final class NoteStore {
     var activeTranscriptionIds: Set<UUID> = []
     var localVoiceBodyStates: [UUID: NoteBodyState]
     var pendingNoteUpserts: [UUID: Note]
+    var pendingHardDeletes: Set<UUID>
     let persistsLocalVoiceBodyStates: Bool
     let persistsPendingNoteUpserts: Bool
+    let persistsPendingHardDeletes: Bool
     @ObservationIgnored private let noteSyncDebounceDuration: Duration
     @ObservationIgnored private let noteUpsertExecutor: NoteUpsertExecutor
+    @ObservationIgnored private let hardDeleteExecutor: NoteHardDeleteExecutor
     @ObservationIgnored private var pendingNoteSyncTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var pendingNoteSyncTokens: [UUID: UUID] = [:]
+    @ObservationIgnored private var pendingHardDeleteTasks: [UUID: Task<Void, Never>] = [:]
     private var currentSessionUserId: UUID?
     private var noteSyncRevisions: [UUID: Int] = [:]
     private var categorySyncRevisions: [UUID: Int] = [:]
@@ -113,11 +118,15 @@ final class NoteStore {
         persistsLocalVoiceBodyStates: Bool = true,
         pendingNoteUpserts: [UUID: Note]? = nil,
         persistsPendingNoteUpserts: Bool = true,
+        pendingHardDeletes: Set<UUID>? = nil,
+        persistsPendingHardDeletes: Bool = true,
         noteSyncDebounceDuration: Duration = .milliseconds(700),
-        noteUpsertExecutor: NoteUpsertExecutor? = nil
+        noteUpsertExecutor: NoteUpsertExecutor? = nil,
+        hardDeleteExecutor: NoteHardDeleteExecutor? = nil
     ) {
         self.persistsLocalVoiceBodyStates = persistsLocalVoiceBodyStates
         self.persistsPendingNoteUpserts = persistsPendingNoteUpserts
+        self.persistsPendingHardDeletes = persistsPendingHardDeletes
         self.noteSyncDebounceDuration = noteSyncDebounceDuration
         self.noteUpsertExecutor = noteUpsertExecutor ?? { note in
             try await supabase
@@ -125,8 +134,16 @@ final class NoteStore {
                 .upsert(NoteSyncPayload(from: note))
                 .execute()
         }
+        self.hardDeleteExecutor = hardDeleteExecutor ?? { id in
+            try await supabase
+                .from("notes")
+                .delete()
+                .eq("id", value: id)
+                .execute()
+        }
         self.localVoiceBodyStates = localVoiceBodyStates ?? [:]
         self.pendingNoteUpserts = pendingNoteUpserts ?? [:]
+        self.pendingHardDeletes = pendingHardDeletes ?? []
     }
 
     // MARK: - Multi-Speaker Format
@@ -162,6 +179,7 @@ final class NoteStore {
     private static let localAudioKey = "localAudioPaths"
     private static let localVoiceBodyStateKey = "localVoiceBodyStates"
     private static let pendingNoteUpsertsKey = "pendingNoteUpserts"
+    private static let pendingHardDeletesKey = "pendingHardDeletes"
 
     private static func scopedKey(_ base: String, userId: UUID?) -> String {
         "\(base).\(userId?.uuidString ?? "anonymous")"
@@ -208,6 +226,23 @@ final class NoteStore {
         }
         guard let data = try? JSONEncoder().encode(notes) else { return }
         UserDefaults.standard.set(data, forKey: key)
+    }
+
+    private static func loadPendingHardDeletes(for userId: UUID?) -> Set<UUID> {
+        let key = scopedKey(Self.pendingHardDeletesKey, userId: userId)
+        let raw = (UserDefaults.standard.array(forKey: key) as? [String]) ?? []
+        return Set(raw.compactMap(UUID.init(uuidString:)))
+    }
+
+    private func persistPendingHardDeletes() {
+        guard persistsPendingHardDeletes else { return }
+        let key = Self.scopedKey(Self.pendingHardDeletesKey, userId: currentSessionUserId)
+        if pendingHardDeletes.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        let raw = pendingHardDeletes.map(\.uuidString).sorted()
+        UserDefaults.standard.set(raw, forKey: key)
     }
 
     private func setLocalVoiceBodyState(_ state: NoteBodyState?, for noteId: UUID) {
@@ -295,9 +330,11 @@ final class NoteStore {
     func beginSession(userId: UUID) {
         guard currentSessionUserId != userId else { return }
         cancelAllPendingNoteSyncTasks()
+        cancelAllPendingHardDeleteTasks()
         currentSessionUserId = userId
         localVoiceBodyStates = persistsLocalVoiceBodyStates ? Self.loadLocalVoiceBodyStates(for: userId) : localVoiceBodyStates
         pendingNoteUpserts = persistsPendingNoteUpserts ? Self.loadPendingNoteUpserts(for: userId) : pendingNoteUpserts
+        pendingHardDeletes = persistsPendingHardDeletes ? Self.loadPendingHardDeletes(for: userId) : pendingHardDeletes
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         notes = mergedPendingNotes(with: [])
@@ -311,6 +348,7 @@ final class NoteStore {
 
     func resetSession() {
         cancelAllPendingNoteSyncTasks()
+        cancelAllPendingHardDeleteTasks()
         notes = []
         deletedNotes = []
         categories = []
@@ -323,6 +361,7 @@ final class NoteStore {
         activeTranscriptionIds = []
         localVoiceBodyStates = [:]
         pendingNoteUpserts = [:]
+        pendingHardDeletes = []
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         currentSessionUserId = nil
@@ -425,17 +464,18 @@ final class NoteStore {
 
     private var pendingDeletedNotesById: [UUID: Note] {
         Dictionary(uniqueKeysWithValues: pendingNoteUpserts.values.compactMap { note in
-            guard note.deletedAt != nil else { return nil }
+            guard note.deletedAt != nil, !pendingHardDeletes.contains(note.id) else { return nil }
             return (note.id, note)
         })
     }
 
     private func mergedPendingNotes(with remoteNotes: [Note]) -> [Note] {
         let pendingDeletedIds = Set(pendingDeletedNotesById.keys)
+        let hiddenIds = pendingDeletedIds.union(pendingHardDeletes)
         var merged = Dictionary(uniqueKeysWithValues: remoteNotes
-            .filter { !pendingDeletedIds.contains($0.id) }
+            .filter { !hiddenIds.contains($0.id) }
             .map { ($0.id, normalizeLocalVoiceNote($0)) })
-        for note in pendingNoteUpserts.values where note.deletedAt == nil {
+        for note in pendingNoteUpserts.values where note.deletedAt == nil && !pendingHardDeletes.contains(note.id) {
             merged[note.id] = normalizeLocalVoiceNote(note)
         }
         return merged.values.sorted { lhs, rhs in
@@ -458,6 +498,17 @@ final class NoteStore {
         }
         pendingNoteUpserts.removeValue(forKey: id)
         persistPendingNoteUpserts()
+    }
+
+    private func queuePendingHardDelete(_ id: UUID) {
+        pendingHardDeletes.insert(id)
+        persistPendingHardDeletes()
+    }
+
+    private func clearPendingHardDelete(id: UUID) {
+        guard pendingHardDeletes.contains(id) else { return }
+        pendingHardDeletes.remove(id)
+        persistPendingHardDeletes()
     }
 
     @discardableResult
@@ -491,6 +542,59 @@ final class NoteStore {
         }
         pendingNoteSyncTasks = [:]
         pendingNoteSyncTokens = [:]
+    }
+
+    private func cancelPendingHardDeleteTask(id: UUID) {
+        pendingHardDeleteTasks[id]?.cancel()
+        pendingHardDeleteTasks[id] = nil
+    }
+
+    private func cancelAllPendingHardDeleteTasks() {
+        for task in pendingHardDeleteTasks.values {
+            task.cancel()
+        }
+        pendingHardDeleteTasks = [:]
+    }
+
+    private func schedulePendingHardDelete(id: UUID) {
+        cancelPendingHardDeleteTask(id: id)
+        pendingHardDeleteTasks[id] = Task { [weak self] in
+            guard let self else { return }
+            await self.syncPendingHardDelete(id: id)
+        }
+    }
+
+    func flushPendingHardDelete(id: UUID) async {
+        cancelPendingHardDeleteTask(id: id)
+        await syncPendingHardDelete(id: id)
+    }
+
+    func flushPendingHardDeletes() async {
+        for id in pendingHardDeletes.sorted(by: { $0.uuidString < $1.uuidString }) {
+            await flushPendingHardDelete(id: id)
+        }
+    }
+
+    func retryPendingHardDeletes() {
+        for id in pendingHardDeletes.sorted(by: { $0.uuidString < $1.uuidString }) {
+            schedulePendingHardDelete(id: id)
+        }
+    }
+
+    private func syncPendingHardDelete(id: UUID) async {
+        guard pendingHardDeletes.contains(id) else {
+            pendingHardDeleteTasks[id] = nil
+            return
+        }
+
+        do {
+            try await hardDeleteExecutor(id)
+            pendingHardDeleteTasks[id] = nil
+            clearPendingHardDelete(id: id)
+        } catch {
+            pendingHardDeleteTasks[id] = nil
+            logger.error("pending hard delete failed for \(id): \(error)")
+        }
     }
 
     private func schedulePendingNoteUpsertSync(id: UUID, expectedRevision: Int, delay: Duration) {
@@ -654,6 +758,9 @@ final class NoteStore {
             .execute()
             .value
         var mergedDeleted = Dictionary(uniqueKeysWithValues: deleted.map { ($0.id, $0) })
+        for id in pendingHardDeletes {
+            mergedDeleted.removeValue(forKey: id)
+        }
         for note in pendingDeletedNotesById.values {
             mergedDeleted[note.id] = note
         }
@@ -673,6 +780,7 @@ final class NoteStore {
         // Auto-purge notes deleted more than 30 days ago
         await purgeExpiredNotes()
         retryPendingNoteUpserts()
+        retryPendingHardDeletes()
     }
 
     func fetchCategories() async throws {
@@ -761,21 +869,21 @@ final class NoteStore {
     }
 
     func permanentlyDeleteNote(id: UUID) {
+        let deletedNote = deletedNotes.first(where: { $0.id == id })
         deletedNotes.removeAll { $0.id == id }
+        cancelPendingNoteSyncTask(id: id)
         pendingNoteUpserts.removeValue(forKey: id)
         persistPendingNoteUpserts()
-
-        Task {
-            do {
-                try await supabase
-                    .from("notes")
-                    .delete()
-                    .eq("id", value: id)
-                    .execute()
-            } catch {
-                logger.error("permanentlyDeleteNote failed: \(error)")
-            }
+        noteSyncRevisions[id] = nil
+        setLocalVoiceBodyState(nil, for: id)
+        if let audioURL = localAudioFileURL(for: id, audioUrl: deletedNote?.audioUrl) {
+            unregisterLocalAudio(for: id)
+            try? FileManager.default.removeItem(at: audioURL)
+        } else {
+            unregisterLocalAudio(for: id)
         }
+        queuePendingHardDelete(id)
+        schedulePendingHardDelete(id: id)
     }
 
     private func purgeExpiredNotes() async {
@@ -786,17 +894,8 @@ final class NoteStore {
         }
         guard !expired.isEmpty else { return }
 
-        let expiredIds = expired.map(\.id)
-        deletedNotes.removeAll { expiredIds.contains($0.id) }
-
-        do {
-            try await supabase
-                .from("notes")
-                .delete()
-                .in("id", values: expiredIds.map(\.uuidString))
-                .execute()
-        } catch {
-            logger.error("purgeExpiredNotes failed: \(error)")
+        for note in expired {
+            permanentlyDeleteNote(id: note.id)
         }
     }
 

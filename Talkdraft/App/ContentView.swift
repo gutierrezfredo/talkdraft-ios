@@ -96,6 +96,7 @@ struct ContentView: View {
                 try? await Task.sleep(for: .seconds(3))
                 noteStore.repairOrphanedTranscriptions()
                 noteStore.retryPendingNoteUpserts()
+                noteStore.retryPendingHardDeletes()
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 noteStore.retryWaitingNotes(language: language, userId: authStore.userId, customDictionary: settingsStore.customDictionary)
             }
@@ -104,6 +105,7 @@ struct ContentView: View {
             guard phase == .background else { return }
             Task {
                 await noteStore.flushPendingNoteUpserts()
+                await noteStore.flushPendingHardDeletes()
             }
         }
     }

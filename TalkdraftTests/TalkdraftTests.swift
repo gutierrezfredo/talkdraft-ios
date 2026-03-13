@@ -646,6 +646,14 @@ actor NoteUpsertRecorder {
     }
 }
 
+actor HardDeleteRecorder {
+    private(set) var deletedNoteIds: [UUID] = []
+
+    func record(_ noteId: UUID) {
+        deletedNoteIds.append(noteId)
+    }
+}
+
 @MainActor
 @Test func noteStoreUpdateNoteDebouncesPerNoteSync() async {
     let recorder = NoteUpsertRecorder()
@@ -830,6 +838,107 @@ actor NoteUpsertRecorder {
     #expect(reloaded.pendingNoteUpserts[note.id]?.deletedAt != nil)
 
     reloaded.resetSession()
+}
+
+@MainActor
+@Test func noteStorePermanentlyDeleteQueuesHardDeleteAndClearsPendingUpsert() {
+    let note = makeNote(content: "Trash me")
+    let store = NoteStore(persistsLocalVoiceBodyStates: false, persistsPendingNoteUpserts: false, persistsPendingHardDeletes: false)
+    store.deletedNotes = [note]
+    store.pendingNoteUpserts = [note.id: note]
+
+    store.permanentlyDeleteNote(id: note.id)
+
+    #expect(store.deletedNotes.isEmpty)
+    #expect(store.pendingNoteUpserts[note.id] == nil)
+    #expect(store.pendingHardDeletes == [note.id])
+}
+
+@MainActor
+@Test func noteStoreFlushPendingHardDeletesClearsQueueAfterSuccess() async {
+    let recorder = HardDeleteRecorder()
+    let noteId = UUID()
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        pendingHardDeletes: [noteId],
+        persistsPendingHardDeletes: false,
+        hardDeleteExecutor: { id in
+            await recorder.record(id)
+        }
+    )
+
+    await store.flushPendingHardDeletes()
+
+    #expect(store.pendingHardDeletes.isEmpty)
+    #expect(await recorder.deletedNoteIds == [noteId])
+}
+
+@MainActor
+@Test func noteStoreBeginSessionReloadsPendingHardDeletesForSameUser() {
+    let userId = UUID()
+    let key = "pendingHardDeletes.\(userId.uuidString)"
+    let note = makeNote(content: "Trash me")
+    defer { UserDefaults.standard.removeObject(forKey: key) }
+
+    let deleting = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingHardDeletes: true,
+        hardDeleteExecutor: { _ in }
+    )
+    deleting.beginSession(userId: userId)
+    deleting.deletedNotes = [note]
+    deleting.permanentlyDeleteNote(id: note.id)
+    deleting.resetSession()
+
+    let reloaded = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingHardDeletes: true,
+        hardDeleteExecutor: { _ in }
+    )
+    reloaded.beginSession(userId: userId)
+
+    #expect(reloaded.pendingHardDeletes == [note.id])
+
+    reloaded.resetSession()
+}
+
+@MainActor
+@Test func noteStoreBeginSessionKeepsPendingHardDeletesScopedToCurrentUser() {
+    let firstUserId = UUID()
+    let secondUserId = UUID()
+    let firstKey = "pendingHardDeletes.\(firstUserId.uuidString)"
+    let secondKey = "pendingHardDeletes.\(secondUserId.uuidString)"
+    let note = makeNote(content: "Trash me")
+    defer {
+        UserDefaults.standard.removeObject(forKey: firstKey)
+        UserDefaults.standard.removeObject(forKey: secondKey)
+    }
+
+    let deleting = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingHardDeletes: true,
+        hardDeleteExecutor: { _ in }
+    )
+    deleting.beginSession(userId: firstUserId)
+    deleting.deletedNotes = [note]
+    deleting.permanentlyDeleteNote(id: note.id)
+    deleting.resetSession()
+
+    let otherSession = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingHardDeletes: true,
+        hardDeleteExecutor: { _ in }
+    )
+    otherSession.beginSession(userId: secondUserId)
+
+    #expect(otherSession.pendingHardDeletes.isEmpty)
+
+    otherSession.resetSession()
 }
 
 @MainActor
