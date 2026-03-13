@@ -1246,11 +1246,15 @@ final class NoteStore {
         Task {
             for (catId, order) in updates {
                 let sortUpdate = CategorySortUpdate(sortOrder: order)
-                try? await supabase
-                    .from("categories")
-                    .update(sortUpdate)
-                    .eq("id", value: catId)
-                    .execute()
+                do {
+                    try await supabase
+                        .from("categories")
+                        .update(sortUpdate)
+                        .eq("id", value: catId)
+                        .execute()
+                } catch {
+                    logger.error("moveCategory failed for \(catId): \(error)")
+                }
             }
         }
     }

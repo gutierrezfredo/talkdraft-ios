@@ -52,6 +52,7 @@ struct LoginView: View {
 
                     // Email
                     Button {
+                        authStore.error = nil
                         showEmailForm = true
                     } label: {
                         HStack(spacing: 10) {
@@ -142,6 +143,10 @@ private struct EmailSignInSheet: View {
         colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
+    private var effectiveCooldown: Int {
+        max(resendCooldown, authStore.magicLinkCooldownRemaining)
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -155,6 +160,7 @@ private struct EmailSignInSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
+                        authStore.error = nil
                         if magicLinkSent {
                             withAnimation(.snappy) {
                                 magicLinkSent = false
@@ -201,21 +207,21 @@ private struct EmailSignInSheet: View {
                 .onAppear { emailFocused = true }
                 .onSubmit { if isValid { sendLink() } }
 
-            if let error = authStore.error {
-                Text(error)
-                    .font(.footnote)
+                if let error = authStore.error {
+                    Text(error)
+                        .font(.footnote)
                     .foregroundStyle(.red)
                     .padding(.horizontal, 24)
                     .padding(.top, 12)
-            }
+                }
 
-            Spacer()
+                Spacer()
 
-            Button {
-                sendLink()
+                Button {
+                    sendLink()
             } label: {
                 Group {
-                    if authStore.isLoading {
+                    if authStore.isSendingMagicLink {
                         ProgressView()
                             .tint(.white)
                     } else {
@@ -231,7 +237,7 @@ private struct EmailSignInSheet: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(!isValid || authStore.isLoading)
+            .disabled(!isValid || authStore.isSendingMagicLink || authStore.magicLinkCooldownRemaining > 0)
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
         }
@@ -272,16 +278,25 @@ private struct EmailSignInSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
+            if let error = authStore.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+            }
+
             // Resend
             Button {
                 resendLink()
             } label: {
-                Text(resendCooldown > 0 ? "Resend in \(resendCooldown)s" : "Resend email")
+                Text(effectiveCooldown > 0 ? "Resend in \(effectiveCooldown)s" : "Resend email")
                     .font(.subheadline)
-                    .foregroundStyle(resendCooldown > 0 ? .tertiary : .secondary)
+                    .foregroundStyle(effectiveCooldown > 0 ? .tertiary : .secondary)
             }
             .buttonStyle(.plain)
-            .disabled(resendCooldown > 0)
+            .disabled(effectiveCooldown > 0)
             .padding(.top, 20)
 
             Spacer()
@@ -323,6 +338,11 @@ private struct EmailSignInSheet: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
         }
+        .onChange(of: email) { _, _ in
+            if authStore.magicLinkCooldownRemaining == 0 {
+                authStore.error = nil
+            }
+        }
     }
 
     private func setupVideoPlayer() {
@@ -339,13 +359,13 @@ private struct EmailSignInSheet: View {
 
     private func sendLink() {
         emailFocused = false
-        withAnimation(.snappy) { magicLinkSent = true }
         Task {
             do {
                 try await authStore.sendMagicLink(email: email)
+                withAnimation(.snappy) { magicLinkSent = true }
                 startCooldown()
             } catch {
-                // Non-fatal — user already sees the confirmation screen
+                // Error is surfaced through authStore.error on the form.
             }
         }
     }
@@ -356,7 +376,7 @@ private struct EmailSignInSheet: View {
                 try await authStore.sendMagicLink(email: email)
                 startCooldown()
             } catch {
-                // Non-fatal
+                // Error is surfaced through authStore.error on the confirmation screen.
             }
         }
     }
@@ -371,4 +391,3 @@ private struct EmailSignInSheet: View {
         }
     }
 }
-

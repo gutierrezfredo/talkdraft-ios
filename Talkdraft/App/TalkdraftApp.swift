@@ -9,6 +9,7 @@ struct TalkdraftApp: App {
     @State private var subscriptionStore = SubscriptionStore()
 
     init() {
+        settingsStore.loadSettings()
         subscriptionStore.configure()
     }
 

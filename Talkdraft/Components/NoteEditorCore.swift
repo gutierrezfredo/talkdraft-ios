@@ -127,6 +127,24 @@ struct NoteEditorRules {
             }
         }
 
+        if replacementText.isEmpty, nsText.length > 0 {
+            let lineRange = currentLineRange(in: nsText, at: range.location)
+            if lineRange.location < nsText.length, lineRange.length > 0 {
+                let firstChar = nsText.character(at: lineRange.location)
+                let checkboxPrefixRange = NSRange(location: lineRange.location, length: min(2, lineRange.length))
+                let lineTextLength = max(0, lineRange.length - checkboxPrefixRange.length)
+                if (firstChar == 0x2610 || firstChar == 0x2611),
+                   lineTextLength > 0,
+                   NSIntersectionRange(range, checkboxPrefixRange).length > 0 {
+                    let updatedText = nsText.replacingCharacters(in: checkboxPrefixRange, with: "")
+                    return .apply(
+                        updatedText: updatedText,
+                        selectedRange: NSRange(location: lineRange.location, length: 0)
+                    )
+                }
+            }
+        }
+
         if !protectedLines.isEmpty, nsText.length > 0 {
             let lineRange = currentLineRange(in: nsText, at: range.location)
             let currentLine = trimmedLine(in: nsText, lineRange: lineRange)
@@ -137,7 +155,12 @@ struct NoteEditorRules {
 
         if replacementText == "]", range.location > 0, range.location <= nsText.length {
             let prevIdx = range.location - 1
-            if prevIdx < nsText.length, nsText.character(at: prevIdx) == UInt16(Character("[").asciiValue!) {
+            let lineRange = currentLineRange(in: nsText, at: range.location)
+            let leadingText = nsText.substring(with: NSRange(location: lineRange.location, length: max(0, prevIdx - lineRange.location)))
+            let isChecklistShortcutPosition = leadingText.trimmingCharacters(in: .whitespaces).isEmpty
+            if prevIdx < nsText.length,
+               nsText.character(at: prevIdx) == UInt16(Character("[").asciiValue!),
+               isChecklistShortcutPosition {
                 let updatedText = nsText.replacingCharacters(in: NSRange(location: prevIdx, length: 1), with: uncheckedPrefix)
                 return .apply(
                     updatedText: updatedText,

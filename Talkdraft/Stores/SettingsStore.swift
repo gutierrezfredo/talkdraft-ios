@@ -36,6 +36,11 @@ final class SettingsStore {
         customDictionary = dictionary
     }
 
+    func resetSession() {
+        userId = nil
+        customDictionary = []
+    }
+
     func addWord(_ word: String) {
         guard !customDictionary.contains(word) else { return }
         customDictionary.append(word)

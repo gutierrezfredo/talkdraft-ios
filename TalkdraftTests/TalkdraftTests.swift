@@ -696,6 +696,84 @@ actor NoteUpsertRecorder {
 }
 
 @MainActor
+@Test func noteStoreBeginSessionReloadsPersistedPendingUpsertsForSameUser() {
+    let userId = UUID()
+    let pendingKey = "pendingNoteUpserts.\(userId.uuidString)"
+    let note = makeNote(content: "Original")
+    defer { UserDefaults.standard.removeObject(forKey: pendingKey) }
+
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: true,
+        noteSyncDebounceDuration: .seconds(60),
+        noteUpsertExecutor: { _ in }
+    )
+    store.beginSession(userId: userId)
+    store.notes = [note]
+
+    var updated = note
+    updated.content = "Queued change"
+    updated.updatedAt = .now.addingTimeInterval(1)
+    store.updateNote(updated)
+    store.resetSession()
+
+    let reloaded = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: true,
+        noteSyncDebounceDuration: .seconds(60),
+        noteUpsertExecutor: { _ in }
+    )
+    reloaded.beginSession(userId: userId)
+
+    #expect(reloaded.pendingNoteUpserts[updated.id]?.content == "Queued change")
+    #expect(reloaded.notes.map(\.id) == [updated.id])
+    #expect(reloaded.notes.first?.content == "Queued change")
+
+    reloaded.resetSession()
+}
+
+@MainActor
+@Test func noteStoreBeginSessionKeepsPendingUpsertsScopedToCurrentUser() {
+    let firstUserId = UUID()
+    let secondUserId = UUID()
+    let firstKey = "pendingNoteUpserts.\(firstUserId.uuidString)"
+    let secondKey = "pendingNoteUpserts.\(secondUserId.uuidString)"
+    let note = makeNote(content: "User one")
+    defer {
+        UserDefaults.standard.removeObject(forKey: firstKey)
+        UserDefaults.standard.removeObject(forKey: secondKey)
+    }
+
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: true,
+        noteSyncDebounceDuration: .seconds(60),
+        noteUpsertExecutor: { _ in }
+    )
+    store.beginSession(userId: firstUserId)
+    store.notes = [note]
+
+    var updated = note
+    updated.content = "Queued for first user"
+    updated.updatedAt = .now.addingTimeInterval(1)
+    store.updateNote(updated)
+    store.resetSession()
+
+    let otherSession = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: true,
+        noteSyncDebounceDuration: .seconds(60),
+        noteUpsertExecutor: { _ in }
+    )
+    otherSession.beginSession(userId: secondUserId)
+
+    #expect(otherSession.pendingNoteUpserts.isEmpty)
+    #expect(otherSession.notes.isEmpty)
+
+    otherSession.resetSession()
+}
+
+@MainActor
 @Test func noteStoreMoveNotesQueuesEachChangedNoteForSync() {
     let originalCategory = UUID()
     let targetCategory = UUID()

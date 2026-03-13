@@ -492,7 +492,6 @@ extension NoteDetailView {
                     onStartAppendRecording: { startAppendRecording() },
                     onDismissKeyboard: { contentFocused = false }
                 )
-                .sensoryFeedback(.selection, trigger: showCategoryPicker)
             }
         }
     }

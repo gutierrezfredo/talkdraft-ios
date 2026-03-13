@@ -81,6 +81,7 @@ extension NoteDetailView {
     }
 
     func presentCategoryPicker() {
+        UISelectionFeedbackGenerator().selectionChanged()
         presentAfterKeyboardDismiss {
             showCategoryPicker = true
         }
