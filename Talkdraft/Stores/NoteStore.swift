@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Observation
 import os
@@ -5,6 +6,28 @@ import Supabase
 import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
+typealias TranscriptionConnectivityProbe = @MainActor () async throws -> Void
+typealias TranscriptionUploadExecutor = @MainActor (TranscriptionUploadRequest) async throws -> TranscriptionResult
+typealias AITitleExecutor = @MainActor (String, String?) async throws -> String
+
+struct TranscriptionUploadRequest: Sendable {
+    let audioData: Data
+    let fileName: String
+    let language: String?
+    let userId: UUID?
+}
+
+enum ImportedAudioNoteError: LocalizedError {
+    case accessDenied
+    case copyFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .accessDenied, .copyFailed:
+            "Failed to import audio file"
+        }
+    }
+}
 
 private struct NoteUpdate: Encodable {
     var categoryId: UUID?
@@ -49,6 +72,39 @@ final class NoteStore {
     var selectedCategoryId: UUID?
     var isLoading = false
     var lastError: String?
+    @ObservationIgnored let transcriptionConnectivityProbe: TranscriptionConnectivityProbe
+    @ObservationIgnored let transcriptionUploadExecutor: TranscriptionUploadExecutor
+    @ObservationIgnored let aiTitleExecutor: AITitleExecutor
+
+    init(
+        transcriptionConnectivityProbe: TranscriptionConnectivityProbe? = nil,
+        transcriptionUploadExecutor: TranscriptionUploadExecutor? = nil,
+        aiTitleExecutor: AITitleExecutor? = nil
+    ) {
+        self.transcriptionConnectivityProbe = transcriptionConnectivityProbe ?? {
+            var probe = URLRequest(url: AppConfig.supabaseUrl.appendingPathComponent("rest/v1/"))
+            probe.httpMethod = "GET"
+            probe.timeoutInterval = 15
+            probe.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+            probe.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
+            let (_, response) = try await URLSession.shared.data(for: probe)
+            guard let http = response as? HTTPURLResponse, http.statusCode < 500 else {
+                throw URLError(.cannotConnectToHost)
+            }
+        }
+        self.transcriptionUploadExecutor = transcriptionUploadExecutor ?? { request in
+            let service = TranscriptionService()
+            return try await service.transcribe(
+                audioData: request.audioData,
+                fileName: request.fileName,
+                language: request.language,
+                userId: request.userId
+            )
+        }
+        self.aiTitleExecutor = aiTitleExecutor ?? { content, language in
+            try await AIService.generateTitle(for: content, language: language)
+        }
+    }
 
     /// Retry any notes stuck in "Waiting for connection…".
     /// Scans the notes array directly — works even after app restart.
@@ -61,8 +117,13 @@ final class NoteStore {
 
         for note in waiting {
             guard let urlString = note.audioUrl,
-                  let url = URL(string: urlString),
-                  url.isFileURL,
+                  let url = if let fileURL = URL(string: urlString), fileURL.isFileURL {
+                      fileURL
+                  } else if urlString.hasPrefix("/") {
+                      URL(fileURLWithPath: urlString)
+                  } else {
+                      nil
+                  },
                   FileManager.default.fileExists(atPath: url.path)
             else { continue }
 
@@ -71,12 +132,83 @@ final class NoteStore {
         }
     }
 
+    func importAudioNote(
+        from sourceURL: URL,
+        userId: UUID?,
+        categoryId: UUID?,
+        language: String?,
+        requiresSecurityScopedAccess: Bool = true
+    ) async throws -> Note {
+        let destinationURL: URL
+        if requiresSecurityScopedAccess {
+            guard sourceURL.startAccessingSecurityScopedResource() else {
+                throw ImportedAudioNoteError.accessDenied
+            }
+            do {
+                defer { sourceURL.stopAccessingSecurityScopedResource() }
+                destinationURL = try Self.copyImportedAudio(from: sourceURL)
+            } catch {
+                throw ImportedAudioNoteError.copyFailed
+            }
+        } else {
+            do {
+                destinationURL = try Self.copyImportedAudio(from: sourceURL)
+            } catch {
+                throw ImportedAudioNoteError.copyFailed
+            }
+        }
+
+        let noteId = UUID()
+        let note = Note(
+            id: noteId,
+            userId: userId,
+            categoryId: categoryId,
+            title: sourceURL.deletingPathExtension().lastPathComponent,
+            content: "Transcribing…",
+            source: .voice,
+            audioUrl: destinationURL.absoluteString,
+            durationSeconds: await Self.importedAudioDurationSeconds(for: destinationURL),
+            createdAt: .now,
+            updatedAt: .now
+        )
+
+        addNote(note)
+        transcribeNote(id: noteId, audioFileURL: destinationURL, language: language, userId: userId)
+        return note
+    }
+
     var filteredNotes: [Note] {
         guard let categoryId = selectedCategoryId else { return notes }
         return notes.filter { $0.categoryId == categoryId }
     }
 
     // MARK: - Fetch
+
+    static func importedAudioDurationSeconds(for url: URL) async -> Int? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(duration)
+            return seconds.isFinite ? Int(seconds) : nil
+        } catch {
+            return nil
+        }
+    }
+
+    static func copyImportedAudio(from sourceURL: URL) throws -> URL {
+        let recordingsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Recordings", isDirectory: true)
+        try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+
+        let fileName = if sourceURL.pathExtension.isEmpty {
+            UUID().uuidString
+        } else {
+            "\(UUID().uuidString).\(sourceURL.pathExtension)"
+        }
+        let destinationURL = recordingsDir.appendingPathComponent(fileName)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
 
     func refresh() async {
         isLoading = true
@@ -324,12 +456,9 @@ final class NoteStore {
                     return
                 }
 
-                // Connectivity probe — fast HEAD request to detect offline before heavy upload
+                // Connectivity probe — quick request to verify network before heavy upload
                 do {
-                    var probe = URLRequest(url: AppConfig.supabaseUrl)
-                    probe.httpMethod = "HEAD"
-                    probe.timeoutInterval = 5
-                    _ = try await URLSession.shared.data(for: probe)
+                    try await transcriptionConnectivityProbe()
                 } catch {
                     logger.info("Connectivity probe failed — device appears offline: \(error)")
                     setNoteContent(id: id, content: "Waiting for connection…")
@@ -350,12 +479,13 @@ final class NoteStore {
                 let audioData = try Data(contentsOf: uploadURL)
                 let fileName = uploadURL.lastPathComponent
 
-                let service = TranscriptionService()
-                let result = try await service.transcribe(
-                    audioData: audioData,
-                    fileName: fileName,
-                    language: language,
-                    userId: userId
+                let result = try await transcriptionUploadExecutor(
+                    TranscriptionUploadRequest(
+                        audioData: audioData,
+                        fileName: fileName,
+                        language: language,
+                        userId: userId
+                    )
                 )
 
                 // Guard against empty transcription
@@ -412,7 +542,7 @@ final class NoteStore {
     func generateTitle(for noteId: UUID, content: String, language: String?) {
         Task {
             do {
-                let aiTitle = try await AIService.generateTitle(for: content, language: language)
+                let aiTitle = try await aiTitleExecutor(content, language)
                 guard var note = notes.first(where: { $0.id == noteId }) else { return }
                 note.title = aiTitle
                 note.updatedAt = Date()
@@ -494,7 +624,7 @@ final class NoteStore {
         Task {
             for (catId, order) in updates {
                 let sortUpdate = CategorySortUpdate(sortOrder: order)
-                try? await supabase
+                _ = try? await supabase
                     .from("categories")
                     .update(sortUpdate)
                     .eq("id", value: catId)
