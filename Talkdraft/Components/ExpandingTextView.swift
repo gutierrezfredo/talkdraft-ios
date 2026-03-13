@@ -857,7 +857,13 @@ struct ExpandingTextView: UIViewRepresentable {
                         animationOptions: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
                     )
                 } else {
-                    scheduleScrollCursorVisible(in: tv, animated: false, delay: 0.05)
+                    scheduleScrollCursorVisible(
+                        in: tv,
+                        animated: false,
+                        delay: 0.02,
+                        animationDuration: 0.12,
+                        animationOptions: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+                    )
                 }
             }
         }
