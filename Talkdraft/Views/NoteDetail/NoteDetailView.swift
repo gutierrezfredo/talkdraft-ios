@@ -183,16 +183,27 @@ struct NoteDetailView: View {
 
 
     /// Unique speaker display names in order of first appearance.
-    /// Uses note.speakerNames as the authoritative source (survives renames),
-    /// falling back to content parsing for notes without it.
+    /// For transcript notes, follow the currently visible transcript structure first so
+    /// speaker chips and inline styling stay aligned with the text the user is seeing.
+    /// Fall back to persisted metadata only when the content itself does not expose
+    /// speaker lines clearly.
     var detectedSpeakers: [String] {
-        // Authoritative: use speakerNames dict (keys sorted to preserve original order)
+        let lines = editedContent.components(separatedBy: "\n")
+        var seen: [String] = []
+
         if let names = note.speakerNames, !names.isEmpty {
+            for index in lines.indices {
+                let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { continue }
+                if isTranscriptSpeakerLine(in: lines, index: index), !seen.contains(trimmed) {
+                    seen.append(trimmed)
+                }
+            }
+            if !seen.isEmpty { return seen }
             return names.keys.sorted().map { names[$0] ?? $0 }
         }
-        // New format: standalone "Speaker N" lines
-        var seen: [String] = []
-        for line in editedContent.components(separatedBy: "\n") {
+
+        for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }
             if trimmed.range(of: #"^Speaker \d+$"#, options: .regularExpression) != nil,
@@ -201,13 +212,31 @@ struct NoteDetailView: View {
             }
         }
         if !seen.isEmpty { return seen }
-        // Legacy format: [Speaker N]: inline
+
         let pattern = /\[([^\]]+)\]:/
         for match in editedContent.matches(of: pattern) {
             let key = String(match.output.1)
             if !seen.contains(key) { seen.append(key) }
         }
         return seen
+    }
+
+    func isTranscriptSpeakerLine(in lines: [String], index: Int) -> Bool {
+        let current = lines[index].trimmingCharacters(in: .whitespaces)
+        guard !current.isEmpty else { return false }
+
+        let previousIsSeparator = index == 0 || lines[index - 1].trimmingCharacters(in: .whitespaces).isEmpty
+        guard previousIsSeparator else { return false }
+
+        guard index + 1 < lines.count else { return false }
+        let next = lines[index + 1].trimmingCharacters(in: .whitespaces)
+        guard !next.isEmpty else { return false }
+
+        if current.hasPrefix("• ") || current.hasPrefix("☐ ") || current.hasPrefix("☑ ") || current.hasPrefix("[") {
+            return false
+        }
+
+        return true
     }
 
     func speakerColor(for key: String) -> Color {
