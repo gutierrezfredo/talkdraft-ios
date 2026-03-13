@@ -1,5 +1,6 @@
 import Testing
 @testable import Talkdraft
+import SwiftUI
 import UIKit
 
 @Test func appLaunches() async throws {
@@ -355,6 +356,64 @@ import UIKit
     #expect(mapper.plainRange(forAttributedRange: NSRange(location: attributed.length, length: 0)) == NSRange(location: plainLength, length: 0))
 }
 
+@MainActor
+@Test func expandingTextViewGestureRejectsTapJustRightOfCheckboxIcon() {
+    let harness = makeEditorHarness(text: "☐ Task")
+    guard let hit = firstCheckboxHit(in: harness.textView, using: harness.coordinator) else {
+        Issue.record("Expected to find checkbox icon hit region")
+        return
+    }
+
+    let tap = FixedPointTapGestureRecognizer()
+    harness.textView.addGestureRecognizer(tap)
+    tap.fixedPoint = CGPoint(x: hit.iconRect.maxX + 8, y: hit.iconRect.midY)
+
+    #expect(!harness.coordinator.gestureRecognizerShouldBegin(tap))
+}
+
+@MainActor
+@Test func expandingTextViewToggleCheckboxPreservesSavedPlainSelection() {
+    var toggledText: String?
+    let harness = makeEditorHarness(text: "☐ Task") { updatedText in
+        toggledText = updatedText
+    }
+    let savedSelection = NSRange(location: 6, length: 0)
+
+    ExpandingTextView.setSelectedPlainRange(savedSelection, in: harness.textView)
+    harness.coordinator.pendingCheckboxTapSelection = savedSelection
+    harness.coordinator.toggleCheckbox(at: 0, in: harness.textView)
+
+    let mapper = NoteTextMapper(attributedText: harness.textView.attributedText)
+    #expect(harness.state.text == "☑ Task")
+    #expect(mapper.plainRange(forAttributedRange: harness.textView.selectedRange) == savedSelection)
+    #expect(harness.state.cursorPosition == savedSelection.location)
+    #expect(toggledText == "☑ Task")
+}
+
+@MainActor
+@Test func expandingTextViewNudgesCursorOffCheckboxAttachment() {
+    let harness = makeEditorHarness(text: "☐ Task")
+
+    harness.textView.selectedRange = NSRange(location: 0, length: 0)
+    harness.coordinator.nudgeCursorOffCheckbox(harness.textView)
+
+    #expect(harness.textView.selectedRange == NSRange(location: 1, length: 0))
+}
+
+@MainActor
+@Test func expandingTextViewNudgesCursorOffSpeakerLine() {
+    let harness = makeEditorHarness(
+        text: "Speaker 1\nHello",
+        speakerColors: ["Speaker 1": .systemBlue]
+    )
+
+    ExpandingTextView.setSelectedPlainRange(NSRange(location: 3, length: 0), in: harness.textView)
+    harness.coordinator.nudgeCursorOffSpeakerLine(harness.textView)
+
+    let mapper = NoteTextMapper(attributedText: harness.textView.attributedText)
+    #expect(mapper.plainRange(forAttributedRange: harness.textView.selectedRange) == NSRange(location: 10, length: 0))
+}
+
 @Test func rewriteToolbarStateInfersVisibleRewriteFromPersistedContent() {
     let rewrite = NoteRewrite(
         id: UUID(),
@@ -423,6 +482,90 @@ import UIKit
 
     #expect(!state.showsLabel)
     #expect(state.labelText == "Original")
+}
+
+@MainActor
+private final class EditorStateBox {
+    var text: String
+    var isFocused = false
+    var cursorPosition = 0
+    var highlightRange: NSRange?
+    var preserveScroll = false
+    var moveCursorToEnd = false
+
+    init(text: String) {
+        self.text = text
+    }
+}
+
+private final class FixedPointTapGestureRecognizer: UITapGestureRecognizer {
+    var fixedPoint: CGPoint = .zero
+
+    override func location(in view: UIView?) -> CGPoint {
+        fixedPoint
+    }
+}
+
+@MainActor
+private func makeEditorHarness(
+    text: String,
+    speakerColors: [String: UIColor] = [:],
+    onCheckboxToggle: ((String) -> Void)? = nil
+) -> (state: EditorStateBox, coordinator: ExpandingTextView.Coordinator, textView: CheckboxTextView) {
+    let state = EditorStateBox(text: text)
+    let parent = ExpandingTextView(
+        text: Binding(get: { state.text }, set: { state.text = $0 }),
+        isFocused: Binding(get: { state.isFocused }, set: { state.isFocused = $0 }),
+        cursorPosition: Binding(get: { state.cursorPosition }, set: { state.cursorPosition = $0 }),
+        highlightRange: Binding(get: { state.highlightRange }, set: { state.highlightRange = $0 }),
+        preserveScroll: Binding(get: { state.preserveScroll }, set: { state.preserveScroll = $0 }),
+        isEditable: true,
+        font: .preferredFont(forTextStyle: .body),
+        lineSpacing: 6,
+        placeholder: "",
+        speakerColors: speakerColors,
+        horizontalPadding: 0,
+        moveCursorToEnd: Binding(get: { state.moveCursorToEnd }, set: { state.moveCursorToEnd = $0 }),
+        onCheckboxToggle: onCheckboxToggle
+    )
+
+    let coordinator = parent.makeCoordinator()
+    let textStorage = NSTextStorage()
+    let layoutManager = NSLayoutManager()
+    let textContainer = NSTextContainer(size: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude))
+    textContainer.widthTracksTextView = true
+    textContainer.heightTracksTextView = false
+    layoutManager.addTextContainer(textContainer)
+    textStorage.addLayoutManager(layoutManager)
+
+    let textView = CheckboxTextView(frame: CGRect(x: 0, y: 0, width: 320, height: 200), textContainer: textContainer)
+    textView.isScrollEnabled = false
+    textView.backgroundColor = UIColor.clear
+    textView.textContainerInset = UIEdgeInsets.zero
+    textView.textContainer.lineFragmentPadding = 0
+    textView.delegate = coordinator
+    textView.coordinator = coordinator
+    coordinator.textView = textView
+    parent.applyTextAttributes(textView)
+    textView.layoutIfNeeded()
+    textView.layoutManager.ensureLayout(for: textView.textContainer)
+
+    return (state, coordinator, textView)
+}
+
+@MainActor
+private func firstCheckboxHit(
+    in textView: UITextView,
+    using coordinator: ExpandingTextView.Coordinator
+) -> (plainIndex: Int, iconRect: CGRect)? {
+    for y in stride(from: 0 as CGFloat, through: 72, by: 1) {
+        for x in stride(from: 0 as CGFloat, through: 72, by: 1) {
+            if let hit = coordinator.checkboxHit(near: CGPoint(x: x, y: y), in: textView) {
+                return hit
+            }
+        }
+    }
+    return nil
 }
 
 private func makeNote(
