@@ -139,18 +139,23 @@ final class NoteStore {
         language: String?,
         requiresSecurityScopedAccess: Bool = true
     ) async throws -> Note {
+        let destinationURL: URL
         if requiresSecurityScopedAccess {
             guard sourceURL.startAccessingSecurityScopedResource() else {
                 throw ImportedAudioNoteError.accessDenied
             }
-            defer { sourceURL.stopAccessingSecurityScopedResource() }
-        }
-
-        let destinationURL: URL
-        do {
-            destinationURL = try Self.copyImportedAudio(from: sourceURL)
-        } catch {
-            throw ImportedAudioNoteError.copyFailed
+            do {
+                defer { sourceURL.stopAccessingSecurityScopedResource() }
+                destinationURL = try Self.copyImportedAudio(from: sourceURL)
+            } catch {
+                throw ImportedAudioNoteError.copyFailed
+            }
+        } else {
+            do {
+                destinationURL = try Self.copyImportedAudio(from: sourceURL)
+            } catch {
+                throw ImportedAudioNoteError.copyFailed
+            }
         }
 
         let noteId = UUID()
@@ -619,7 +624,7 @@ final class NoteStore {
         Task {
             for (catId, order) in updates {
                 let sortUpdate = CategorySortUpdate(sortOrder: order)
-                try? await supabase
+                _ = try? await supabase
                     .from("categories")
                     .update(sortUpdate)
                     .eq("id", value: catId)

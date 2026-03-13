@@ -3,10 +3,10 @@ import Testing
 @testable import Talkdraft
 
 @Test func appLaunches() async throws {
-    #expect(true)
+    #expect(Bool(true))
 }
 
-@Test(.serialized) func audioCompressorWrites16kMonoOutput() async throws {
+@Test func audioCompressorWrites16kMonoOutput() async throws {
     let sourceURL = try makeSineWaveFile()
     let compressedURL = try await AudioCompressor.compress(sourceURL: sourceURL)
     defer {
@@ -22,7 +22,7 @@ import Testing
 }
 
 @MainActor
-@Test(.serialized) func audioPlayerPreloadsAndSeeksLocalAudio() async throws {
+@Test func audioPlayerPreloadsAndSeeksLocalAudio() async throws {
     let sourceURL = try makeSineWaveFile(duration: 1.0)
     let player = AudioPlayer()
     defer {
@@ -52,7 +52,7 @@ import Testing
 }
 
 @MainActor
-@Test(.serialized) func audioRecorderSupportsPauseResumeAndCancel() throws {
+@Test func audioRecorderSupportsPauseResumeAndCancel() throws {
     let recorder = AudioRecorder()
 
     try recorder.startRecording()
@@ -73,7 +73,7 @@ import Testing
 }
 
 @MainActor
-@Test(.serialized) func noteStoreImportAudioNoteCopiesAndTranscribesImportedAudio() async throws {
+@Test func noteStoreImportAudioNoteCopiesAndTranscribesImportedAudio() async throws {
     let sourceURL = try makeSineWaveFile(duration: 0.6)
     defer { try? FileManager.default.removeItem(at: sourceURL) }
 

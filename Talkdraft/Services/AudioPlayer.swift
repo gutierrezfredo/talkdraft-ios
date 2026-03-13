@@ -7,6 +7,7 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Audio
 @Observable
 final class AudioPlayer: @unchecked Sendable {
     var isPlaying = false
+    var isBuffering = false
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
 
@@ -16,27 +17,32 @@ final class AudioPlayer: @unchecked Sendable {
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
+    private var bufferingObservation: NSKeyValueObservation?
+
+    /// Call when the audio UI becomes visible to start buffering ahead of playback.
+    func preload(url: URL) {
+        guard currentURL != url else { return }
+        stop()
+        prepare(url: url)
+    }
 
     func play(url: URL) {
         if let player, currentURL == url {
-            // Resume existing player
+            // Resume or start already-prepared player
+            activateAudioSession()
             player.play()
             isPlaying = true
             return
         }
 
-        // New file
         stop()
+        prepare(url: url)
+        activateAudioSession()
+        player?.play()
+        isPlaying = true
+    }
 
-        // Route audio to speaker (not earpiece)
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
-            try session.setActive(true)
-        } catch {
-            logger.error("Failed to configure audio session: \(error)")
-        }
-
+    private func prepare(url: URL) {
         let item = AVPlayerItem(url: url)
         let newPlayer = AVPlayer(playerItem: item)
 
@@ -53,6 +59,12 @@ final class AudioPlayer: @unchecked Sendable {
         rateObservation = newPlayer.observe(\.rate) { [weak self] player, _ in
             guard let self else { return }
             self.isPlaying = player.rate > 0
+        }
+
+        // Observe buffering state
+        bufferingObservation = newPlayer.observe(\.timeControlStatus) { [weak self] player, _ in
+            guard let self else { return }
+            self.isBuffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         }
 
         // Periodic time updates
@@ -73,12 +85,20 @@ final class AudioPlayer: @unchecked Sendable {
             object: item
         )
 
-        newPlayer.play()
         self.player = newPlayer
         self.currentItem = item
         self.currentURL = url
         self.currentTime = 0
-        self.isPlaying = true
+    }
+
+    private func activateAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+        } catch {
+            logger.error("Failed to configure audio session: \(error)")
+        }
     }
 
     func pause() {
@@ -111,6 +131,8 @@ final class AudioPlayer: @unchecked Sendable {
         statusObservation = nil
         rateObservation?.invalidate()
         rateObservation = nil
+        bufferingObservation?.invalidate()
+        bufferingObservation = nil
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: currentItem)
         player?.pause()
         player = nil
