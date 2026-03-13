@@ -355,6 +355,76 @@ import UIKit
     #expect(mapper.plainRange(forAttributedRange: NSRange(location: attributed.length, length: 0)) == NSRange(location: plainLength, length: 0))
 }
 
+@Test func rewriteToolbarStateInfersVisibleRewriteFromPersistedContent() {
+    let rewrite = NoteRewrite(
+        id: UUID(),
+        noteId: UUID(),
+        toneLabel: "Action Items",
+        toneEmoji: "✅",
+        content: "☐ First task",
+        createdAt: .now
+    )
+
+    let state = RewriteToolbarState(
+        isRewriting: false,
+        activeRewriteId: nil,
+        originalContent: "Original body",
+        persistedContent: rewrite.content,
+        rewrites: [rewrite],
+        fallbackLabel: "Rewrite"
+    )
+
+    #expect(state.showsLabel)
+    #expect(state.inferredVisibleRewrite == rewrite)
+    #expect(state.effectiveSelectionId == rewrite.id)
+    #expect(state.labelText == "✅ Action Items")
+}
+
+@Test func rewriteToolbarStateUsesGenericRewriteLabelUntilActiveRewriteLoads() {
+    let state = RewriteToolbarState(
+        isRewriting: false,
+        activeRewriteId: UUID(),
+        originalContent: "Original body",
+        persistedContent: "Edited rewrite body",
+        rewrites: [],
+        fallbackLabel: nil
+    )
+
+    #expect(state.showsLabel)
+    #expect(state.inferredVisibleRewrite == nil)
+    #expect(state.labelText == "Rewrite")
+}
+
+@Test func rewriteToolbarStateFallsBackToOriginalForOriginalSelection() {
+    let state = RewriteToolbarState(
+        isRewriting: false,
+        activeRewriteId: nil,
+        originalContent: "Original body",
+        persistedContent: "Original body",
+        rewrites: [],
+        fallbackLabel: nil
+    )
+
+    #expect(state.showsLabel)
+    #expect(state.inferredVisibleRewrite == nil)
+    #expect(state.effectiveSelectionId == nil)
+    #expect(state.labelText == "Original")
+}
+
+@Test func rewriteToolbarStateHidesLabelForPlainNotes() {
+    let state = RewriteToolbarState(
+        isRewriting: false,
+        activeRewriteId: nil,
+        originalContent: nil,
+        persistedContent: "Plain note",
+        rewrites: [],
+        fallbackLabel: nil
+    )
+
+    #expect(!state.showsLabel)
+    #expect(state.labelText == "Original")
+}
+
 private func makeNote(
     id: UUID = UUID(),
     content: String,

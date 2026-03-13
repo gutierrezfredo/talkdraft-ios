@@ -178,37 +178,31 @@ extension NoteDetailView {
         }
     }
 
+    var rewriteToolbarState: RewriteToolbarState {
+        RewriteToolbarState(
+            isRewriting: isRewriting,
+            activeRewriteId: activeRewriteId,
+            originalContent: note.originalContent,
+            persistedContent: persistedEditedContent,
+            rewrites: rewrites,
+            fallbackLabel: rewriteLabelFallback
+        )
+    }
+
     var showsRewriteToolbarLabel: Bool {
-        isRewriting || activeRewriteId != nil || note.originalContent != nil || !rewrites.isEmpty
+        rewriteToolbarState.showsLabel
     }
 
     var inferredVisibleRewrite: NoteRewrite? {
-        if let activeRewriteId {
-            return rewrites.first { $0.id == activeRewriteId }
-        }
-
-        guard let originalContent = note.originalContent,
-              persistedEditedContent != originalContent else {
-            return nil
-        }
-
-        return rewrites.last { $0.content == persistedEditedContent }
+        rewriteToolbarState.inferredVisibleRewrite
     }
 
     var effectiveRewriteSelectionId: UUID? {
-        activeRewriteId ?? inferredVisibleRewrite?.id
+        rewriteToolbarState.effectiveSelectionId
     }
 
     var rewriteToolbarLabelText: String {
-        if let inferredVisibleRewrite {
-            return inferredVisibleRewrite.displayLabel
-        }
-
-        if let rewriteLabelFallback {
-            return rewriteLabelFallback
-        }
-
-        return "Original"
+        rewriteToolbarState.labelText
     }
 
     func repairMissingActiveRewriteSelection() {
