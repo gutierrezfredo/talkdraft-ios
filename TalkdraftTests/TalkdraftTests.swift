@@ -774,6 +774,65 @@ actor NoteUpsertRecorder {
 }
 
 @MainActor
+@Test func noteStoreRemoveNoteQueuesSoftDeleteAsPendingUpsert() {
+    let note = makeNote(content: "Delete me")
+    let store = NoteStore(persistsLocalVoiceBodyStates: false, persistsPendingNoteUpserts: false)
+    store.notes = [note]
+
+    store.removeNote(id: note.id)
+
+    #expect(store.notes.isEmpty)
+    #expect(store.deletedNotes.map(\.id) == [note.id])
+    #expect(store.pendingNoteUpserts[note.id]?.deletedAt != nil)
+}
+
+@MainActor
+@Test func noteStoreRestoreNoteReplacesQueuedSoftDeleteWithActiveUpsert() {
+    let note = makeNote(content: "Restore me")
+    let store = NoteStore(persistsLocalVoiceBodyStates: false, persistsPendingNoteUpserts: false)
+    store.notes = [note]
+
+    store.removeNote(id: note.id)
+    store.restoreNote(id: note.id)
+
+    #expect(store.deletedNotes.isEmpty)
+    #expect(store.notes.map(\.id) == [note.id])
+    #expect(store.pendingNoteUpserts[note.id]?.deletedAt == nil)
+}
+
+@MainActor
+@Test func noteStoreBeginSessionKeepsPendingSoftDeletesOutOfActiveNotes() {
+    let userId = UUID()
+    let key = "pendingNoteUpserts.\(userId.uuidString)"
+    let note = makeNote(content: "Deleted")
+    defer { UserDefaults.standard.removeObject(forKey: key) }
+
+    let deleting = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: true,
+        noteSyncDebounceDuration: .seconds(60),
+        noteUpsertExecutor: { _ in }
+    )
+    deleting.beginSession(userId: userId)
+    deleting.notes = [note]
+    deleting.removeNote(id: note.id)
+    deleting.resetSession()
+
+    let reloaded = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: true,
+        noteSyncDebounceDuration: .seconds(60),
+        noteUpsertExecutor: { _ in }
+    )
+    reloaded.beginSession(userId: userId)
+
+    #expect(reloaded.notes.isEmpty)
+    #expect(reloaded.pendingNoteUpserts[note.id]?.deletedAt != nil)
+
+    reloaded.resetSession()
+}
+
+@MainActor
 @Test func noteStoreMoveNotesQueuesEachChangedNoteForSync() {
     let originalCategory = UUID()
     let targetCategory = UUID()

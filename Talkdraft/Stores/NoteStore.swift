@@ -423,9 +423,19 @@ final class NoteStore {
         return notes.filter { $0.categoryId == categoryId }
     }
 
+    private var pendingDeletedNotesById: [UUID: Note] {
+        Dictionary(uniqueKeysWithValues: pendingNoteUpserts.values.compactMap { note in
+            guard note.deletedAt != nil else { return nil }
+            return (note.id, note)
+        })
+    }
+
     private func mergedPendingNotes(with remoteNotes: [Note]) -> [Note] {
-        var merged = Dictionary(uniqueKeysWithValues: remoteNotes.map { ($0.id, normalizeLocalVoiceNote($0)) })
-        for note in pendingNoteUpserts.values {
+        let pendingDeletedIds = Set(pendingDeletedNotesById.keys)
+        var merged = Dictionary(uniqueKeysWithValues: remoteNotes
+            .filter { !pendingDeletedIds.contains($0.id) }
+            .map { ($0.id, normalizeLocalVoiceNote($0)) })
+        for note in pendingNoteUpserts.values where note.deletedAt == nil {
             merged[note.id] = normalizeLocalVoiceNote(note)
         }
         return merged.values.sorted { lhs, rhs in
@@ -643,7 +653,22 @@ final class NoteStore {
             .order("deleted_at", ascending: false)
             .execute()
             .value
-        deletedNotes = deleted
+        var mergedDeleted = Dictionary(uniqueKeysWithValues: deleted.map { ($0.id, $0) })
+        for note in pendingDeletedNotesById.values {
+            mergedDeleted[note.id] = note
+        }
+        deletedNotes = mergedDeleted.values.sorted { lhs, rhs in
+            switch (lhs.deletedAt, rhs.deletedAt) {
+            case let (left?, right?) where left != right:
+                return left > right
+            case (nil, .some):
+                return false
+            case (.some, nil):
+                return true
+            default:
+                return lhs.updatedAt > rhs.updatedAt
+            }
+        }
 
         // Auto-purge notes deleted more than 30 days ago
         await purgeExpiredNotes()
@@ -702,21 +727,9 @@ final class NoteStore {
         removed.deletedAt = Date()
         deletedNotes.insert(removed, at: 0)
         setLocalVoiceBodyState(nil, for: id)
-        pendingNoteUpserts.removeValue(forKey: id)
-        persistPendingNoteUpserts()
-
-        Task {
-            do {
-                let update = SoftDeleteUpdate(deletedAt: removed.deletedAt)
-                try await supabase
-                    .from("notes")
-                    .update(update)
-                    .eq("id", value: id)
-                    .execute()
-            } catch {
-                // Sync failure is non-fatal — note is already removed locally
-            }
-        }
+        queuePendingNoteUpsert(removed)
+        let revision = bumpNoteSyncRevision(for: id)
+        schedulePendingNoteUpsertSync(id: id, expectedRevision: revision, delay: .zero)
     }
 
     func removeNotes(ids: Set<UUID>) {
@@ -725,27 +738,11 @@ final class NoteStore {
         notes.removeAll { ids.contains($0.id) }
         for i in removed.indices { removed[i].deletedAt = now }
         deletedNotes.insert(contentsOf: removed, at: 0)
-        ids.forEach { setLocalVoiceBodyState(nil, for: $0) }
-        ids.forEach { pendingNoteUpserts.removeValue(forKey: $0) }
-        persistPendingNoteUpserts()
-
-        Task {
-            // Batch in chunks of 20 to avoid oversized IN clauses
-            let idArray = Array(ids)
-            for chunk in stride(from: 0, to: idArray.count, by: 20).map({
-                Array(idArray[$0..<min($0 + 20, idArray.count)])
-            }) {
-                do {
-                    let update = SoftDeleteUpdate(deletedAt: now)
-                    try await supabase
-                        .from("notes")
-                        .update(update)
-                        .in("id", values: chunk.map(\.uuidString))
-                        .execute()
-                } catch {
-                    // Sync failure is non-fatal — notes are already removed locally
-                }
-            }
+        for note in removed {
+            setLocalVoiceBodyState(nil, for: note.id)
+            queuePendingNoteUpsert(note)
+            let revision = bumpNoteSyncRevision(for: note.id)
+            schedulePendingNoteUpsertSync(id: note.id, expectedRevision: revision, delay: .zero)
         }
     }
 
@@ -1261,14 +1258,6 @@ final class NoteStore {
 }
 
 // MARK: - Partial Update Models
-
-private struct SoftDeleteUpdate: Encodable {
-    let deletedAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case deletedAt = "deleted_at"
-    }
-}
 
 private struct CategorySortUpdate: Encodable {
     let sortOrder: Int
