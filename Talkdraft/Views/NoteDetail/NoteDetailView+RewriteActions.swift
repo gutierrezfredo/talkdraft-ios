@@ -82,6 +82,7 @@ extension NoteDetailView {
                 await noteStore.saveRewrite(rewrite)
                 rewrites = noteStore.rewritesCache[noteId] ?? []
                 activeRewriteId = rewrite.id
+                rewriteLabelFallback = nil
                 if rewriteLabelOpacity == 0 {
                     try? await Task.sleep(for: .milliseconds(32))
                     rewriteLabelOpacity = 1
@@ -114,6 +115,7 @@ extension NoteDetailView {
         UISelectionFeedbackGenerator().selectionChanged()
         rewriteLabelOpacity = 1
         activeRewriteId = rewrite.id
+        rewriteLabelFallback = nil
         contentOpacity = 0
         editedContent = rewrite.content
         scrollToTop()
@@ -148,6 +150,7 @@ extension NoteDetailView {
         UISelectionFeedbackGenerator().selectionChanged()
         rewriteLabelOpacity = 1
         activeRewriteId = nil
+        rewriteLabelFallback = nil
         contentOpacity = 0
         editedContent = original
         scrollToTop()

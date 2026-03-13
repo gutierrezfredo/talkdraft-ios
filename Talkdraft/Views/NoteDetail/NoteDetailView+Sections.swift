@@ -182,6 +182,50 @@ extension NoteDetailView {
         isRewriting || activeRewriteId != nil || note.originalContent != nil || !rewrites.isEmpty
     }
 
+    var inferredVisibleRewrite: NoteRewrite? {
+        if let activeRewriteId {
+            return rewrites.first { $0.id == activeRewriteId }
+        }
+
+        guard let originalContent = note.originalContent,
+              persistedEditedContent != originalContent else {
+            return nil
+        }
+
+        return rewrites.last { $0.content == persistedEditedContent }
+    }
+
+    var effectiveRewriteSelectionId: UUID? {
+        activeRewriteId ?? inferredVisibleRewrite?.id
+    }
+
+    var rewriteToolbarLabelText: String {
+        if let inferredVisibleRewrite {
+            return inferredVisibleRewrite.displayLabel
+        }
+
+        if let rewriteLabelFallback {
+            return rewriteLabelFallback
+        }
+
+        return "Original"
+    }
+
+    func repairMissingActiveRewriteSelection() {
+        guard activeRewriteId == nil,
+              note.activeRewriteId == nil,
+              let inferredVisibleRewrite else {
+            return
+        }
+
+        activeRewriteId = inferredVisibleRewrite.id
+        rewriteLabelFallback = nil
+
+        var updated = note
+        updated.activeRewriteId = inferredVisibleRewrite.id
+        noteStore.updateNote(updated)
+    }
+
     @ViewBuilder
     func rewriteToolbarLabelView(_ label: String, showsChevron: Bool) -> some View {
         let chevron = Image(systemName: "chevron.up.chevron.down")
@@ -213,8 +257,8 @@ extension NoteDetailView {
     func toolbarContent() -> some ToolbarContent {
         if showsRewriteToolbarLabel {
             ToolbarItem(placement: .principal) {
-                let activeRewrite = rewrites.first { $0.id == activeRewriteId }
-                let label = activeRewriteId == nil ? "Original" : (activeRewrite?.displayLabel ?? "Rewrite")
+                let selectionId = effectiveRewriteSelectionId
+                let label = rewriteToolbarLabelText
                 ZStack {
                     if isRewriting {
                         shimmerLabel(rewritingLabel.isEmpty ? label : rewritingLabel)
@@ -224,7 +268,7 @@ extension NoteDetailView {
                                 Button {
                                     switchToOriginal()
                                 } label: {
-                                    if activeRewriteId == nil {
+                                    if selectionId == nil {
                                         Label("Original", systemImage: "checkmark")
                                     } else {
                                         Text("Original")
@@ -246,7 +290,7 @@ extension NoteDetailView {
                                         Button {
                                             switchToRewrite(rewrite)
                                         } label: {
-                                            if rewrite.id == activeRewriteId {
+                                            if rewrite.id == selectionId {
                                                 Label(rewrite.displayLabel, systemImage: "checkmark")
                                             } else {
                                                 Text(rewrite.displayLabel)

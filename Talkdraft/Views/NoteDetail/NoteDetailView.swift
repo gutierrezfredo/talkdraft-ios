@@ -47,6 +47,7 @@ struct NoteDetailView: View {
     @State var rewritingLabel: String = ""
     @State var rewrites: [NoteRewrite] = []
     @State var activeRewriteId: UUID?
+    @State var rewriteLabelFallback: String?
     @State var rewriteLabelOpacity: Double = 0
     @State var audioExpanded = false
     @State var player = AudioPlayer()
@@ -145,6 +146,9 @@ struct NoteDetailView: View {
         self.initialNote = note
         let title = note.title ?? ""
         let content = initialContent ?? note.content
+        let opensOnUnresolvedRewrite = note.activeRewriteId == nil
+            && note.originalContent != nil
+            && content != note.originalContent
         // If the note has an active rewrite but no cached content yet, the task will
         // switch content after fetching — start invisible to prevent the flash.
         let willSwitch = note.activeRewriteId != nil && initialContent == nil
@@ -153,6 +157,7 @@ struct NoteDetailView: View {
         self._noteBodyState = State(initialValue: NoteBodyState(content: content, source: note.source))
         self._contentFocused = State(initialValue: false)
         self._activeRewriteId = State(initialValue: note.activeRewriteId)
+        self._rewriteLabelFallback = State(initialValue: opensOnUnresolvedRewrite ? "Rewrite" : nil)
         self._rewriteLabelOpacity = State(initialValue: (note.originalContent != nil || note.activeRewriteId != nil) ? 1 : 0)
         self._titleBaseline = State(initialValue: title)
         self._contentBaseline = State(initialValue: content)
@@ -250,9 +255,20 @@ struct NoteDetailView: View {
         .animation(.easeOut(duration: 0.2), value: bodyState)
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            rewrites = noteStore.rewritesCache[noteId] ?? []
+            activeRewriteId = note.activeRewriteId
+            if activeRewriteId != nil {
+                rewriteLabelFallback = nil
+            }
+            repairMissingActiveRewriteSelection()
+
             await noteStore.fetchRewrites(for: noteId)
             rewrites = noteStore.rewritesCache[noteId] ?? []
             activeRewriteId = note.activeRewriteId
+            if activeRewriteId != nil {
+                rewriteLabelFallback = nil
+            }
+            repairMissingActiveRewriteSelection()
             let displayContent = noteStore.displayContent(for: note)
             if editedContent != displayContent {
                 acceptResolvedNoteContent(displayContent)
@@ -387,6 +403,12 @@ struct NoteDetailView: View {
         .onChange(of: note.title) { oldValue, newValue in
             if editedTitle == (oldValue ?? "") {
                 syncStoreTitle(newValue ?? "")
+            }
+        }
+        .onChange(of: note.activeRewriteId) { _, newValue in
+            activeRewriteId = newValue
+            if newValue != nil || note.originalContent == nil || noteStore.displayContent(for: note) == note.originalContent {
+                rewriteLabelFallback = nil
             }
         }
         .onChange(of: isGeneratingTitle) { _, generating in
