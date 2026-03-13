@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import os
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "AudioCompressor")
@@ -8,6 +8,25 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Audio
 /// compression to remove low-frequency handling noise and pocket rumble, improving
 /// transcription accuracy without affecting the original stored recording.
 enum AudioCompressor {
+
+    private final class ProcessingState: @unchecked Sendable {
+        let reader: AVAssetReader
+        let readerOutput: AVAssetReaderTrackOutput
+        let writerInput: AVAssetWriterInput
+        let hpf: HPFState
+
+        init(
+            reader: AVAssetReader,
+            readerOutput: AVAssetReaderTrackOutput,
+            writerInput: AVAssetWriterInput,
+            hpf: HPFState
+        ) {
+            self.reader = reader
+            self.readerOutput = readerOutput
+            self.writerInput = writerInput
+            self.hpf = hpf
+        }
+    }
 
     static func compress(sourceURL: URL) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
@@ -55,19 +74,25 @@ enum AudioCompressor {
 
         let queue = DispatchQueue(label: "com.pleymob.talkdraft.audiocompress")
         let hpf = HPFState()
+        let state = ProcessingState(
+            reader: reader,
+            readerOutput: readerOutput,
+            writerInput: writerInput,
+            hpf: hpf
+        )
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            writerInput.requestMediaDataWhenReady(on: queue) {
-                while writerInput.isReadyForMoreMediaData {
-                    guard reader.status == .reading,
-                          let buffer = readerOutput.copyNextSampleBuffer() else {
-                        writerInput.markAsFinished()
+            state.writerInput.requestMediaDataWhenReady(on: queue) {
+                while state.writerInput.isReadyForMoreMediaData {
+                    guard state.reader.status == .reading,
+                          let buffer = state.readerOutput.copyNextSampleBuffer() else {
+                        state.writerInput.markAsFinished()
                         continuation.resume()
                         return
                     }
                     // Apply high-pass filter in-place before encoding
-                    hpf.process(buffer)
-                    writerInput.append(buffer)
+                    state.hpf.process(buffer)
+                    state.writerInput.append(buffer)
                 }
             }
         }

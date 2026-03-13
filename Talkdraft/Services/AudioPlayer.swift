@@ -1,11 +1,11 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Observation
 import os
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "AudioPlayer")
 
 @Observable
-final class AudioPlayer {
+final class AudioPlayer: @unchecked Sendable {
     var isPlaying = false
     var isBuffering = false
     var currentTime: TimeInterval = 0

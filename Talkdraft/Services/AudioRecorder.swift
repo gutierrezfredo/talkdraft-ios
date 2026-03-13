@@ -1,5 +1,5 @@
 import Accelerate
-import AVFoundation
+@preconcurrency import AVFoundation
 import Observation
 import os
 
@@ -17,7 +17,7 @@ enum RecordingError: LocalizedError {
 }
 
 @Observable
-final class AudioRecorder {
+final class AudioRecorder: @unchecked Sendable {
     var isRecording = false
     var isPaused = false
     var elapsedSeconds: TimeInterval = 0
@@ -407,6 +407,20 @@ private final class FFTProcessor: @unchecked Sendable {
         vDSP_destroy_fftsetup(fftSetup)
     }
 
+    private func withSplitComplex<Result>(
+        _ body: (inout DSPSplitComplex) -> Result
+    ) -> Result {
+        realp.withUnsafeMutableBufferPointer { realBuffer in
+            imagp.withUnsafeMutableBufferPointer { imagBuffer in
+                var split = DSPSplitComplex(
+                    realp: realBuffer.baseAddress!,
+                    imagp: imagBuffer.baseAddress!
+                )
+                return body(&split)
+            }
+        }
+    }
+
     func process(buffer: AVAudioPCMBuffer) -> [Float] {
         guard let channelData = buffer.floatChannelData?[0] else {
             return Array(repeating: 0, count: bandCount)
@@ -418,25 +432,32 @@ private final class FFTProcessor: @unchecked Sendable {
         vDSP_vmul(channelData, 1, window, 1, &windowedData, 1, vDSP_Length(frameCount))
         // Zero-fill remainder
         if frameCount < fftSize {
-            var zero: Float = 0
-            vDSP_vfill(&zero, &windowedData + frameCount, 1, vDSP_Length(fftSize - frameCount))
+            windowedData.withUnsafeMutableBufferPointer { buffer in
+                var zero: Float = 0
+                vDSP_vfill(
+                    &zero,
+                    buffer.baseAddress!.advanced(by: frameCount),
+                    1,
+                    vDSP_Length(fftSize - frameCount)
+                )
+            }
         }
 
         // Pack into split complex
         windowedData.withUnsafeBufferPointer { dataPtr in
             dataPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfSize) {
                 complexPtr in
-                var split = DSPSplitComplex(realp: &realp, imagp: &imagp)
-                vDSP_ctoz(complexPtr, 2, &split, 1, vDSP_Length(halfSize))
+                withSplitComplex { split in
+                    vDSP_ctoz(complexPtr, 2, &split, 1, vDSP_Length(halfSize))
+                }
             }
         }
 
         // Forward FFT
-        var split = DSPSplitComplex(realp: &realp, imagp: &imagp)
-        vDSP_fft_zrip(fftSetup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
-
-        // Squared magnitudes
-        vDSP_zvmags(&split, 1, &magnitudes, 1, vDSP_Length(halfSize))
+        withSplitComplex { split in
+            vDSP_fft_zrip(fftSetup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+            vDSP_zvmags(&split, 1, &magnitudes, 1, vDSP_Length(halfSize))
+        }
 
         // Convert to dB in bulk: 10*log10(mag) = 20*log10(sqrt(mag))
         // Normalize by FFT size squared to match Web Audio convention
