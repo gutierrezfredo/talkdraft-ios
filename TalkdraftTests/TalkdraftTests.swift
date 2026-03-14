@@ -1119,7 +1119,8 @@ struct NoteStoreDebounceTests {
         selectedCategory: categoryId,
         query: "needle",
         sortOrder: .updatedAt,
-        resolvedContent: { note in note.id == matching.id ? "Hidden needle" : note.content }
+        resolvedContent: { note in note.id == matching.id ? "Hidden needle" : note.content },
+        allRewrites: { _ in [] }
     )
 
     #expect(filtered.map(\.id) == [matching.id])
@@ -1135,10 +1136,35 @@ struct NoteStoreDebounceTests {
         selectedCategory: nil,
         query: "apollo",
         sortOrder: .updatedAt,
-        resolvedContent: { $0.content }
+        resolvedContent: { $0.content },
+        allRewrites: { _ in [] }
     )
 
     #expect(filtered.map(\.id) == [titled.id])
+}
+
+@Test func homeNoteQueryMatchesHistoricalRewriteSearch() {
+    let matching = makeNote(content: "Current body")
+    let other = makeNote(content: "Other body")
+    let rewrite = NoteRewrite(
+        id: UUID(),
+        noteId: matching.id,
+        content: "Archived apollo draft",
+        createdAt: .now
+    )
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [matching, other],
+        selectedCategory: nil,
+        query: "apollo",
+        sortOrder: .updatedAt,
+        resolvedContent: { $0.content },
+        allRewrites: { note in
+            note.id == matching.id ? [rewrite] : []
+        }
+    )
+
+    #expect(filtered.map(\.id) == [matching.id])
 }
 
 @Test func homeNoteQuerySortsUncategorizedFirst() {
@@ -1154,7 +1180,8 @@ struct NoteStoreDebounceTests {
         selectedCategory: nil,
         query: "",
         sortOrder: .uncategorized,
-        resolvedContent: { $0.content }
+        resolvedContent: { $0.content },
+        allRewrites: { _ in [] }
     )
 
     #expect(filtered.map(\.id) == [uncategorized.id, categorized.id])
@@ -1170,7 +1197,8 @@ struct NoteStoreDebounceTests {
         selectedCategory: nil,
         query: "",
         sortOrder: .actionItems,
-        resolvedContent: { note in note.id == actionable.id ? "☐ Task" : note.content }
+        resolvedContent: { note in note.id == actionable.id ? "☐ Task" : note.content },
+        allRewrites: { _ in [] }
     )
 
     #expect(filtered.map(\.id) == [actionable.id, plain.id])
@@ -1185,7 +1213,8 @@ struct NoteStoreDebounceTests {
         selectedCategory: nil,
         query: "",
         sortOrder: .createdAt,
-        resolvedContent: { $0.content }
+        resolvedContent: { $0.content },
+        allRewrites: { _ in [] }
     )
 
     #expect(filtered.map(\.id) == [newer.id, older.id])

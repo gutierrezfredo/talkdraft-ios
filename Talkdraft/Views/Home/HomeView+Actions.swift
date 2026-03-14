@@ -118,7 +118,8 @@ extension HomeView {
             selectedCategory: selectedCategory,
             query: isSearching ? query : "",
             sortOrder: sortOrder,
-            resolvedContent: noteStore.resolvedContent(for:)
+            resolvedContent: noteStore.resolvedContent(for:),
+            allRewrites: { noteStore.rewritesCache[$0.id] ?? [] }
         )
     }
 }
