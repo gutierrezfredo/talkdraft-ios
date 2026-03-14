@@ -6,7 +6,8 @@ struct HomeNoteQuery {
         selectedCategory: UUID?,
         query: String,
         sortOrder: NoteSortOrder,
-        resolvedContent: (Note) -> String
+        resolvedContent: (Note) -> String,
+        allRewrites: (Note) -> [NoteRewrite]
     ) -> [Note] {
         var filtered = selectedCategory == nil
             ? notes
@@ -15,8 +16,9 @@ struct HomeNoteQuery {
         if !query.isEmpty {
             let lowered = query.lowercased()
             filtered = filtered.filter { note in
-                (note.title?.lowercased().contains(lowered) ?? false)
-                    || resolvedContent(note).lowercased().contains(lowered)
+                if note.title?.lowercased().contains(lowered) ?? false { return true }
+                if resolvedContent(note).lowercased().contains(lowered) { return true }
+                return allRewrites(note).contains { $0.content.lowercased().contains(lowered) }
             }
         }
 

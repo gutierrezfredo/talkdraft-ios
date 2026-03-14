@@ -430,10 +430,12 @@ final class NoteStore {
 
         async let fetchedNotes: () = fetchNotes()
         async let fetchedCategories: () = fetchCategories()
+        async let fetchedRewrites: () = fetchAllRewrites()
         // Await independently so a failure in one doesn't cancel the other.
         // Tuple await propagates the first error and implicitly cancels siblings.
         try? await fetchedNotes
         try? await fetchedCategories
+        _ = await fetchedRewrites
     }
 
     func fetchNotes() async throws {

@@ -31,6 +31,20 @@ extension NoteStore {
 
     // MARK: - Rewrites
 
+    func fetchAllRewrites() async {
+        do {
+            let fetched: [NoteRewrite] = try await supabase
+                .from("note_rewrites")
+                .select()
+                .order("created_at", ascending: true)
+                .execute()
+                .value
+            rewritesCache = Dictionary(grouping: fetched, by: \.noteId)
+        } catch {
+            logger.error("fetchAllRewrites failed: \(error)")
+        }
+    }
+
     func fetchRewrites(for noteId: UUID) async {
         do {
             let fetched: [NoteRewrite] = try await supabase
