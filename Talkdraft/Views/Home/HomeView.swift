@@ -188,11 +188,6 @@ struct HomeView: View {
                 if noteStore.notes.isEmpty {
                     await noteStore.refresh()
                 }
-                // Warm rewrite history after Home is visible so launch is not blocked
-                // on a full note_rewrites fetch for users with large histories.
-                if noteStore.rewritesCache.isEmpty, !noteStore.notes.isEmpty {
-                    await noteStore.fetchAllRewrites()
-                }
             }
         }
         .fullScreenCover(isPresented: $showRecordView, onDismiss: {
