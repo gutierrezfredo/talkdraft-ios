@@ -1143,6 +1143,30 @@ struct NoteStoreDebounceTests {
     #expect(filtered.map(\.id) == [titled.id])
 }
 
+@Test func homeNoteQueryMatchesHistoricalRewriteSearch() {
+    let matching = makeNote(content: "Current body")
+    let other = makeNote(content: "Other body")
+    let rewrite = NoteRewrite(
+        id: UUID(),
+        noteId: matching.id,
+        content: "Archived apollo draft",
+        createdAt: .now
+    )
+
+    let filtered = HomeNoteQuery.filteredNotes(
+        notes: [matching, other],
+        selectedCategory: nil,
+        query: "apollo",
+        sortOrder: .updatedAt,
+        resolvedContent: { $0.content },
+        allRewrites: { note in
+            note.id == matching.id ? [rewrite] : []
+        }
+    )
+
+    #expect(filtered.map(\.id) == [matching.id])
+}
+
 @Test func homeNoteQuerySortsUncategorizedFirst() {
     let now = Date()
     let categoryId = UUID()

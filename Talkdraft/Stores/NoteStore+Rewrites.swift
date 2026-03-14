@@ -32,6 +32,7 @@ extension NoteStore {
     // MARK: - Rewrites
 
     func fetchAllRewrites() async {
+        let sessionUserId = currentSessionUserId
         do {
             let fetched: [NoteRewrite] = try await supabase
                 .from("note_rewrites")
@@ -39,6 +40,7 @@ extension NoteStore {
                 .order("created_at", ascending: true)
                 .execute()
                 .value
+            guard !Task.isCancelled, currentSessionUserId == sessionUserId else { return }
             rewritesCache = Dictionary(grouping: fetched, by: \.noteId)
         } catch {
             logger.error("fetchAllRewrites failed: \(error)")
