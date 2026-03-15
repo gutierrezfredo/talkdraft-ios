@@ -58,6 +58,32 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const jwt = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : "";
+
+    if (!jwt) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const { data: authData, error: authError } = await admin.auth.getUser(jwt);
+    if (authError || !authData.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     ({ jobId } = await req.json());
     if (!jobId) {
       return new Response(
@@ -80,6 +106,16 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Rewrite job not found" }),
         {
           status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (job.user_id !== authData.user.id) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        {
+          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
