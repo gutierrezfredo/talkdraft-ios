@@ -20,10 +20,10 @@ struct NoteDetailTranscribingIndicatorView: View {
                     LoopingVideoView(player: videoPlayer)
                         .frame(width: 180, height: 180)
                 } else {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(Color.brand)
-                        .scaleEffect(1.1)
+                    Image(systemName: "waveform")
+                        .font(.system(size: 44, weight: .medium))
+                        .foregroundStyle(Color.brand)
+                        .symbolEffect(.pulse.byLayer, options: .repeating)
                 }
             }
             .onAppear {

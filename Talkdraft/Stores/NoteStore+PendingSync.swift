@@ -102,6 +102,7 @@ extension NoteStore {
     func resetSession() {
         cancelAllPendingNoteSyncTasks()
         cancelAllPendingHardDeleteTasks()
+        cancelAllPendingRewriteTasks()
         notes = []
         deletedNotes = []
         categories = []
@@ -112,12 +113,23 @@ extension NoteStore {
         lastError = nil
         generatingTitleIds = []
         activeTranscriptionIds = []
+        activeRewriteIds = []
+        rewriteLabelsByNoteId = [:]
+        rewriteErrorsByNoteId = [:]
         localVoiceBodyStates = [:]
         pendingNoteUpserts = [:]
         pendingHardDeletes = []
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         currentSessionUserId = nil
+    }
+
+    func cancelAllPendingRewriteTasks() {
+        let tasks = pendingRewriteTasks.values
+        pendingRewriteTasks.removeAll()
+        for task in tasks {
+            task.cancel()
+        }
     }
 
     var pendingDeletedNotesById: [UUID: Note] {

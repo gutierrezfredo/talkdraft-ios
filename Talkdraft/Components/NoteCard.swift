@@ -7,13 +7,16 @@ struct NoteCard: View {
     var selectionMode: Bool = false
     var isSelected: Bool = false
 
+    @Environment(NoteStore.self) private var noteStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var transcribingPulse = false
+    @State private var rewritePulse = false
 
     private var isDark: Bool { colorScheme == .dark }
     private var resolvedContent: String { content ?? note.content }
     private var previewContent: String { NoteTextFormatting.plainDisplayText(for: resolvedContent) }
     private var bodyState: NoteBodyState { NoteBodyState(content: resolvedContent, source: note.source) }
+    private var isRewriting: Bool { noteStore.activeRewriteIds.contains(note.id) }
 
     private var cardBackground: Color {
         guard let category else {
@@ -76,6 +79,17 @@ struct NoteCard: View {
                         }
                     }
                     .onDisappear { transcribingPulse = false }
+            } else if isRewriting {
+                Label("Rewriting…", systemImage: "wand.and.stars")
+                    .font(.caption)
+                    .foregroundStyle(Color.brand)
+                    .opacity(rewritePulse ? 0.35 : 1.0)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                            rewritePulse = true
+                        }
+                    }
+                    .onDisappear { rewritePulse = false }
             } else {
                 Text(previewContent)
                     .font(.caption)

@@ -203,6 +203,7 @@ private struct EmailSignInSheet: View {
 
                     TextField("Enter your email", text: $email)
                         .font(.brandTitle2)
+                        .tint(Color.brand)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .autocorrectionDisabled()

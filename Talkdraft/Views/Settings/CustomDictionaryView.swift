@@ -12,6 +12,7 @@ struct CustomDictionaryView: View {
                 // Add word field
                 HStack(spacing: 12) {
                     TextField("Add a word…", text: $newWord)
+                        .tint(Color.brand)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .focused($isFieldFocused)

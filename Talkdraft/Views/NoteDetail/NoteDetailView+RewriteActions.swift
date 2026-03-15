@@ -2,111 +2,35 @@ import SwiftUI
 
 extension NoteDetailView {
     func performRewrite(tone: String?, instructions: String?, toneLabel: String? = nil, toneEmoji: String? = nil) {
-        if let emoji = toneEmoji, let name = toneLabel { rewritingLabel = "\(emoji) \(name)" }
-        else if let name = toneLabel { rewritingLabel = name }
-        else if let instructions { rewritingLabel = String(instructions.prefix(30)) + (instructions.count > 30 ? "…" : "") }
-        else { rewritingLabel = "Rewriting…" }
-        isRewriting = true
         rewriteLabelOpacity = 1
-        Task {
-            do {
-                let sourceContent = note.originalContent ?? persistedEditedContent
+        if let emoji = toneEmoji, let name = toneLabel {
+            rewriteLabelFallback = "\(emoji) \(name)"
+        } else if let name = toneLabel {
+            rewriteLabelFallback = name
+        } else if let instructions, !instructions.isEmpty {
+            let preview = String(instructions.prefix(30))
+            rewriteLabelFallback = instructions.count > 30 ? "\(preview)…" : preview
+        } else {
+            rewriteLabelFallback = "Rewriting…"
+        }
 
-                // Preserve original before streaming starts
-                var updated = note
-                if updated.originalContent == nil {
-                    updated.originalContent = persistedEditedContent
-                    noteStore.updateNote(updated)
-                }
+        scrollToTop()
+        contentFocused = false
 
-                // Stream with typewriter reveal
-                scrollToTop()
+        noteStore.startRewrite(
+            for: note,
+            title: editedTitle,
+            visibleContent: persistedEditedContent,
+            sourceContent: note.originalContent ?? persistedEditedContent,
+            userId: authStore.userId,
+            tone: tone,
+            instructions: instructions,
+            toneLabel: toneLabel,
+            toneEmoji: toneEmoji
+        )
 
-                let stream = AIService.rewriteStreaming(
-                    content: sourceContent,
-                    tone: tone,
-                    customInstructions: instructions,
-                    language: note.language,
-                    multiSpeaker: !(note.speakerNames ?? [:]).isEmpty
-                )
-
-                // Buffer streamed chunks, reveal progressively by character index
-                var fullText = ""
-                var revealed = 0
-                var firstChunk = true
-
-                for try await chunk in stream {
-                    fullText += chunk
-
-                    // Clear old content when first chunk arrives
-                    if firstChunk {
-                        editedContent = ""
-                        firstChunk = false
-                    }
-
-                    // Reveal buffered text a few characters at a time
-                    while revealed < fullText.count {
-                        let end = min(revealed + 3, fullText.count)
-                        let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
-                        let endIdx = fullText.index(fullText.startIndex, offsetBy: end)
-                        editedContent += fullText[startIdx..<endIdx]
-                        revealed = end
-                        try await Task.sleep(for: .milliseconds(15))
-                    }
-                }
-
-                // Flush any remaining
-                if revealed < fullText.count {
-                    let startIdx = fullText.index(fullText.startIndex, offsetBy: revealed)
-                    editedContent += fullText[startIdx...]
-                }
-
-                // Normalize any "- " line starts to "• " (safety net if model ignores prompt)
-                editedContent = editedContent
-                    .components(separatedBy: "\n")
-                    .map { $0.hasPrefix("- ") ? "• " + $0.dropFirst(2) : $0 }
-                    .joined(separator: "\n")
-
-                // Save rewrite version
-                let rewrite = NoteRewrite(
-                    id: UUID(),
-                    noteId: noteId,
-                    userId: authStore.userId,
-                    tone: tone,
-                    toneLabel: toneLabel,
-                    toneEmoji: toneEmoji,
-                    instructions: instructions,
-                    content: editedContent,
-                    createdAt: Date()
-                )
-                await noteStore.saveRewrite(rewrite)
-                rewrites = noteStore.rewritesCache[noteId] ?? []
-                activeRewriteId = rewrite.id
-                rewriteLabelFallback = nil
-                if rewriteLabelOpacity == 0 {
-                    try? await Task.sleep(for: .milliseconds(32))
-                    rewriteLabelOpacity = 1
-                }
-
-                // Save note content
-                updated.content = editedContent
-                updated.activeRewriteId = rewrite.id
-                updated.title = editedTitle.isEmpty ? nil : editedTitle
-                updated.updatedAt = Date()
-                noteStore.updateNote(updated)
-                markCurrentStateAsSaved()
-
-                // Auto-save custom instructions as a recent preset
-                if tone == nil, let instructions, !instructions.isEmpty {
-                    RecentPresetsStore.add(instructions: instructions)
-                }
-            } catch {
-                if editedContent.isEmpty {
-                    editedContent = note.originalContent ?? note.content
-                }
-                errorMessage = "Rewrite failed: \(error.localizedDescription)"
-            }
-            isRewriting = false
+        if tone == nil, let instructions, !instructions.isEmpty {
+            RecentPresetsStore.add(instructions: instructions)
         }
     }
 

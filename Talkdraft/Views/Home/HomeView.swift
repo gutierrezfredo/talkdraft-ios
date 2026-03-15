@@ -35,7 +35,10 @@ struct HomeView: View {
     @State var draggingCategory: Category?
     @State var chipsBarHeight: CGFloat = 0
     @State var searchPreviousCategory: UUID?
+    @State var showsSelectionSearchTransition = false
+    @State var selectionSearchTransitionTask: Task<Void, Never>?
     @Namespace var namespace
+    @Namespace var bottomBarNamespace
     @FocusState var searchFocused: Bool
 
     private let columns = [

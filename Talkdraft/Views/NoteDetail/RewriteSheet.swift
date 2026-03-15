@@ -353,6 +353,7 @@ struct RewriteSheet: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .searchable(text: $searchText, prompt: "Search presets")
+        .tint(Color.brand)
     }
 
     private var recentPresetsGrid: some View {
@@ -507,6 +508,7 @@ struct RewriteSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
                         .font(.brandTitle2)
+                        .tint(Color.brand)
                         .lineLimit(3...8)
                         .focused($customFocused)
                         .frame(maxWidth: .infinity, alignment: .leading)

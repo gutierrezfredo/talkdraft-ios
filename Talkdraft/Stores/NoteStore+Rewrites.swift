@@ -31,6 +31,127 @@ extension NoteStore {
 
     // MARK: - Rewrites
 
+    func rewriteLabel(for noteId: UUID) -> String? {
+        rewriteLabelsByNoteId[noteId]
+    }
+
+    func rewriteError(for noteId: UUID) -> String? {
+        rewriteErrorsByNoteId[noteId]
+    }
+
+    func clearRewriteError(for noteId: UUID) {
+        rewriteErrorsByNoteId[noteId] = nil
+    }
+
+    func startRewrite(
+        for noteSnapshot: Note,
+        title: String,
+        visibleContent: String,
+        sourceContent: String,
+        userId: UUID?,
+        tone: String?,
+        instructions: String?,
+        toneLabel: String?,
+        toneEmoji: String?
+    ) {
+        guard activeRewriteIds.insert(noteSnapshot.id).inserted else { return }
+
+        let label: String
+        if let emoji = toneEmoji, let name = toneLabel {
+            label = "\(emoji) \(name)"
+        } else if let name = toneLabel {
+            label = name
+        } else if let instructions, !instructions.isEmpty {
+            let preview = String(instructions.prefix(30))
+            label = instructions.count > 30 ? "\(preview)…" : preview
+        } else {
+            label = "Rewriting…"
+        }
+
+        rewriteLabelsByNoteId[noteSnapshot.id] = label
+        rewriteErrorsByNoteId[noteSnapshot.id] = nil
+
+        var note = notes.first(where: { $0.id == noteSnapshot.id }) ?? noteSnapshot
+        let introducedOriginalContent = note.originalContent == nil
+        note.userId = note.userId ?? userId
+        note.title = title.isEmpty ? nil : title
+        note.content = visibleContent
+        if introducedOriginalContent {
+            note.originalContent = sourceContent
+        }
+        note.updatedAt = Date()
+
+        if notes.contains(where: { $0.id == note.id }) {
+            updateNote(note)
+        } else {
+            addNote(note)
+        }
+
+        pendingRewriteTasks[note.id]?.cancel()
+        pendingRewriteTasks[note.id] = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.activeRewriteIds.remove(note.id)
+                self.rewriteLabelsByNoteId[note.id] = nil
+                self.pendingRewriteTasks[note.id] = nil
+            }
+
+            do {
+                let stream = self.aiRewriteStreamExecutor(
+                    sourceContent,
+                    tone,
+                    instructions,
+                    note.language,
+                    !(note.speakerNames ?? [:]).isEmpty
+                )
+
+                var fullText = ""
+                for try await chunk in stream {
+                    fullText += chunk
+                }
+
+                let rewrittenContent = self.normalizedRewriteContent(from: fullText)
+
+                let rewrite = NoteRewrite(
+                    id: UUID(),
+                    noteId: note.id,
+                    userId: userId,
+                    tone: tone,
+                    toneLabel: toneLabel,
+                    toneEmoji: toneEmoji,
+                    instructions: instructions,
+                    content: rewrittenContent,
+                    createdAt: Date()
+                )
+                await self.saveRewrite(rewrite)
+
+                guard var updated = self.notes.first(where: { $0.id == note.id }) else { return }
+                updated.title = title.isEmpty ? nil : title
+                updated.content = rewrittenContent
+                updated.activeRewriteId = rewrite.id
+                updated.updatedAt = Date()
+                self.updateNote(updated)
+            } catch is CancellationError {
+                self.rewriteErrorsByNoteId[note.id] = nil
+            } catch {
+                if introducedOriginalContent,
+                   var reverted = self.notes.first(where: { $0.id == note.id }) {
+                    reverted.originalContent = nil
+                    reverted.updatedAt = Date()
+                    self.updateNote(reverted)
+                }
+
+                self.rewriteErrorsByNoteId[note.id] = "Rewrite failed: \(error.localizedDescription)"
+                logger.error("rewrite failed for \(note.id): \(error.localizedDescription, privacy: .public)")
+                ErrorLogger.shared.log(
+                    type: "rewrite_failed",
+                    message: error.localizedDescription,
+                    context: ["note_id": note.id.uuidString]
+                )
+            }
+        }
+    }
+
     func fetchRewrites(for noteId: UUID) async {
         do {
             let fetched: [NoteRewrite] = try await supabase
@@ -141,5 +262,12 @@ extension NoteStore {
                 logger.error("deleteRewrites failed: \(error)")
             }
         }
+    }
+
+    private func normalizedRewriteContent(from text: String) -> String {
+        text
+            .components(separatedBy: "\n")
+            .map { $0.hasPrefix("- ") ? "• " + $0.dropFirst(2) : $0 }
+            .joined(separator: "\n")
     }
 }
