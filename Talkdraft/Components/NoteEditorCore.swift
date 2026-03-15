@@ -931,7 +931,7 @@ enum NoteTextFormatting {
     }
 
     static func headingFont(from font: UIFont) -> UIFont {
-        UIFont.systemFont(ofSize: font.pointSize + 8, weight: .semibold)
+        UIFont.systemFont(ofSize: 21, weight: .semibold)
     }
 
     private static func boldFont(from font: UIFont) -> UIFont {
@@ -939,6 +939,12 @@ enum NoteTextFormatting {
     }
 
     private static func displayText(forLine rawLine: String) -> String {
+        if checkboxState(for: rawLine) != nil {
+            let prefixLength = checkboxPrefixLength(in: rawLine)
+            let itemText = (rawLine as NSString).substring(from: prefixLength)
+            return "- \(stripBoldMarkers(in: itemText))"
+        }
+
         let headingPrefix = "# "
         let headingContent = rawLine.hasPrefix(headingPrefix)
             ? String(rawLine.dropFirst((headingPrefix as NSString).length))
