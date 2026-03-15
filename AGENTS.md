@@ -12,10 +12,10 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 
 - Read `DESIGN_RULES.md` before any UI change.
 - Read `PRODUCT.md` before any product or feature work. Use its terminology exactly.
-- Update `FEATURES.md` after adding, changing, or removing any feature.
+- Read `FEATURES.md` before starting any task.
 - Build and test on a physical device, not just the simulator.
 - Every data-fetching view needs loading, error, and empty states.
-- Code like a senior Apple engineer. Prefer first-party frameworks over third-party. Use proper Swift concurrency (`Sendable`, actors, structured concurrency) — avoid `@unchecked Sendable` when real conformance is possible. No unnecessary `NSObject` inheritance, no force unwraps, no redundant pipelines. Favor single-responsibility, clean encapsulation, and pre-computed data.
+- Prefer first-party Apple frameworks and idiomatic SwiftUI/Swift 6 patterns. Use structured concurrency, actors, and real `Sendable` conformance where appropriate; avoid `@unchecked Sendable` unless it is unavoidable and documented. Avoid force unwraps, unnecessary `NSObject` inheritance, and redundant abstraction layers. Favor small focused types, clear ownership boundaries, and precomputed view data when it simplifies rendering logic.
 
 ## Parallel Workflow (with Claude)
 
@@ -39,34 +39,6 @@ Two AI tools work on this project simultaneously using git worktrees.
 - After a PR is merged, sync your worktree before starting the next task
 - If your PR has merge conflicts, rebase onto `main` and resolve them
 - **Cross-review**: whoever didn't write the code reviews the PR. If asked to review Claude's PR, read the diff and leave comments
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| UI | SwiftUI (iOS 26+, Liquid Glass) |
-| State | `@Observable` classes via `@Environment` |
-| Backend | Supabase (Postgres + Auth + Storage + Edge Functions) |
-| Transcription | Groq Whisper API via Supabase Edge Function |
-| AI Titles | Gemini Flash via Supabase Edge Function (`generate-title`) |
-| AI Rewrite | Gemini Flash via Supabase Edge Function (`rewrite`) |
-| Translation | Gemini Flash via Supabase Edge Function |
-| Subscriptions | RevenueCat (`purchases-ios-spm`) |
-| Dependencies | Managed via Swift Package Manager |
-| Project Gen | xcodegen (`project.yml` → `xcodegen generate`) |
-
-## Project Structure
-
-```
-Talkdraft/
-├── App/          — Entry point, ContentView, Assets, Info.plist
-├── Views/        — SwiftUI screens (Home, Record, NoteDetail, Search, Settings, Auth, Categories)
-├── Models/       — Data models (Note, Category, Profile)
-├── Stores/       — @Observable state (AuthStore, NoteStore, SettingsStore)
-├── Services/     — Supabase client, transcription, AI, audio recorder/player
-├── Components/   — Reusable views
-└── Utils/        — Helpers
-```
 
 ## Key Config
 

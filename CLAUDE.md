@@ -5,7 +5,7 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 ## Context
 - Read `PRODUCT.md` before any product or feature work. Use its terminology exactly.
 - Read `DESIGN_RULES.md` before any UI change. Do not write UI code without it.
-- Update `FEATURES.md` after adding, changing, or removing any feature.
+- After reviewing/merging a Codex PR, update `FEATURES.md` based on what changed in the diff.
 
 ## Rules
 - Build and test on a physical device, not just the simulator.
