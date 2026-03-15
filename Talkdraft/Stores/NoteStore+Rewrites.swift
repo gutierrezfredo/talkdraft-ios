@@ -203,7 +203,7 @@ extension NoteStore {
                 case .completedDetached:
                     rewriteErrorsByNoteId[noteId] = "Rewrite finished, but the note changed before it could be applied."
                 case .queued, .processing, .completed, .canceled:
-                    break
+                    rewriteErrorsByNoteId[noteId] = nil
                 }
             }
 

@@ -164,7 +164,8 @@ Deno.serve(async (req) => {
       throw new Error(rewriteInsertError?.message ?? "Failed to save rewrite");
     }
 
-    const shouldApplyRewrite = note.content === job.source_content;
+    const shouldApplyRewrite = note.content === job.source_content ||
+      note.original_content === job.source_content;
     if (shouldApplyRewrite) {
       const noteUpdate: Record<string, unknown> = {
         content: rewrittenContent,
