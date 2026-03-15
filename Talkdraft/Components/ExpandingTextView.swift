@@ -53,6 +53,7 @@ struct ExpandingTextView: UIViewRepresentable {
         let tv = CheckboxTextView(frame: .zero, textContainer: textContainer)
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
+        tv.tintColor = Self.brandColor
         tv.textContainerInset = UIEdgeInsets(top: 0, left: horizontalPadding, bottom: 0, right: horizontalPadding)
         tv.textContainer.lineFragmentPadding = 0
         tv.keyboardAppearance = colorScheme == .dark ? .dark : .light
@@ -149,6 +150,7 @@ struct ExpandingTextView: UIViewRepresentable {
         if tv.keyboardAppearance != desiredAppearance {
             tv.keyboardAppearance = desiredAppearance
         }
+        tv.tintColor = Self.brandColor
 
         // Editability
         tv.isEditable = isEditable

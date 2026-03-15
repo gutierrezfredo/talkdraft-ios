@@ -502,16 +502,46 @@ struct RewriteSheet: View {
     }
 
     private var customView: some View {
-        VStack(spacing: 0) {
-            TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
-                .font(.brandTitle2)
-                .lineLimit(3...8)
-                .focused($customFocused)
-                .padding(.horizontal, 24)
-                .padding(.top, 32)
-                .onSubmit { if isCustomValid { submitCustom() } }
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
+                        .font(.brandTitle2)
+                        .lineLimit(3...8)
+                        .focused($customFocused)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 32)
+                        .padding(.bottom, 24)
+                        .onSubmit { if isCustomValid { submitCustom() } }
 
-            Spacer()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .topLeading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    customFocused = true
+                }
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            customSubmitBar
+        }
+    }
+
+    private var customSubmitBar: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    .clear,
+                    (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.85),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 20)
 
             Button {
                 submitCustom()
@@ -529,6 +559,7 @@ struct RewriteSheet: View {
             .disabled(!isCustomValid)
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
+            .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.85))
         }
     }
 

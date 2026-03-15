@@ -147,6 +147,10 @@ private struct EmailSignInSheet: View {
         max(resendCooldown, authStore.magicLinkCooldownRemaining)
     }
 
+    private var isEmailSubmitDisabled: Bool {
+        !isValid || authStore.isSendingMagicLink || authStore.magicLinkCooldownRemaining > 0
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -179,46 +183,74 @@ private struct EmailSignInSheet: View {
     }
 
     private var emailForm: some View {
-        VStack(spacing: 0) {
-            Text("Continue with your email")
-                .font(.brandTitle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Continue with your email")
+                        .font(.brandTitle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 24)
 
-            Text("We'll send you a sign-in link. No password needed.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
+                    Text("We'll send you a sign-in link. No password needed.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
 
-            TextField("Enter your email", text: $email)
-                .font(.brandTitle2)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .focused($emailFocused)
-                .padding(.horizontal, 24)
-                .padding(.top, 120)
-                .onAppear { emailFocused = true }
-                .onSubmit { if isValid { sendLink() } }
+                    TextField("Enter your email", text: $email)
+                        .font(.brandTitle2)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .focused($emailFocused)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 120)
+                        .onAppear { emailFocused = true }
+                        .onSubmit { if isValid { sendLink() } }
 
-                if let error = authStore.error {
-                    Text(error)
-                        .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
+                    if let error = authStore.error {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 12)
+                    }
+
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .topLeading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    emailFocused = true
+                }
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            emailSubmitBar
+        }
+    }
 
-                Spacer()
+    private var emailSubmitBar: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    .clear,
+                    backgroundColor.opacity(0.85),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 20)
 
-                Button {
-                    sendLink()
+            Button {
+                sendLink()
             } label: {
                 Group {
                     if authStore.isSendingMagicLink {
@@ -237,9 +269,10 @@ private struct EmailSignInSheet: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(!isValid || authStore.isSendingMagicLink || authStore.magicLinkCooldownRemaining > 0)
+            .disabled(isEmailSubmitDisabled)
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
+            .background(backgroundColor.opacity(0.85))
         }
     }
 

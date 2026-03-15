@@ -51,6 +51,7 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(colorScheme)
+        .tint(Color.brand)
         .task {
             await authStore.initialize(settingsStore: settingsStore, noteStore: noteStore)
             // Belt-and-suspenders: if startup auth state was already available before onChange
