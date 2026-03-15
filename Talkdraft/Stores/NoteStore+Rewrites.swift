@@ -147,11 +147,19 @@ extension NoteStore {
 
     func startRewriteJobPolling() {
         guard rewriteJobPollingTask == nil else { return }
+        let token = UUID()
+        rewriteJobPollingToken = token
         rewriteJobPollingTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 await self.refreshRewriteJobs()
+                guard !Task.isCancelled else { break }
+                guard !self.activeRewriteIds.isEmpty else { break }
                 try? await Task.sleep(for: .seconds(5))
+            }
+            if self.rewriteJobPollingToken == token {
+                self.rewriteJobPollingTask = nil
+                self.rewriteJobPollingToken = nil
             }
         }
     }
@@ -159,6 +167,7 @@ extension NoteStore {
     func stopRewriteJobPolling() {
         rewriteJobPollingTask?.cancel()
         rewriteJobPollingTask = nil
+        rewriteJobPollingToken = nil
     }
 
     func refreshRewriteJobs() async {

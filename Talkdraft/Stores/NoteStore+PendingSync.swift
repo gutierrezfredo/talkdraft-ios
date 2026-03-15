@@ -90,6 +90,7 @@ extension NoteStore {
         rewriteLabelsByNoteId = [:]
         rewriteErrorsByNoteId = [:]
         attemptedRewriteTriggerIds = []
+        rewriteJobPollingToken = nil
         generatingTitleIds = []
         activeTranscriptionIds = []
         currentSessionUserId = userId
@@ -126,6 +127,7 @@ extension NoteStore {
         rewriteLabelsByNoteId = [:]
         rewriteErrorsByNoteId = [:]
         attemptedRewriteTriggerIds = []
+        rewriteJobPollingToken = nil
         localVoiceBodyStates = [:]
         pendingNoteUpserts = [:]
         pendingHardDeletes = []

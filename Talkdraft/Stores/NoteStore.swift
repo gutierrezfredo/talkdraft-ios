@@ -131,6 +131,7 @@ final class NoteStore {
     @ObservationIgnored var pendingNoteSyncTokens: [UUID: UUID] = [:]
     @ObservationIgnored var pendingHardDeleteTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored var rewriteJobPollingTask: Task<Void, Never>?
+    @ObservationIgnored var rewriteJobPollingToken: UUID?
     @ObservationIgnored var attemptedRewriteTriggerIds: Set<UUID> = []
     @ObservationIgnored var isRefreshingRewriteJobs = false
     var currentSessionUserId: UUID?
