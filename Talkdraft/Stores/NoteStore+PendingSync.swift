@@ -84,6 +84,14 @@ extension NoteStore {
         guard currentSessionUserId != userId else { return }
         cancelAllPendingNoteSyncTasks()
         cancelAllPendingHardDeleteTasks()
+        stopRewriteJobPolling()
+        rewriteJobsByNoteId = [:]
+        activeRewriteIds = []
+        rewriteLabelsByNoteId = [:]
+        rewriteErrorsByNoteId = [:]
+        attemptedRewriteTriggerIds = []
+        generatingTitleIds = []
+        activeTranscriptionIds = []
         currentSessionUserId = userId
         localVoiceBodyStates = persistsLocalVoiceBodyStates ? Self.loadLocalVoiceBodyStates(for: userId) : localVoiceBodyStates
         pendingNoteUpserts = persistsPendingNoteUpserts ? Self.loadPendingNoteUpserts(for: userId) : pendingNoteUpserts
@@ -102,11 +110,12 @@ extension NoteStore {
     func resetSession() {
         cancelAllPendingNoteSyncTasks()
         cancelAllPendingHardDeleteTasks()
-        cancelAllPendingRewriteTasks()
+        stopRewriteJobPolling()
         notes = []
         deletedNotes = []
         categories = []
         rewritesCache = [:]
+        rewriteJobsByNoteId = [:]
         selectedCategoryId = nil
         isLoading = false
         hasInitiallyLoaded = false
@@ -116,20 +125,13 @@ extension NoteStore {
         activeRewriteIds = []
         rewriteLabelsByNoteId = [:]
         rewriteErrorsByNoteId = [:]
+        attemptedRewriteTriggerIds = []
         localVoiceBodyStates = [:]
         pendingNoteUpserts = [:]
         pendingHardDeletes = []
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         currentSessionUserId = nil
-    }
-
-    func cancelAllPendingRewriteTasks() {
-        let tasks = pendingRewriteTasks.values
-        pendingRewriteTasks.removeAll()
-        for task in tasks {
-            task.cancel()
-        }
     }
 
     var pendingDeletedNotesById: [UUID: Note] {

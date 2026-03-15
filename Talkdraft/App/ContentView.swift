@@ -57,6 +57,7 @@ struct ContentView: View {
             // hooks settled, initialize the user session here too.
             if authStore.isAuthenticated, let userId = authStore.userId {
                 noteStore.beginSession(userId: userId)
+                noteStore.startRewriteJobPolling()
                 if !subscriptionStore.entitlementChecked {
                     await subscriptionStore.login(userId: userId)
                 }
@@ -69,6 +70,7 @@ struct ContentView: View {
             if authenticated {
                 if let userId = authStore.userId {
                     noteStore.beginSession(userId: userId)
+                    noteStore.startRewriteJobPolling()
                     Task { await noteStore.refresh() }
                     Task { await subscriptionStore.login(userId: userId) }
                 }
@@ -87,6 +89,7 @@ struct ContentView: View {
 
             noteStore.resetSession()
             noteStore.beginSession(userId: newValue)
+            noteStore.startRewriteJobPolling()
             Task { await noteStore.refresh() }
             Task { await subscriptionStore.login(userId: newValue) }
         }
@@ -97,15 +100,23 @@ struct ContentView: View {
                 noteStore.repairOrphanedTranscriptions()
                 noteStore.retryPendingNoteUpserts()
                 noteStore.retryPendingHardDeletes()
+                await noteStore.refreshRewriteJobs()
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 noteStore.retryWaitingNotes(language: language, userId: authStore.userId, customDictionary: settingsStore.customDictionary)
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .background else { return }
-            Task {
-                await noteStore.flushPendingNoteUpserts()
-                await noteStore.flushPendingHardDeletes()
+            switch phase {
+            case .active:
+                noteStore.startRewriteJobPolling()
+            case .background:
+                noteStore.stopRewriteJobPolling()
+                Task {
+                    await noteStore.flushPendingNoteUpserts()
+                    await noteStore.flushPendingHardDeletes()
+                }
+            default:
+                break
             }
         }
     }

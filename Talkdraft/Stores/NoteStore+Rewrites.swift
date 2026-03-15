@@ -54,21 +54,12 @@ extension NoteStore {
         toneLabel: String?,
         toneEmoji: String?
     ) {
-        guard activeRewriteIds.insert(noteSnapshot.id).inserted else { return }
-
-        let label: String
-        if let emoji = toneEmoji, let name = toneLabel {
-            label = "\(emoji) \(name)"
-        } else if let name = toneLabel {
-            label = name
-        } else if let instructions, !instructions.isEmpty {
-            let preview = String(instructions.prefix(30))
-            label = instructions.count > 30 ? "\(preview)…" : preview
-        } else {
-            label = "Rewriting…"
+        guard let userId else {
+            rewriteErrorsByNoteId[noteSnapshot.id] = "You need to be signed in to rewrite notes."
+            return
         }
+        guard rewriteJobsByNoteId[noteSnapshot.id]?.status.isActive != true else { return }
 
-        rewriteLabelsByNoteId[noteSnapshot.id] = label
         rewriteErrorsByNoteId[noteSnapshot.id] = nil
 
         var note = notes.first(where: { $0.id == noteSnapshot.id }) ?? noteSnapshot
@@ -87,68 +78,137 @@ extension NoteStore {
             addNote(note)
         }
 
-        pendingRewriteTasks[note.id]?.cancel()
-        pendingRewriteTasks[note.id] = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                self.activeRewriteIds.remove(note.id)
-                self.rewriteLabelsByNoteId[note.id] = nil
-                self.pendingRewriteTasks[note.id] = nil
-            }
+        let optimisticJob = NoteRewriteJob(
+            id: UUID(),
+            noteId: note.id,
+            userId: userId,
+            status: .queued,
+            sourceContent: sourceContent,
+            titleSnapshot: title.isEmpty ? nil : title,
+            tone: tone,
+            toneLabel: toneLabel,
+            toneEmoji: toneEmoji,
+            instructions: instructions,
+            noteUpdatedAtSnapshot: note.updatedAt,
+            rewriteId: nil,
+            errorMessage: nil,
+            createdAt: Date(),
+            startedAt: nil,
+            finishedAt: nil
+        )
+        applyRewriteJobSnapshot([optimisticJob])
 
+        Task {
             do {
-                let stream = self.aiRewriteStreamExecutor(
-                    sourceContent,
-                    tone,
-                    instructions,
-                    note.language,
-                    !(note.speakerNames ?? [:]).isEmpty
-                )
+                let created: NoteRewriteJob = try await supabase
+                    .from("note_rewrite_jobs")
+                    .insert(
+                        RewriteJobCreatePayload(
+                            noteId: optimisticJob.noteId,
+                            userId: optimisticJob.userId,
+                            status: optimisticJob.status,
+                            sourceContent: optimisticJob.sourceContent,
+                            titleSnapshot: optimisticJob.titleSnapshot,
+                            tone: optimisticJob.tone,
+                            toneLabel: optimisticJob.toneLabel,
+                            toneEmoji: optimisticJob.toneEmoji,
+                            instructions: optimisticJob.instructions,
+                            noteUpdatedAtSnapshot: optimisticJob.noteUpdatedAtSnapshot
+                        )
+                    )
+                    .select()
+                    .single()
+                    .execute()
+                    .value
 
-                var fullText = ""
-                for try await chunk in stream {
-                    fullText += chunk
-                }
-
-                let rewrittenContent = self.normalizedRewriteContent(from: fullText)
-
-                let rewrite = NoteRewrite(
-                    id: UUID(),
-                    noteId: note.id,
-                    userId: userId,
-                    tone: tone,
-                    toneLabel: toneLabel,
-                    toneEmoji: toneEmoji,
-                    instructions: instructions,
-                    content: rewrittenContent,
-                    createdAt: Date()
-                )
-                await self.saveRewrite(rewrite)
-
-                guard var updated = self.notes.first(where: { $0.id == note.id }) else { return }
-                updated.title = title.isEmpty ? nil : title
-                updated.content = rewrittenContent
-                updated.activeRewriteId = rewrite.id
-                updated.updatedAt = Date()
-                self.updateNote(updated)
-            } catch is CancellationError {
-                self.rewriteErrorsByNoteId[note.id] = nil
+                applyRewriteJobSnapshot([created])
+                try await triggerRewriteJob(created.id)
             } catch {
                 if introducedOriginalContent,
-                   var reverted = self.notes.first(where: { $0.id == note.id }) {
+                   var reverted = notes.first(where: { $0.id == note.id }) {
                     reverted.originalContent = nil
                     reverted.updatedAt = Date()
-                    self.updateNote(reverted)
+                    updateNote(reverted)
                 }
 
-                self.rewriteErrorsByNoteId[note.id] = "Rewrite failed: \(error.localizedDescription)"
-                logger.error("rewrite failed for \(note.id): \(error.localizedDescription, privacy: .public)")
+                rewriteJobsByNoteId[note.id] = nil
+                activeRewriteIds.remove(note.id)
+                rewriteLabelsByNoteId[note.id] = nil
+                rewriteErrorsByNoteId[note.id] = "Rewrite failed: \(error.localizedDescription)"
+                logger.error("startRewrite failed for \(note.id): \(error.localizedDescription, privacy: .public)")
                 ErrorLogger.shared.log(
-                    type: "rewrite_failed",
+                    type: "rewrite_job_start_failed",
                     message: error.localizedDescription,
                     context: ["note_id": note.id.uuidString]
                 )
             }
+        }
+    }
+
+    func startRewriteJobPolling() {
+        guard rewriteJobPollingTask == nil else { return }
+        rewriteJobPollingTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.refreshRewriteJobs()
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
+
+    func stopRewriteJobPolling() {
+        rewriteJobPollingTask?.cancel()
+        rewriteJobPollingTask = nil
+    }
+
+    func refreshRewriteJobs() async {
+        guard currentSessionUserId != nil, !isRefreshingRewriteJobs else { return }
+        isRefreshingRewriteJobs = true
+        defer { isRefreshingRewriteJobs = false }
+
+        do {
+            let fetched: [NoteRewriteJob] = try await supabase
+                .from("note_rewrite_jobs")
+                .select()
+                .order("created_at", ascending: false)
+                .limit(200)
+                .execute()
+                .value
+
+            let noteIds = Set(notes.map(\.id))
+            let relevant = fetched.filter { noteIds.contains($0.noteId) }
+            let previousByNote = rewriteJobsByNoteId
+            let previousActiveIds = Set(previousByNote.values.compactMap { $0.status.isActive ? $0.noteId : nil })
+
+            applyRewriteJobSnapshot(relevant, replacingAll: true)
+
+            for job in rewriteJobsByNoteId.values where job.status == .queued && !attemptedRewriteTriggerIds.contains(job.id) {
+                try? await triggerRewriteJob(job.id)
+            }
+
+            let currentActiveIds = Set(rewriteJobsByNoteId.values.compactMap { $0.status.isActive ? $0.noteId : nil })
+            let completedIds = previousActiveIds.subtracting(currentActiveIds)
+
+            for (noteId, job) in rewriteJobsByNoteId {
+                let previousStatus = previousByNote[noteId]?.status
+                guard previousStatus != job.status else { continue }
+                switch job.status {
+                case .failed:
+                    rewriteErrorsByNoteId[noteId] = job.errorMessage ?? "Rewrite failed."
+                case .completedDetached:
+                    rewriteErrorsByNoteId[noteId] = "Rewrite finished, but the note changed before it could be applied."
+                case .queued, .processing, .completed, .canceled:
+                    break
+                }
+            }
+
+            guard !completedIds.isEmpty else { return }
+            try? await fetchNotes()
+            for noteId in completedIds {
+                await fetchRewrites(for: noteId)
+            }
+        } catch {
+            logger.error("refreshRewriteJobs failed: \(error)")
         }
     }
 
@@ -259,15 +319,65 @@ extension NoteStore {
                     .eq("note_id", value: noteId.uuidString)
                     .execute()
             } catch {
-                logger.error("deleteRewrites failed: \(error)")
+            logger.error("deleteRewrites failed: \(error)")
             }
         }
     }
 
-    private func normalizedRewriteContent(from text: String) -> String {
-        text
-            .components(separatedBy: "\n")
-            .map { $0.hasPrefix("- ") ? "• " + $0.dropFirst(2) : $0 }
-            .joined(separator: "\n")
+    private func rewriteDisplayLabel(
+        toneLabel: String?,
+        toneEmoji: String?,
+        instructions: String?
+    ) -> String {
+        if let emoji = toneEmoji, let name = toneLabel {
+            return "\(emoji) \(name)"
+        } else if let name = toneLabel {
+            return name
+        } else if let instructions, !instructions.isEmpty {
+            let preview = String(instructions.prefix(30))
+            return instructions.count > 30 ? "\(preview)…" : preview
+        }
+        return "Rewriting…"
+    }
+
+    private func applyRewriteJobSnapshot(_ jobs: [NoteRewriteJob], replacingAll: Bool = false) {
+        let grouped = Dictionary(grouping: jobs, by: \.noteId)
+        let trackedNoteIds = Set(notes.map(\.id))
+        var updated: [UUID: NoteRewriteJob] = replacingAll ? [:] : rewriteJobsByNoteId
+
+        for noteId in trackedNoteIds where replacingAll || grouped[noteId] != nil {
+            if let selected = grouped[noteId]?.first(where: { $0.status.isActive }) ?? grouped[noteId]?.first {
+                updated[noteId] = selected
+            } else if replacingAll {
+                updated[noteId] = nil
+            }
+        }
+
+        updated = updated.filter { trackedNoteIds.contains($0.key) }
+
+        rewriteJobsByNoteId = updated
+        activeRewriteIds = Set(updated.values.compactMap { $0.status.isActive ? $0.noteId : nil })
+        rewriteLabelsByNoteId = Dictionary(
+            uniqueKeysWithValues: updated.compactMap { noteId, job in
+                guard job.status.isActive else { return nil }
+                return (noteId, job.displayLabel)
+            }
+        )
+        attemptedRewriteTriggerIds = Set(
+            updated.values.compactMap { job in
+                job.status == .queued ? nil : job.id
+            }
+        )
+    }
+
+    private func triggerRewriteJob(_ jobId: UUID) async throws {
+        attemptedRewriteTriggerIds.insert(jobId)
+        let _: RewriteJobTriggerResponse = try await supabase.functions.invoke(
+            "process-rewrite-job",
+            options: .init(
+                method: .post,
+                body: RewriteJobTriggerPayload(jobId: jobId)
+            )
+        )
     }
 }

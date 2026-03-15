@@ -11,7 +11,6 @@ typealias NoteHardDeleteExecutor = @MainActor (UUID) async throws -> Void
 typealias TranscriptionConnectivityProbe = @MainActor () async throws -> Void
 typealias TranscriptionUploadExecutor = @MainActor (TranscriptionUploadRequest) async throws -> TranscriptionResult
 typealias AITitleExecutor = @MainActor (String, String?) async throws -> String
-typealias AIRewriteStreamExecutor = @MainActor (String, String?, String?, String?, Bool) -> AsyncThrowingStream<String, Error>
 
 struct TranscriptionUploadRequest: Sendable {
     let audioData: Data
@@ -112,6 +111,7 @@ final class NoteStore {
     var lastError: String?
     var generatingTitleIds: Set<UUID> = []
     var activeTranscriptionIds: Set<UUID> = []
+    var rewriteJobsByNoteId: [UUID: NoteRewriteJob] = [:]
     var activeRewriteIds: Set<UUID> = []
     var rewriteLabelsByNoteId: [UUID: String] = [:]
     var rewriteErrorsByNoteId: [UUID: String] = [:]
@@ -127,11 +127,12 @@ final class NoteStore {
     @ObservationIgnored let transcriptionConnectivityProbe: TranscriptionConnectivityProbe
     @ObservationIgnored let transcriptionUploadExecutor: TranscriptionUploadExecutor
     @ObservationIgnored let aiTitleExecutor: AITitleExecutor
-    @ObservationIgnored let aiRewriteStreamExecutor: AIRewriteStreamExecutor
     @ObservationIgnored var pendingNoteSyncTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored var pendingNoteSyncTokens: [UUID: UUID] = [:]
     @ObservationIgnored var pendingHardDeleteTasks: [UUID: Task<Void, Never>] = [:]
-    @ObservationIgnored var pendingRewriteTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var rewriteJobPollingTask: Task<Void, Never>?
+    @ObservationIgnored var attemptedRewriteTriggerIds: Set<UUID> = []
+    @ObservationIgnored var isRefreshingRewriteJobs = false
     var currentSessionUserId: UUID?
     var noteSyncRevisions: [UUID: Int] = [:]
     var categorySyncRevisions: [UUID: Int] = [:]
@@ -148,8 +149,7 @@ final class NoteStore {
         hardDeleteExecutor: NoteHardDeleteExecutor? = nil,
         transcriptionConnectivityProbe: TranscriptionConnectivityProbe? = nil,
         transcriptionUploadExecutor: TranscriptionUploadExecutor? = nil,
-        aiTitleExecutor: AITitleExecutor? = nil,
-        aiRewriteStreamExecutor: AIRewriteStreamExecutor? = nil
+        aiTitleExecutor: AITitleExecutor? = nil
     ) {
         self.persistsLocalVoiceBodyStates = persistsLocalVoiceBodyStates
         self.persistsPendingNoteUpserts = persistsPendingNoteUpserts
@@ -194,15 +194,6 @@ final class NoteStore {
         }
         self.aiTitleExecutor = aiTitleExecutor ?? { content, language in
             try await AIService.generateTitle(for: content, language: language)
-        }
-        self.aiRewriteStreamExecutor = aiRewriteStreamExecutor ?? { content, tone, customInstructions, language, multiSpeaker in
-            AIService.rewriteStreaming(
-                content: content,
-                tone: tone,
-                customInstructions: customInstructions,
-                language: language,
-                multiSpeaker: multiSpeaker
-            )
         }
         self.localVoiceBodyStates = localVoiceBodyStates ?? [:]
         self.pendingNoteUpserts = pendingNoteUpserts ?? [:]
@@ -450,6 +441,7 @@ final class NoteStore {
         // Tuple await propagates the first error and implicitly cancels siblings.
         try? await fetchedNotes
         try? await fetchedCategories
+        await refreshRewriteJobs()
     }
 
     func fetchNotes() async throws {
