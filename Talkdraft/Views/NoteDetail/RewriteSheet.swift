@@ -164,7 +164,7 @@ struct RewriteSheet: View {
                 .padding(.top, 8)
                 .animation(.snappy, value: selectedTab)
                 .onChange(of: selectedTab) {
-                    customFocused = false
+                    customFocused = selectedTab == 1
                 }
 
                 if selectedTab == 0 {
@@ -353,6 +353,7 @@ struct RewriteSheet: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .searchable(text: $searchText, prompt: "Search presets")
+        .tint(Color.brand)
     }
 
     private var recentPresetsGrid: some View {
@@ -497,38 +498,75 @@ struct RewriteSheet: View {
 
     // MARK: - Custom
 
+    private var isCustomValid: Bool {
+        !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private var customView: some View {
-        VStack(spacing: 20) {
-            TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
-                .font(.body)
-                .lineLimit(3...8)
-                .focused($customFocused)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                )
-                .padding(.horizontal, 20)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
+                        .font(.brandTitle2)
+                        .tint(Color.brand)
+                        .lineLimit(3...8)
+                        .focused($customFocused)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 32)
+                        .padding(.bottom, 24)
+                        .onSubmit { if isCustomValid { submitCustom() } }
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .topLeading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    customFocused = true
+                }
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            customSubmitBar
+        }
+    }
+
+    private var customSubmitBar: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    .clear,
+                    (colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.85),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 20)
 
             Button {
-                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces), nil, nil)
-                dismiss()
+                submitCustom()
             } label: {
                 Text("Rewrite")
-                    .font(.body)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(isCustomValid ? .white : .secondary)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Capsule().fill(Color.brand))
+                    .frame(height: 56)
+                    .background(
+                        Capsule().fill(isCustomValid ? Color.brand : (colorScheme == .dark ? Color.darkSurface : Color.secondary.opacity(0.12)))
+                    )
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .disabled(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
-
-            Spacer()
+            .disabled(!isCustomValid)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+            .background((colorScheme == .dark ? Color.darkBackground : Color.warmBackground).opacity(0.85))
         }
-        .padding(.top, 20)
+    }
+
+    private func submitCustom() {
+        onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces), nil, nil)
+        dismiss()
     }
 }

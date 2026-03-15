@@ -29,7 +29,7 @@ extension ExpandingTextView.Coordinator {
             return false
         }
         if tv.isFirstResponder {
-            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let mapper = ExpandingTextView.mapper(for: tv)
             pendingCheckboxTapSelection = mapper.plainRange(forAttributedRange: tv.selectedRange)
         } else {
             pendingCheckboxTapSelection = nil
@@ -53,7 +53,7 @@ extension ExpandingTextView.Coordinator {
     /// Toggles the checkbox at the given plain-text index. Called from handleCheckboxTap.
     func toggleCheckbox(at plainIndex: Int, in tv: CheckboxTextView) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let mapper = ExpandingTextView.mapper(for: tv)
         let savedSelection = pendingCheckboxTapSelection ?? mapper.plainRange(forAttributedRange: tv.selectedRange)
         pendingCheckboxTapSelection = nil
         guard let updatedText = NoteEditorRules.toggleCheckbox(in: parent.text, at: plainIndex) else { return }
@@ -87,7 +87,7 @@ extension ExpandingTextView.Coordinator {
         var fraction: CGFloat = 0
         let charIdx = lm.characterIndex(for: layoutPoint, in: tc, fractionOfDistanceBetweenInsertionPoints: &fraction)
 
-        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let mapper = ExpandingTextView.mapper(for: tv)
         let plainOffset = mapper.plainOffset(forAttributedOffset: charIdx)
 
         let nsText = parent.text as NSString
@@ -135,7 +135,7 @@ extension ExpandingTextView.Coordinator {
 
         let nsText = parent.text as NSString
         guard nsText.length > 0 else { return nil }
-        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let mapper = ExpandingTextView.mapper(for: tv)
         let plainOffset = mapper.plainOffset(forAttributedOffset: charIdx)
         let safeOffset = min(plainOffset, nsText.length - 1)
         let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))
@@ -159,7 +159,7 @@ extension ExpandingTextView.Coordinator {
             nudgeCursorOffSpeakerLine(tv)
         }
 
-        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let mapper = ExpandingTextView.mapper(for: tv)
         parent.cursorPosition = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
         scheduleTypingAttributesSync(for: tv)
         guard tv.isFirstResponder else { return }
@@ -187,7 +187,7 @@ extension ExpandingTextView.Coordinator {
     func nudgeCursorOffSpeakerLine(_ tv: UITextView) {
         let nsText = parent.text as NSString
         guard nsText.length > 0, tv.selectedRange.length == 0 else { return }
-        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let mapper = ExpandingTextView.mapper(for: tv)
         let cursor = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
         let safeOffset = min(cursor, nsText.length - 1)
         let lineRange = nsText.lineRange(for: NSRange(location: safeOffset, length: 0))

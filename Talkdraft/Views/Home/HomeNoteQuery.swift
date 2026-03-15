@@ -15,8 +15,9 @@ struct HomeNoteQuery {
         if !query.isEmpty {
             let lowered = query.lowercased()
             filtered = filtered.filter { note in
-                (note.title?.lowercased().contains(lowered) ?? false)
-                    || resolvedContent(note).lowercased().contains(lowered)
+                let normalizedContent = NoteTextFormatting.plainDisplayText(for: resolvedContent(note))
+                return (note.title?.lowercased().contains(lowered) ?? false)
+                    || normalizedContent.lowercased().contains(lowered)
             }
         }
 

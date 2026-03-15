@@ -230,10 +230,7 @@ extension HomeView {
                 .matchedTransitionSource(id: "record", in: namespace)
 
             Button {
-                withAnimation(.snappy) {
-                    isSearching = true
-                }
-                searchFocused = true
+                beginSearch()
             } label: {
                 Image(systemName: "magnifyingglass")
                     .fontWeight(.medium)
@@ -249,37 +246,10 @@ extension HomeView {
 
     var searchBar: some View {
         HStack(spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-
-                TextField("Search", text: $query)
-                    .font(.body)
-                    .focused($searchFocused)
-                    .submitLabel(.search)
-
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 44)
-            .glassEffect(.regular, in: .capsule)
+            searchFieldShell
 
             Button {
-                withAnimation(.snappy) {
-                    isSearching = false
-                    query = ""
-                    searchFocused = false
-                }
+                endSearch()
             } label: {
                 Image(systemName: "xmark")
                     .font(.body)
@@ -292,6 +262,55 @@ extension HomeView {
         }
         .padding(.horizontal, 16)
         .contentShape(Rectangle())
+    }
+
+    var searchFieldShell: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            TextField("Search", text: $query)
+                .font(.body)
+                .tint(Color.brand)
+                .focused($searchFocused)
+                .submitLabel(.search)
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+        .glassEffect(.regular, in: .capsule)
+        .matchedGeometryEffect(id: "home-search-shell", in: bottomBarNamespace)
+    }
+
+    var selectionSearchTransitionPill: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.body)
+                .foregroundStyle(Color.brand)
+
+            Text(query)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .contentTransition(.opacity)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 44)
+        .glassEffect(.regular, in: .capsule)
+        .matchedGeometryEffect(id: "home-search-shell", in: bottomBarNamespace)
     }
 
     var selectionToolbar: some View {
@@ -338,6 +357,14 @@ extension HomeView {
         }
         .padding(.horizontal, 20)
         .contentShape(Rectangle())
+        .overlay(alignment: .top) {
+            if showsSelectionSearchTransition, isSearching, !query.isEmpty {
+                selectionSearchTransitionPill
+                    .padding(.horizontal, 20)
+                    .offset(y: -52)
+                    .transition(.opacity)
+            }
+        }
     }
 
     var bulkCategoryPicker: some View {

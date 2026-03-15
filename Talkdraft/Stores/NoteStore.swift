@@ -111,6 +111,10 @@ final class NoteStore {
     var lastError: String?
     var generatingTitleIds: Set<UUID> = []
     var activeTranscriptionIds: Set<UUID> = []
+    var rewriteJobsByNoteId: [UUID: NoteRewriteJob] = [:]
+    var activeRewriteIds: Set<UUID> = []
+    var rewriteLabelsByNoteId: [UUID: String] = [:]
+    var rewriteErrorsByNoteId: [UUID: String] = [:]
     var localVoiceBodyStates: [UUID: NoteBodyState]
     var pendingNoteUpserts: [UUID: Note]
     var pendingHardDeletes: Set<UUID>
@@ -126,6 +130,10 @@ final class NoteStore {
     @ObservationIgnored var pendingNoteSyncTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored var pendingNoteSyncTokens: [UUID: UUID] = [:]
     @ObservationIgnored var pendingHardDeleteTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var rewriteJobPollingTask: Task<Void, Never>?
+    @ObservationIgnored var rewriteJobPollingToken: UUID?
+    @ObservationIgnored var attemptedRewriteTriggerIds: Set<UUID> = []
+    @ObservationIgnored var isRefreshingRewriteJobs = false
     var currentSessionUserId: UUID?
     var noteSyncRevisions: [UUID: Int] = [:]
     var categorySyncRevisions: [UUID: Int] = [:]
@@ -434,6 +442,7 @@ final class NoteStore {
         // Tuple await propagates the first error and implicitly cancels siblings.
         try? await fetchedNotes
         try? await fetchedCategories
+        await refreshRewriteJobs()
     }
 
     func fetchNotes() async throws {

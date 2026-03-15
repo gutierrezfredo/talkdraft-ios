@@ -17,7 +17,7 @@ Voice + text capture app with AI-generated titles, transcription, translation, a
 - Claude worktree: `talkdraft-ios-claude/`, Codex: `talkdraft-ios-codex/`, Main: `talkdraft-ios/`
 - Stay in your assigned worktree — never touch the others
 - Branch from latest `main` before each task: `git fetch origin && git checkout -b <tool>/task-name origin/main`
-- Push branch and open PR to `main` when done
+- Push branch and open PR to `main` when done — **never merge without explicit user approval**
 - Cross-review: whoever didn't write the code reviews the PR
 
 ## Config

@@ -41,8 +41,6 @@ struct NoteDetailView: View {
     @State var showCategoryPicker = false
     @State var showRewriteSheet = false
     @State var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
-    @State var isRewriting = false
-    @State var rewritingLabel: String = ""
     @State var rewrites: [NoteRewrite] = []
     @State var activeRewriteId: UUID?
     @State var rewriteLabelFallback: String?
@@ -72,8 +70,6 @@ struct NoteDetailView: View {
     @State var autosaveTask: Task<Void, Never>?
 
     @State var transcribingVideoPlayer: AVQueuePlayer?
-    @State var transcribingPresentationTask: Task<Void, Never>?
-    @State var showTranscribingIndicator = false
     @State var transcribingPlayerLooper: AVPlayerLooper?
     @State var transcribingPhraseIndex = 0
     @State var transcribingIsLong = false
@@ -135,6 +131,14 @@ struct NoteDetailView: View {
 
     var isGeneratingTitle: Bool {
         noteStore.generatingTitleIds.contains(noteId)
+    }
+
+    var isRewriting: Bool {
+        noteStore.activeRewriteIds.contains(noteId)
+    }
+
+    var rewritingLabel: String {
+        noteStore.rewriteLabel(for: noteId) ?? ""
     }
 
     init(note: Note, initialContent: String? = nil) {
@@ -220,28 +224,259 @@ struct NoteDetailView: View {
 
 
     var body: some View {
+        noteDetailLifecycleView
+    }
+
+    var noteDetailLifecycleView: some View {
+        noteDetailPresentationView
+            .task {
+                rewrites = noteStore.rewritesCache[noteId] ?? []
+                activeRewriteId = note.activeRewriteId
+                if activeRewriteId != nil {
+                    rewriteLabelFallback = nil
+                }
+                repairMissingActiveRewriteSelection()
+
+                await noteStore.fetchRewrites(for: noteId)
+                rewrites = noteStore.rewritesCache[noteId] ?? []
+                activeRewriteId = note.activeRewriteId
+                if activeRewriteId != nil {
+                    rewriteLabelFallback = nil
+                }
+                repairMissingActiveRewriteSelection()
+                let displayContent = noteStore.displayContent(for: note)
+                if editedContent != displayContent {
+                    acceptResolvedNoteContent(displayContent)
+                } else if contentOpacity == 0 {
+                    withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
+                }
+                if showsRewriteToolbarLabel, rewriteLabelOpacity == 0 {
+                    rewriteLabelOpacity = 1
+                }
+            }
+            .task {
+                // Auto-focus for new text notes — delay lets the view hierarchy and trait
+                // collection fully settle before the keyboard appears, preventing a color flash.
+                guard initialNote.source == .text && initialNote.content.isEmpty else { return }
+                try? await Task.sleep(for: .milliseconds(450))
+                contentFocused = true
+                moveCursorToEnd = true
+            }
+            .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
+            .onChange(of: audioExpanded) { _, expanded in
+                if expanded, let url = audioURL {
+                    player.preload(url: url)
+                }
+            }
+            .onChange(of: noteStore.displayContent(for: note)) { oldValue, newValue in
+                if editedContent == oldValue || persistedEditedContent == oldValue {
+                    let oldState = resolvedBodyState(for: oldValue)
+                    let isPlaceholder = oldState.isTransientTranscriptionState
+                    if isPlaceholder && newValue != oldValue {
+                        acceptStoreDrivenContent(newValue, revealIfNeeded: true)
+                    } else {
+                        acceptStoreDrivenContent(newValue)
+                    }
+                }
+            }
+            .onChange(of: noteStore.rewritesCache[noteId]) { _, newValue in
+                rewrites = newValue ?? []
+            }
+            .onChange(of: note.title) { oldValue, newValue in
+                if editedTitle == (oldValue ?? "") {
+                    syncStoreTitle(newValue ?? "")
+                }
+            }
+            .onChange(of: noteStore.rewriteError(for: noteId)) { _, newValue in
+                guard let newValue else { return }
+                errorMessage = newValue
+                noteStore.clearRewriteError(for: noteId)
+            }
+            .onChange(of: note.activeRewriteId) { _, newValue in
+                activeRewriteId = newValue
+                if newValue != nil || note.originalContent == nil || noteStore.displayContent(for: note) == note.originalContent {
+                    rewriteLabelFallback = nil
+                }
+            }
+            .onChange(of: isRewriting) { _, rewriting in
+                if !rewriting, note.activeRewriteId == nil {
+                    rewriteLabelFallback = nil
+                }
+            }
+            .onChange(of: isGeneratingTitle) { _, generating in
+                guard generating else { return }
+                titlePhraseIndex = Int.random(in: 0..<titlePhrases.count)
+            }
+            .onAppear {
+                updateTranscribingPresentation(for: bodyState)
+            }
+            .renameSpeakerAlert(
+                renamingSpeaker: $renamingSpeaker,
+                renameText: $renameText,
+                onConfirm: renameSpeaker
+            )
+            .onChange(of: bodyState) { _, state in
+                updateTranscribingPresentation(for: state)
+            }
+            .onChange(of: contentFocused) { _, focused in
+                if focused, typewriterTask != nil {
+                    cancelContentTypewriterAndRestoreFromStore()
+                }
+                if !focused { isCursorReady = false }
+            }
+            .onDisappear {
+                typewriterTask?.cancel()
+                titleTypewriterTask?.cancel()
+                teardownTranscribingVideo()
+            }
+            .onChange(of: editedTitle) {
+                scheduleAutosave()
+            }
+            .onChange(of: editedContent) { _, newValue in
+                syncBodyState(with: newValue)
+                scheduleAutosave()
+            }
+            .onChange(of: cursorPosition) { _, newPos in
+                if contentFocused {
+                    lastKnownCursorPosition = newPos
+                    isCursorReady = true
+                }
+            }
+            .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
+                if Int(elapsed) >= 900 && appendRecorder.isRecording {
+                    stopAppendRecording()
+                }
+            }
+    }
+
+    var noteDetailPresentationView: some View {
+        noteDetailScaffold
+            .toolbar { toolbarContent() }
+            .alert("Delete this note?", isPresented: $showDeleteConfirmation) {
+                Button("Delete", role: .destructive) {
+                    didDelete = true
+                    noteStore.removeNote(id: note.id)
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This action cannot be undone.")
+            }
+            .alert("Delete this rewrite?", isPresented: .init(
+                get: { pendingDeleteRewrite != nil },
+                set: { if !$0 { pendingDeleteRewrite = nil } }
+            )) {
+                Button("Delete", role: .destructive) {
+                    if let rewrite = pendingDeleteRewrite {
+                        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                        deleteActiveRewrite(rewrite)
+                        pendingDeleteRewrite = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This action cannot be undone.")
+            }
+            .sheet(isPresented: $showCategoryPicker) {
+                CategoryPickerSheet(note: note)
+                    .presentationDetents([.medium, .large])
+                    .presentationBackground {
+                        SheetBackground()
+                    }
+            }
+            .sheet(isPresented: $showRewriteSheet, onDismiss: {
+                guard let rewrite = pendingRewrite else { return }
+                pendingRewrite = nil
+                performRewrite(
+                    tone: rewrite.tone,
+                    instructions: rewrite.instructions,
+                    toneLabel: rewrite.toneLabel,
+                    toneEmoji: rewrite.toneEmoji
+                )
+            }) {
+                RewriteSheet { tone, instructions, toneLabel, toneEmoji in
+                    pendingRewrite = (tone, instructions, toneLabel, toneEmoji)
+                }
+                .presentationDetents([.large])
+                .presentationContentInteraction(.scrolls)
+                .presentationBackground {
+                    SheetBackground()
+                }
+            }
+            .onDisappear {
+                player.stop()
+                if isAppendRecording {
+                    if appendRecorder.elapsedSeconds >= 1 {
+                        // Stop and transcribe in background — don't discard what was recorded
+                        stopAppendRecording()
+                    } else {
+                        appendRecorder.cancelRecording()
+                        removeAppendPlaceholder()
+                        isAppendRecording = false
+                    }
+                }
+                autosaveTask?.cancel()
+                guard !didDelete else { return }
+                let hasContent = !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !persistedEditedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                if hasContent && (hasChanges || !isInStore) {
+                    saveChanges()
+                }
+            }
+            .alert("Error", isPresented: .init(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+            .sheet(isPresented: .init(
+                get: { audioShareItem != nil },
+                set: { if !$0 { audioShareItem = nil } }
+            )) {
+                if let audioShareItem {
+                    ShareSheet(items: [audioShareItem])
+                        .presentationDetents([.medium])
+                }
+            }
+            .sheet(isPresented: .init(
+                get: { textShareItem != nil },
+                set: { if !$0 { textShareItem = nil } }
+            )) {
+                if let textShareItem {
+                    ShareSheet(items: [textShareItem])
+                        .presentationDetents([.medium])
+                }
+            }
+    }
+
+    var noteDetailScaffold: some View {
         ZStack(alignment: .bottom) {
             (colorScheme == .dark ? Color.darkBackground : Color.warmBackground)
                 .ignoresSafeArea()
 
             GeometryReader { geo in
-            ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    scrollContent
-                    Color.clear
-                        .frame(maxWidth: .infinity, minHeight: 500, maxHeight: geo.size.height)
-                        .contentShape(Rectangle())
-                        .onTapGesture { contentFocused = true; moveCursorToEnd = true }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            scrollContent
+                            Color.clear
+                                .frame(maxWidth: .infinity, minHeight: 500, maxHeight: geo.size.height)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    contentFocused = true
+                                    moveCursorToEnd = true
+                                }
+                        }
+                        .frame(minHeight: geo.size.height, alignment: .top)
+                        .background(ScrollViewKeyboardDismissSetup())
+                        Color.clear.frame(height: 0).id("scrollBottom")
+                    }
+                    .ignoresSafeArea(.all, edges: .bottom)
+                    .onAppear { scrollProxy = proxy }
                 }
-                .frame(minHeight: geo.size.height, alignment: .top)
-                .background(ScrollViewKeyboardDismissSetup())
-                Color.clear.frame(height: 0).id("scrollBottom")
             }
-            .ignoresSafeArea(.all, edges: .bottom)
-            .onAppear { scrollProxy = proxy }
-            } // ScrollViewReader
-            } // GeometryReader
 
             bottomFade
         }
@@ -257,207 +492,6 @@ struct NoteDetailView: View {
         .animation(.easeOut(duration: 0.25), value: renamingSpeaker == nil)
         .animation(.easeOut(duration: 0.2), value: bodyState)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            rewrites = noteStore.rewritesCache[noteId] ?? []
-            activeRewriteId = note.activeRewriteId
-            if activeRewriteId != nil {
-                rewriteLabelFallback = nil
-            }
-            repairMissingActiveRewriteSelection()
-
-            await noteStore.fetchRewrites(for: noteId)
-            rewrites = noteStore.rewritesCache[noteId] ?? []
-            activeRewriteId = note.activeRewriteId
-            if activeRewriteId != nil {
-                rewriteLabelFallback = nil
-            }
-            repairMissingActiveRewriteSelection()
-            let displayContent = noteStore.displayContent(for: note)
-            if editedContent != displayContent {
-                acceptResolvedNoteContent(displayContent)
-            } else if contentOpacity == 0 {
-                withAnimation(.easeIn(duration: 0.2)) { contentOpacity = 1 }
-            }
-            if showsRewriteToolbarLabel, rewriteLabelOpacity == 0 {
-                rewriteLabelOpacity = 1
-            }
-        }
-        .task {
-            // Auto-focus for new text notes — delay lets the view hierarchy and trait
-            // collection fully settle before the keyboard appears, preventing a color flash.
-            guard initialNote.source == .text && initialNote.content.isEmpty else { return }
-            try? await Task.sleep(for: .milliseconds(450))
-            contentFocused = true
-            moveCursorToEnd = true
-        }
-        .toolbar { toolbarContent() }
-        .alert("Delete this note?", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                didDelete = true
-                noteStore.removeNote(id: note.id)
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This action cannot be undone.")
-        }
-        .alert("Delete this rewrite?", isPresented: .init(
-            get: { pendingDeleteRewrite != nil },
-            set: { if !$0 { pendingDeleteRewrite = nil } }
-        )) {
-            Button("Delete", role: .destructive) {
-                if let rewrite = pendingDeleteRewrite {
-                    UINotificationFeedbackGenerator().notificationOccurred(.warning)
-                    deleteActiveRewrite(rewrite)
-                    pendingDeleteRewrite = nil
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This action cannot be undone.")
-        }
-        .sheet(isPresented: $showCategoryPicker) {
-            CategoryPickerSheet(
-                note: note
-            )
-            .presentationDetents([.medium, .large])
-            .presentationBackground {
-                SheetBackground()
-            }
-        }
-        .sheet(isPresented: $showRewriteSheet, onDismiss: {
-            guard let rewrite = pendingRewrite else { return }
-            pendingRewrite = nil
-            performRewrite(tone: rewrite.tone, instructions: rewrite.instructions, toneLabel: rewrite.toneLabel, toneEmoji: rewrite.toneEmoji)
-        }) {
-            RewriteSheet { tone, instructions, toneLabel, toneEmoji in
-                pendingRewrite = (tone, instructions, toneLabel, toneEmoji)
-            }
-            .presentationDetents([.large])
-            .presentationContentInteraction(.scrolls)
-            .presentationBackground {
-                SheetBackground()
-            }
-        }
-        .onDisappear {
-            player.stop()
-            if isAppendRecording {
-                if appendRecorder.elapsedSeconds >= 1 {
-                    // Stop and transcribe in background — don't discard what was recorded
-                    stopAppendRecording()
-                } else {
-                    appendRecorder.cancelRecording()
-                    removeAppendPlaceholder()
-                    isAppendRecording = false
-                }
-            }
-            autosaveTask?.cancel()
-            guard !didDelete else { return }
-            let hasContent = !editedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !persistedEditedContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if hasContent && (hasChanges || !isInStore) {
-                saveChanges()
-            }
-        }
-        .alert("Error", isPresented: .init(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
-        }
-
-        .sheet(isPresented: .init(
-            get: { audioShareItem != nil },
-            set: { if !$0 { audioShareItem = nil } }
-        )) {
-            if let audioShareItem {
-                ShareSheet(items: [audioShareItem])
-                    .presentationDetents([.medium])
-            }
-        }
-        .sheet(isPresented: .init(
-            get: { textShareItem != nil },
-            set: { if !$0 { textShareItem = nil } }
-        )) {
-            if let textShareItem {
-                ShareSheet(items: [textShareItem])
-                    .presentationDetents([.medium])
-            }
-        }
-        .sensoryFeedback(.impact(weight: .light), trigger: audioExpanded)
-        .onChange(of: audioExpanded) { _, expanded in
-            if expanded, let url = audioURL {
-                player.preload(url: url)
-            }
-        }
-        .onChange(of: noteStore.displayContent(for: note)) { oldValue, newValue in
-            if editedContent == oldValue || persistedEditedContent == oldValue {
-                let oldState = resolvedBodyState(for: oldValue)
-                let isPlaceholder = oldState.isTransientTranscriptionState
-                if isPlaceholder && newValue != oldValue {
-                    acceptStoreDrivenContent(newValue, revealIfNeeded: true)
-                } else {
-                    acceptStoreDrivenContent(newValue)
-                }
-            }
-        }
-        .onChange(of: note.title) { oldValue, newValue in
-            if editedTitle == (oldValue ?? "") {
-                syncStoreTitle(newValue ?? "")
-            }
-        }
-        .onChange(of: note.activeRewriteId) { _, newValue in
-            activeRewriteId = newValue
-            if newValue != nil || note.originalContent == nil || noteStore.displayContent(for: note) == note.originalContent {
-                rewriteLabelFallback = nil
-            }
-        }
-        .onChange(of: isGeneratingTitle) { _, generating in
-            guard generating else { return }
-            titlePhraseIndex = Int.random(in: 0..<titlePhrases.count)
-        }
-        .onAppear {
-            updateTranscribingPresentation(for: bodyState)
-        }
-        .renameSpeakerAlert(
-            renamingSpeaker: $renamingSpeaker,
-            renameText: $renameText,
-            onConfirm: renameSpeaker
-        )
-        .onChange(of: bodyState) { _, state in
-            updateTranscribingPresentation(for: state)
-        }
-        .onChange(of: contentFocused) { _, focused in
-            if focused, typewriterTask != nil {
-                cancelContentTypewriterAndRestoreFromStore()
-            }
-            if !focused { isCursorReady = false }
-        }
-        .onDisappear {
-            typewriterTask?.cancel()
-            titleTypewriterTask?.cancel()
-            transcribingPresentationTask?.cancel()
-        }
-        .onChange(of: editedTitle) {
-            scheduleAutosave()
-        }
-        .onChange(of: editedContent) { _, newValue in
-            syncBodyState(with: newValue)
-            scheduleAutosave()
-        }
-        .onChange(of: cursorPosition) { _, newPos in
-            if contentFocused {
-                lastKnownCursorPosition = newPos
-                isCursorReady = true
-            }
-        }
-        .onChange(of: appendRecorder.elapsedSeconds) { _, elapsed in
-            if Int(elapsed) >= 900 && appendRecorder.isRecording {
-                stopAppendRecording()
-            }
-        }
     }
 
 }

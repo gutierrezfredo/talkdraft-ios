@@ -6,7 +6,7 @@ extension ExpandingTextView.Coordinator {
         func textView(_ tv: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
             guard !isAnimatingAttributes else { return true }
 
-            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let mapper = ExpandingTextView.mapper(for: tv)
             let plainText = mapper.plainText
             let plainRange = mapper.plainRange(forAttributedRange: range)
             let mutation = NoteEditorRules.mutation(
@@ -18,6 +18,11 @@ extension ExpandingTextView.Coordinator {
 
             switch mutation {
             case .allowSystem:
+                let updatedText = (plainText as NSString).replacingCharacters(in: plainRange, with: text)
+                pendingSystemEdit = (
+                    updatedText: updatedText,
+                    selectedPlainRange: NSRange(location: plainRange.location + (text as NSString).length, length: 0)
+                )
                 pendingAnimatedNewlineDeletionFollow = false
                 prepareCursorFollowForSystemEdit(
                     replacementText: text,
@@ -38,6 +43,7 @@ extension ExpandingTextView.Coordinator {
                 suppressNextScrollOffsetRestore = false
                 pendingAnimatedNewlineInsertionFollow = false
                 pendingAnimatedNewlineDeletionFollow = false
+                pendingSystemEdit = nil
                 return false
             case let .apply(updatedText, selectedPlainRange):
                 pendingDeletionAnchorCaretBottom = nil
@@ -45,6 +51,7 @@ extension ExpandingTextView.Coordinator {
                 suppressNextScrollOffsetRestore = false
                 pendingAnimatedNewlineInsertionFollow = false
                 pendingAnimatedNewlineDeletionFollow = false
+                pendingSystemEdit = nil
                 applyPlainTextEdit(
                     updatedText: updatedText,
                     selectedPlainRange: selectedPlainRange,
@@ -63,6 +70,7 @@ extension ExpandingTextView.Coordinator {
             ensureCursorVisible: Bool = false
         ) {
             preserveScrollOnNextUpdate = preserveScroll
+            pendingSystemEdit = nil
             isAnimatingAttributes = true
             parent.text = updatedText
             parent.applyTextAttributes(tv)
@@ -87,9 +95,20 @@ extension ExpandingTextView.Coordinator {
 
         func textViewDidChange(_ tv: UITextView) {
             guard !isAnimatingAttributes else { return }
-            let mapper = NoteTextMapper(attributedText: tv.attributedText)
-            parent.text = mapper.plainText
-            parent.cursorPosition = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
+            let savedOffset = enclosingScrollView(for: tv)?.contentOffset
+            if let pendingSystemEdit {
+                self.pendingSystemEdit = nil
+                isAnimatingAttributes = true
+                parent.text = pendingSystemEdit.updatedText
+                parent.applyTextAttributes(tv)
+                ExpandingTextView.setSelectedPlainRange(pendingSystemEdit.selectedPlainRange, in: tv)
+                parent.cursorPosition = pendingSystemEdit.selectedPlainRange.location
+                isAnimatingAttributes = false
+            } else {
+                let mapper = ExpandingTextView.mapper(for: tv)
+                parent.text = mapper.plainText
+                parent.cursorPosition = mapper.plainOffset(forAttributedOffset: tv.selectedRange.location)
+            }
             if let label = tv.viewWithTag(999) as? UILabel {
                 label.isHidden = !parent.text.isEmpty
             }
@@ -99,7 +118,7 @@ extension ExpandingTextView.Coordinator {
             // word boundary when typingAttributes is mutated during a selection change.
             syncTypingAttributesToCurrentLine(tv)
             lastTextChangeSelection = tv.selectedRange
-            if let savedOffset = enclosingScrollView(for: tv)?.contentOffset, !suppressNextScrollOffsetRestore {
+            if let savedOffset, !suppressNextScrollOffsetRestore {
                 scheduleScrollOffsetRestore(in: tv, savedOffset: savedOffset, delays: [0, 0.02])
             }
             suppressNextScrollOffsetRestore = false
@@ -141,7 +160,7 @@ extension ExpandingTextView.Coordinator {
         }
 
         func syncTypingAttributesToCurrentLine(_ tv: UITextView) {
-            let mapper = NoteTextMapper(attributedText: tv.attributedText)
+            let mapper = ExpandingTextView.mapper(for: tv)
             let nsText = mapper.plainText as NSString
             let baseStyle = NSMutableParagraphStyle()
             baseStyle.lineSpacing = parent.lineSpacing
@@ -161,9 +180,10 @@ extension ExpandingTextView.Coordinator {
                     bulletStyle.firstLineHeadIndent = 0
                     bulletStyle.headIndent = bulletIndent
                     let checkboxStyle = ExpandingTextView.checkboxParagraphStyle(font: parent.font, lineSpacing: parent.lineSpacing)
-                    let lineStart = nsText.character(at: lineRange.location)
+                    let lineLength = max(0, lineRange.length - (lineRange.location + lineRange.length < nsText.length ? 1 : 0))
+                    let lineText = nsText.substring(with: NSRange(location: lineRange.location, length: lineLength))
                     attrs = parent.typingAttributes(
-                        forLineStart: lineStart,
+                        forLineText: lineText,
                         baseAttributes: attrs,
                         bulletParaStyle: bulletStyle,
                         checkboxParaStyle: checkboxStyle

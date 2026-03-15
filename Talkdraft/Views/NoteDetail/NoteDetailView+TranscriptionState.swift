@@ -15,10 +15,6 @@ extension NoteDetailView {
         bodyState == .transcribing
     }
 
-    var showsTranscribingIndicator: Bool {
-        isTranscribing && showTranscribingIndicator
-    }
-
     var isTranscriptionFailed: Bool {
         bodyState == .transcriptionFailed
     }
@@ -48,35 +44,14 @@ extension NoteDetailView {
         )
     }
 
-    var transcribingPlaceholderView: some View {
-        NoteDetailTranscribingIndicatorView(
-            videoPlayer: nil,
-            subtitle: transcribingSubtitle,
-            onAppear: {},
-            onDisappear: {}
-        )
-    }
-
     func updateTranscribingPresentation(for state: NoteBodyState) {
-        transcribingPresentationTask?.cancel()
         guard state == .transcribing else {
-            withAnimation(.easeOut(duration: 0.12)) {
-                showTranscribingIndicator = false
-            }
+            teardownTranscribingVideo()
             return
         }
 
         setupTranscribingState()
-        showTranscribingIndicator = false
-        transcribingPresentationTask = Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled, noteBodyState == .transcribing else { return }
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    showTranscribingIndicator = true
-                }
-            }
-        }
+        setupTranscribingVideo()
     }
 
     func setupTranscribingState() {
@@ -108,6 +83,12 @@ extension NoteDetailView {
         player.isMuted = true
         player.play()
         transcribingVideoPlayer = player
+    }
+
+    func teardownTranscribingVideo() {
+        transcribingVideoPlayer?.pause()
+        transcribingVideoPlayer = nil
+        transcribingPlayerLooper = nil
     }
 
     var waitingForConnectionView: some View {

@@ -64,8 +64,9 @@ extension NoteDetailView {
     }
 
     func buildShareText() -> String {
-        let title = editedTitle.isEmpty ? "" : editedTitle + "\n\n"
-        return title + persistedEditedContent
+        let normalizedBody = NoteTextFormatting.plainDisplayText(for: persistedEditedContent)
+        let title = editedTitle.isEmpty ? "" : editedTitle + (normalizedBody.isEmpty ? "" : "\n\n")
+        return title + normalizedBody
     }
 
     func dismissKeyboard() {

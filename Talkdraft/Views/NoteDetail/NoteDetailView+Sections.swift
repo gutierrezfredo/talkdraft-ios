@@ -309,7 +309,7 @@ extension NoteDetailView {
                     Button {
                         startAppendRecording(scrollToBottom: true)
                     } label: {
-                        Label("Record More", systemImage: "mic")
+                        Label(note.source == .voice ? "Record More" : "Record", systemImage: "mic")
                     }
                     .disabled(isAppendRecording || isAppendTranscribing || isRewriting)
 
@@ -320,11 +320,13 @@ extension NoteDetailView {
                             if isDownloadingAudio {
                                 Label { Text("Downloading…") } icon: { ProgressView() }
                             } else {
-                                Label("Download Audio", systemImage: "arrow.down.circle")
+                                Label("Export Audio", systemImage: "arrow.down.circle")
                             }
                         }
                         .disabled(isDownloadingAudio)
                     }
+
+                    Divider()
 
                     if let rewriteId = activeRewriteId,
                        let rewrite = rewrites.first(where: { $0.id == rewriteId }) {
@@ -367,10 +369,8 @@ extension NoteDetailView {
                 titleField
             }
 
-            if showsTranscribingIndicator {
+            if isTranscribing {
                 transcribingIndicator
-            } else if isTranscribing {
-                transcribingPlaceholderView
             } else if isWaitingForConnection {
                 waitingForConnectionView
                     .padding(.top, 40)
@@ -405,9 +405,11 @@ extension NoteDetailView {
             } else {
                 TextField("Untitled", text: editedTitleBinding, axis: .vertical)
                     .font(.brandTitle)
+                    .tint(Color.brand)
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
                     .focused($titleFocused)
+                    .disabled(isRewriting)
                     .padding(.horizontal, 24)
             }
         }
@@ -456,7 +458,7 @@ extension NoteDetailView {
             cursorPosition: $cursorPosition,
             highlightRange: $highlightRange,
             preserveScroll: $preserveScroll,
-            isEditable: !isAppendRecording && !isAppendTranscribing,
+            isEditable: !isAppendRecording && !isAppendTranscribing && !isRewriting,
             font: .preferredFont(forTextStyle: .body),
             lineSpacing: 6,
             placeholder: "Start typing...",

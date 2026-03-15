@@ -196,6 +196,7 @@ struct CategoryFormSheet: View {
 
                         TextField("Category name", text: $name)
                             .focused($isNameFocused)
+                            .tint(Color.brand)
                             .font(.body)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 16)

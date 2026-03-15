@@ -28,6 +28,7 @@ extension View {
             set: { if !$0 { renamingSpeaker.wrappedValue = nil } }
         )) {
             TextField("New name", text: renameText)
+                .tint(Color.brand)
             Button("Rename") {
                 if let key = renamingSpeaker.wrappedValue {
                     let trimmed = renameText.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)

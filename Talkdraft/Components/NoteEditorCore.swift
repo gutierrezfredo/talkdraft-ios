@@ -57,6 +57,7 @@ final class CheckboxAttachment: NSTextAttachment {
 /// UITextView subclass for the note body. Handles checkbox tap detection and toggling.
 final class CheckboxTextView: UITextView {
     weak var coordinator: ExpandingTextView.Coordinator?
+    var noteTextMapper = NoteTextMapper.empty
     /// Set to true during a checkbox tap to prevent UITextView's tap recognizer from
     /// making this view first responder (which would show the keyboard).
     var suppressBecomeFirstResponder = false
@@ -262,22 +263,48 @@ struct NoteEditorRules {
 }
 
 struct NoteTextMapper {
-    private struct Segment {
+    struct Segment {
         let attributedRange: NSRange
         let plainRange: NSRange
+        let hiddenPrefixLength: Int
+        let hiddenSuffixLength: Int
         let isCheckboxAttachment: Bool
+
+        var visiblePlainStart: Int {
+            plainRange.location + hiddenPrefixLength
+        }
+
+        var visiblePlainLength: Int {
+            max(0, plainRange.length - hiddenPrefixLength - hiddenSuffixLength)
+        }
+
+        var visiblePlainEnd: Int {
+            visiblePlainStart + visiblePlainLength
+        }
     }
+
+    private enum BoundaryKind {
+        case cursor
+        case selectionStart
+        case selectionEnd
+    }
+
+    static let empty = NoteTextMapper(plainText: "", attributedLength: 0, segments: [])
 
     let plainText: String
 
     private let attributedLength: Int
     private let segments: [Segment]
 
+    init(plainText: String, attributedLength: Int, segments: [Segment]) {
+        self.plainText = plainText
+        self.attributedLength = attributedLength
+        self.segments = segments
+    }
+
     init(attributedText: NSAttributedString?) {
         guard let attributedText, attributedText.length > 0 else {
-            self.plainText = ""
-            self.attributedLength = 0
-            self.segments = []
+            self = .empty
             return
         }
 
@@ -304,6 +331,8 @@ struct NoteTextMapper {
                 Segment(
                     attributedRange: range,
                     plainRange: NSRange(location: plainLocation, length: plainLength),
+                    hiddenPrefixLength: 0,
+                    hiddenSuffixLength: 0,
                     isCheckboxAttachment: isCheckboxAttachment
                 )
             )
@@ -317,6 +346,10 @@ struct NoteTextMapper {
     }
 
     func plainOffset(forAttributedOffset attributedOffset: Int) -> Int {
+        plainOffset(forAttributedOffset: attributedOffset, kind: .cursor)
+    }
+
+    private func plainOffset(forAttributedOffset attributedOffset: Int, kind: BoundaryKind) -> Int {
         let boundedOffset = min(max(0, attributedOffset), attributedLength)
         guard boundedOffset > 0 else { return 0 }
 
@@ -324,11 +357,11 @@ struct NoteTextMapper {
             let segmentStart = segment.attributedRange.location
             let segmentEnd = segmentStart + segment.attributedRange.length
 
-            if boundedOffset >= segmentEnd {
+            if boundedOffset > segmentEnd {
                 continue
             }
 
-            if boundedOffset <= segmentStart {
+            if boundedOffset < segmentStart {
                 return segment.plainRange.location
             }
 
@@ -336,16 +369,29 @@ struct NoteTextMapper {
                 return segment.plainRange.location + segment.plainRange.length
             }
 
+            if boundedOffset == segmentStart {
+                switch kind {
+                case .cursor:
+                    return segment.visiblePlainStart
+                case .selectionStart, .selectionEnd:
+                    return segment.plainRange.location
+                }
+            }
+
+            if boundedOffset == segmentEnd {
+                return segment.plainRange.location + segment.plainRange.length
+            }
+
             let delta = boundedOffset - segmentStart
-            return segment.plainRange.location + min(segment.plainRange.length, delta)
+            return segment.visiblePlainStart + min(segment.visiblePlainLength, delta)
         }
 
         return segments.last.map { $0.plainRange.location + $0.plainRange.length } ?? 0
     }
 
     func plainRange(forAttributedRange range: NSRange) -> NSRange {
-        let start = plainOffset(forAttributedOffset: range.location)
-        let end = plainOffset(forAttributedOffset: range.location + range.length)
+        let start = plainOffset(forAttributedOffset: range.location, kind: .selectionStart)
+        let end = plainOffset(forAttributedOffset: range.location + range.length, kind: .selectionEnd)
         return NSRange(location: start, length: max(0, end - start))
     }
 
@@ -367,7 +413,15 @@ struct NoteTextMapper {
                 return segment.attributedRange.location + segment.attributedRange.length
             }
 
-            let delta = target - segmentStart
+            if target <= segment.visiblePlainStart {
+                return segment.attributedRange.location
+            }
+
+            if target >= segment.plainRange.location + segment.plainRange.length || target >= segment.visiblePlainEnd {
+                return segment.attributedRange.location + segment.attributedRange.length
+            }
+
+            let delta = target - segment.visiblePlainStart
             return segment.attributedRange.location + min(segment.attributedRange.length, delta)
         }
 
@@ -378,5 +432,563 @@ struct NoteTextMapper {
         let start = attributedOffset(forPlainOffset: range.location)
         let end = attributedOffset(forPlainOffset: range.location + range.length)
         return NSRange(location: start, length: max(0, end - start))
+    }
+}
+
+enum NoteTextFormatting {
+    struct EditorRenderResult {
+        let attributedText: NSAttributedString
+        let mapper: NoteTextMapper
+    }
+
+    private struct LineInstruction {
+        let plainRange: NSRange
+        let kind: ParagraphKind
+    }
+
+    private enum ParagraphKind {
+        case bullet
+        case checkbox(checkedTextRange: NSRange?)
+    }
+
+    static func plainDisplayText(for text: String) -> String {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return text }
+
+        var result: [String] = []
+        var lineLocation = 0
+
+        while lineLocation < nsText.length {
+            let fullLineRange = nsText.lineRange(for: NSRange(location: lineLocation, length: 0))
+            let hasNewline = lineHasTrailingNewline(in: nsText, fullLineRange: fullLineRange)
+            let contentLength = hasNewline ? fullLineRange.length - 1 : fullLineRange.length
+            let contentRange = NSRange(location: fullLineRange.location, length: max(0, contentLength))
+            let rawLine = nsText.substring(with: contentRange)
+            result.append(displayText(forLine: rawLine))
+            if hasNewline {
+                result.append("\n")
+            }
+            lineLocation = fullLineRange.location + fullLineRange.length
+        }
+
+        return result.joined()
+    }
+
+    @MainActor
+    static func renderEditorText(
+        text: String,
+        font: UIFont,
+        lineSpacing: CGFloat,
+        speakerColors: [String: UIColor],
+        traitCollection: UITraitCollection
+    ) -> EditorRenderResult {
+        let baseParagraphStyle = NSMutableParagraphStyle()
+        baseParagraphStyle.lineSpacing = lineSpacing
+
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.label,
+            .paragraphStyle: baseParagraphStyle,
+        ]
+
+        guard !text.isEmpty else {
+            return EditorRenderResult(
+                attributedText: NSAttributedString(string: ""),
+                mapper: .empty
+            )
+        }
+
+        let nsText = text as NSString
+        let attributed = NSMutableAttributedString()
+        var segments: [NoteTextMapper.Segment] = []
+        var lineInstructions: [LineInstruction] = []
+        let headingFont = headingFont(from: font)
+        let headingBoldFont = boldFont(from: headingFont)
+        let bodyBoldFont = boldFont(from: font)
+        let resolvedBrandColor = ExpandingTextView.brandColor.resolvedColor(with: traitCollection)
+        let resolvedUncheckedCheckboxColor = ExpandingTextView.uncheckedCheckboxColor.resolvedColor(with: traitCollection)
+
+        var lineLocation = 0
+        while lineLocation < nsText.length {
+            let fullLineRange = nsText.lineRange(for: NSRange(location: lineLocation, length: 0))
+            let hasNewline = lineHasTrailingNewline(in: nsText, fullLineRange: fullLineRange)
+            let contentLength = hasNewline ? fullLineRange.length - 1 : fullLineRange.length
+            let contentRange = NSRange(location: fullLineRange.location, length: max(0, contentLength))
+            let rawLine = nsText.substring(with: contentRange)
+
+            if let speakerColor = speakerColors[rawLine] {
+                appendVisibleText(
+                    rawLine,
+                    plainLocation: contentRange.location,
+                    hiddenPrefixLength: 0,
+                    hiddenSuffixLength: 0,
+                    attributes: [
+                        .font: UIFont.systemFont(ofSize: font.pointSize, weight: .semibold),
+                        .foregroundColor: speakerColor,
+                        .paragraphStyle: baseParagraphStyle,
+                    ],
+                    attributed: attributed,
+                    segments: &segments
+                )
+            } else if let isChecked = checkboxState(for: rawLine) {
+                let prefixLength = checkboxPrefixLength(in: rawLine)
+                let attachment = CheckboxAttachment(
+                    checked: isChecked,
+                    font: font,
+                    color: isChecked ? resolvedBrandColor : resolvedUncheckedCheckboxColor
+                )
+                appendCheckboxAttachment(
+                    attachment,
+                    plainLocation: contentRange.location,
+                    plainLength: prefixLength,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                let remainingText = (rawLine as NSString).substring(from: prefixLength)
+                appendInlineText(
+                    remainingText,
+                    rawContentStart: contentRange.location + prefixLength,
+                    leadingHiddenPrefixLength: 0,
+                    normalAttributes: isChecked
+                        ? checkedTextAttributes(from: baseAttributes)
+                        : baseAttributes,
+                    boldAttributes: isChecked
+                        ? checkedTextAttributes(from: baseAttributes, font: bodyBoldFont)
+                        : [
+                            .font: bodyBoldFont,
+                            .foregroundColor: UIColor.label,
+                            .paragraphStyle: baseParagraphStyle,
+                        ],
+                    attributed: attributed,
+                    segments: &segments
+                )
+                let checkedTextRange: NSRange? = isChecked && remainingText.isEmpty == false
+                    ? NSRange(location: contentRange.location + prefixLength, length: (remainingText as NSString).length)
+                    : nil
+                lineInstructions.append(
+                    LineInstruction(
+                        plainRange: fullLineRange,
+                        kind: .checkbox(checkedTextRange: checkedTextRange)
+                    )
+                )
+            } else if rawLine.hasPrefix(NoteEditorRules.bulletPrefix) {
+                appendVisibleText(
+                    NoteEditorRules.bulletPrefix,
+                    plainLocation: contentRange.location,
+                    hiddenPrefixLength: 0,
+                    hiddenSuffixLength: 0,
+                    attributes: baseAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                let remainingText = (rawLine as NSString).substring(from: (NoteEditorRules.bulletPrefix as NSString).length)
+                appendInlineText(
+                    remainingText,
+                    rawContentStart: contentRange.location + (NoteEditorRules.bulletPrefix as NSString).length,
+                    leadingHiddenPrefixLength: 0,
+                    normalAttributes: baseAttributes,
+                    boldAttributes: [
+                        .font: bodyBoldFont,
+                        .foregroundColor: UIColor.label,
+                        .paragraphStyle: baseParagraphStyle,
+                    ],
+                    attributed: attributed,
+                    segments: &segments
+                )
+                lineInstructions.append(LineInstruction(plainRange: fullLineRange, kind: .bullet))
+            } else {
+                let headingPrefix = "# "
+                let headingPrefixLength = (headingPrefix as NSString).length
+                let headingContent = rawLine.hasPrefix(headingPrefix)
+                    ? (rawLine as NSString).substring(from: headingPrefixLength)
+                    : ""
+                let shouldRenderHeading = rawLine.hasPrefix(headingPrefix)
+                    && !headingContent.trimmingCharacters(in: .whitespaces).isEmpty
+
+                appendInlineText(
+                    shouldRenderHeading ? headingContent : rawLine,
+                    rawContentStart: shouldRenderHeading
+                        ? contentRange.location + headingPrefixLength
+                        : contentRange.location,
+                    leadingHiddenPrefixLength: shouldRenderHeading ? headingPrefixLength : 0,
+                    normalAttributes: [
+                        .font: shouldRenderHeading ? headingFont : font,
+                        .foregroundColor: UIColor.label,
+                        .paragraphStyle: baseParagraphStyle,
+                    ],
+                    boldAttributes: [
+                        .font: shouldRenderHeading ? headingBoldFont : bodyBoldFont,
+                        .foregroundColor: UIColor.label,
+                        .paragraphStyle: baseParagraphStyle,
+                    ],
+                    attributed: attributed,
+                    segments: &segments
+                )
+            }
+
+            if hasNewline {
+                appendVisibleText(
+                    "\n",
+                    plainLocation: fullLineRange.location + fullLineRange.length - 1,
+                    hiddenPrefixLength: 0,
+                    hiddenSuffixLength: 0,
+                    attributes: baseAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+            }
+
+            lineLocation = fullLineRange.location + fullLineRange.length
+        }
+
+        let mapper = NoteTextMapper(
+            plainText: text,
+            attributedLength: attributed.length,
+            segments: segments
+        )
+
+        applyPlaceholderStyling(to: attributed, font: font)
+        applyLegacySpeakerStyling(to: attributed, speakerColors: speakerColors, font: font)
+        applyParagraphStyles(
+            to: attributed,
+            mapper: mapper,
+            lineInstructions: lineInstructions,
+            font: font,
+            lineSpacing: lineSpacing
+        )
+
+        return EditorRenderResult(attributedText: attributed, mapper: mapper)
+    }
+
+    private static func appendInlineText(
+        _ text: String,
+        rawContentStart: Int,
+        leadingHiddenPrefixLength: Int,
+        normalAttributes: [NSAttributedString.Key: Any],
+        boldAttributes: [NSAttributedString.Key: Any],
+        attributed: NSMutableAttributedString,
+        segments: inout [NoteTextMapper.Segment]
+    ) {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return }
+
+        var location = 0
+        var pendingLeadingHiddenPrefixLength = leadingHiddenPrefixLength
+
+        while location < nsText.length {
+            let searchRange = NSRange(location: location, length: nsText.length - location)
+            let openRange = nsText.range(of: "**", range: searchRange)
+            guard openRange.location != NSNotFound else {
+                appendVisibleText(
+                    nsText.substring(with: NSRange(location: location, length: nsText.length - location)),
+                    plainLocation: rawContentStart + location - pendingLeadingHiddenPrefixLength,
+                    hiddenPrefixLength: pendingLeadingHiddenPrefixLength,
+                    hiddenSuffixLength: 0,
+                    attributes: normalAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                return
+            }
+
+            if openRange.location > location {
+                appendVisibleText(
+                    nsText.substring(with: NSRange(location: location, length: openRange.location - location)),
+                    plainLocation: rawContentStart + location - pendingLeadingHiddenPrefixLength,
+                    hiddenPrefixLength: pendingLeadingHiddenPrefixLength,
+                    hiddenSuffixLength: 0,
+                    attributes: normalAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                pendingLeadingHiddenPrefixLength = 0
+            }
+
+            let innerStart = openRange.location + 2
+            guard innerStart < nsText.length else {
+                appendVisibleText(
+                    nsText.substring(with: NSRange(location: openRange.location, length: nsText.length - openRange.location)),
+                    plainLocation: rawContentStart + openRange.location - pendingLeadingHiddenPrefixLength,
+                    hiddenPrefixLength: pendingLeadingHiddenPrefixLength,
+                    hiddenSuffixLength: 0,
+                    attributes: normalAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                return
+            }
+
+            let closeRange = nsText.range(
+                of: "**",
+                range: NSRange(location: innerStart, length: nsText.length - innerStart)
+            )
+            guard closeRange.location != NSNotFound, closeRange.location > innerStart else {
+                appendVisibleText(
+                    nsText.substring(with: NSRange(location: openRange.location, length: nsText.length - openRange.location)),
+                    plainLocation: rawContentStart + openRange.location - pendingLeadingHiddenPrefixLength,
+                    hiddenPrefixLength: pendingLeadingHiddenPrefixLength,
+                    hiddenSuffixLength: 0,
+                    attributes: normalAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                return
+            }
+
+            let innerLength = closeRange.location - innerStart
+            guard innerLength > 0 else {
+                appendVisibleText(
+                    "**",
+                    plainLocation: rawContentStart + openRange.location - pendingLeadingHiddenPrefixLength,
+                    hiddenPrefixLength: pendingLeadingHiddenPrefixLength,
+                    hiddenSuffixLength: 0,
+                    attributes: normalAttributes,
+                    attributed: attributed,
+                    segments: &segments
+                )
+                pendingLeadingHiddenPrefixLength = 0
+                location = innerStart
+                continue
+            }
+
+            appendVisibleText(
+                nsText.substring(with: NSRange(location: innerStart, length: innerLength)),
+                plainLocation: rawContentStart + openRange.location - pendingLeadingHiddenPrefixLength,
+                hiddenPrefixLength: pendingLeadingHiddenPrefixLength + 2,
+                hiddenSuffixLength: 2,
+                attributes: boldAttributes,
+                attributed: attributed,
+                segments: &segments
+            )
+            pendingLeadingHiddenPrefixLength = 0
+            location = closeRange.location + 2
+        }
+    }
+
+    private static func appendVisibleText(
+        _ text: String,
+        plainLocation: Int,
+        hiddenPrefixLength: Int,
+        hiddenSuffixLength: Int,
+        attributes: [NSAttributedString.Key: Any],
+        attributed: NSMutableAttributedString,
+        segments: inout [NoteTextMapper.Segment]
+    ) {
+        let visibleLength = (text as NSString).length
+        guard visibleLength > 0 else { return }
+
+        let attributedRange = NSRange(location: attributed.length, length: visibleLength)
+        attributed.append(NSAttributedString(string: text, attributes: attributes))
+        segments.append(
+            NoteTextMapper.Segment(
+                attributedRange: attributedRange,
+                plainRange: NSRange(
+                    location: plainLocation,
+                    length: visibleLength + hiddenPrefixLength + hiddenSuffixLength
+                ),
+                hiddenPrefixLength: hiddenPrefixLength,
+                hiddenSuffixLength: hiddenSuffixLength,
+                isCheckboxAttachment: false
+            )
+        )
+    }
+
+    private static func appendCheckboxAttachment(
+        _ attachment: CheckboxAttachment,
+        plainLocation: Int,
+        plainLength: Int,
+        attributed: NSMutableAttributedString,
+        segments: inout [NoteTextMapper.Segment]
+    ) {
+        let attributedRange = NSRange(location: attributed.length, length: 1)
+        attributed.append(NSAttributedString(attachment: attachment))
+        segments.append(
+            NoteTextMapper.Segment(
+                attributedRange: attributedRange,
+                plainRange: NSRange(location: plainLocation, length: plainLength),
+                hiddenPrefixLength: plainLength,
+                hiddenSuffixLength: 0,
+                isCheckboxAttachment: true
+            )
+        )
+    }
+
+    @MainActor
+    private static func applyPlaceholderStyling(
+        to attributed: NSMutableAttributedString,
+        font: UIFont
+    ) {
+        let italicFont = UIFont.italicSystemFont(ofSize: font.pointSize)
+        let nsText = attributed.string as NSString
+
+        for placeholder in ExpandingTextView.styledPlaceholders {
+            var searchRange = NSRange(location: 0, length: nsText.length)
+            while searchRange.location < nsText.length {
+                let range = nsText.range(of: placeholder, range: searchRange)
+                guard range.location != NSNotFound else { break }
+                attributed.addAttribute(.font, value: italicFont, range: range)
+                attributed.addAttribute(.foregroundColor, value: ExpandingTextView.brandColor, range: range)
+                searchRange.location = range.location + range.length
+                searchRange.length = nsText.length - searchRange.location
+            }
+        }
+    }
+
+    private static func applyLegacySpeakerStyling(
+        to attributed: NSMutableAttributedString,
+        speakerColors: [String: UIColor],
+        font: UIFont
+    ) {
+        guard !speakerColors.isEmpty else { return }
+        let boldFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        let nsText = attributed.string as NSString
+
+        for (key, color) in speakerColors {
+            let label = "[\(key)]:"
+            var searchRange = NSRange(location: 0, length: nsText.length)
+            while searchRange.location < nsText.length {
+                let range = nsText.range(of: label, range: searchRange)
+                guard range.location != NSNotFound else { break }
+                attributed.addAttribute(.foregroundColor, value: color, range: range)
+                attributed.addAttribute(.font, value: boldFont, range: range)
+                searchRange.location = range.location + range.length
+                searchRange.length = nsText.length - searchRange.location
+            }
+        }
+    }
+
+    @MainActor
+    private static func applyParagraphStyles(
+        to attributed: NSMutableAttributedString,
+        mapper: NoteTextMapper,
+        lineInstructions: [LineInstruction],
+        font: UIFont,
+        lineSpacing: CGFloat
+    ) {
+        let bulletIndent = ("• " as NSString).size(withAttributes: [.font: font]).width
+        let bulletParagraphStyle = NSMutableParagraphStyle()
+        bulletParagraphStyle.lineSpacing = lineSpacing
+        bulletParagraphStyle.firstLineHeadIndent = 0
+        bulletParagraphStyle.headIndent = bulletIndent
+        let checkboxParagraphStyle = ExpandingTextView.checkboxParagraphStyle(font: font, lineSpacing: lineSpacing)
+
+        for instruction in lineInstructions {
+            let attributedRange = mapper.attributedRange(forPlainRange: instruction.plainRange)
+            guard attributedRange.length > 0 else { continue }
+
+            switch instruction.kind {
+            case .bullet:
+                attributed.addAttribute(.paragraphStyle, value: bulletParagraphStyle, range: attributedRange)
+            case .checkbox(let checkedTextRange):
+                attributed.addAttribute(.paragraphStyle, value: checkboxParagraphStyle, range: attributedRange)
+                if let checkedTextRange {
+                    let checkedAttributedRange = mapper.attributedRange(forPlainRange: checkedTextRange)
+                    guard checkedAttributedRange.length > 0 else { continue }
+                    attributed.addAttribute(
+                        .strikethroughStyle,
+                        value: NSUnderlineStyle.single.rawValue,
+                        range: checkedAttributedRange
+                    )
+                    attributed.addAttribute(
+                        .foregroundColor,
+                        value: UIColor.tertiaryLabel,
+                        range: checkedAttributedRange
+                    )
+                }
+            }
+        }
+    }
+
+    private static func checkedTextAttributes(
+        from baseAttributes: [NSAttributedString.Key: Any],
+        font: UIFont? = nil
+    ) -> [NSAttributedString.Key: Any] {
+        var attributes = baseAttributes
+        if let font {
+            attributes[.font] = font
+        }
+        attributes[.foregroundColor] = UIColor.tertiaryLabel
+        attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        return attributes
+    }
+
+    private static func checkboxState(for rawLine: String) -> Bool? {
+        guard let firstScalar = rawLine.unicodeScalars.first else { return nil }
+        switch firstScalar.value {
+        case 0x2610:
+            return false
+        case 0x2611:
+            return true
+        default:
+            return nil
+        }
+    }
+
+    private static func checkboxPrefixLength(in rawLine: String) -> Int {
+        let nsLine = rawLine as NSString
+        guard nsLine.length > 0 else { return 0 }
+        return (nsLine.length > 1 && nsLine.character(at: 1) == 0x0020) ? 2 : 1
+    }
+
+    static func headingFont(from font: UIFont) -> UIFont {
+        UIFont.systemFont(ofSize: font.pointSize + 8, weight: .semibold)
+    }
+
+    private static func boldFont(from font: UIFont) -> UIFont {
+        UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+    }
+
+    private static func displayText(forLine rawLine: String) -> String {
+        let headingPrefix = "# "
+        let headingContent = rawLine.hasPrefix(headingPrefix)
+            ? String(rawLine.dropFirst((headingPrefix as NSString).length))
+            : rawLine
+        let line = rawLine.hasPrefix(headingPrefix) && !headingContent.trimmingCharacters(in: .whitespaces).isEmpty
+            ? headingContent
+            : rawLine
+
+        return stripBoldMarkers(in: line)
+    }
+
+    private static func stripBoldMarkers(in text: String) -> String {
+        let nsText = text as NSString
+        guard nsText.length > 0 else { return text }
+
+        var pieces: [String] = []
+        var location = 0
+
+        while location < nsText.length {
+            let openRange = nsText.range(of: "**", range: NSRange(location: location, length: nsText.length - location))
+            guard openRange.location != NSNotFound else {
+                pieces.append(nsText.substring(with: NSRange(location: location, length: nsText.length - location)))
+                break
+            }
+
+            if openRange.location > location {
+                pieces.append(nsText.substring(with: NSRange(location: location, length: openRange.location - location)))
+            }
+
+            let innerStart = openRange.location + 2
+            guard innerStart < nsText.length else {
+                pieces.append(nsText.substring(with: NSRange(location: openRange.location, length: nsText.length - openRange.location)))
+                break
+            }
+
+            let closeRange = nsText.range(of: "**", range: NSRange(location: innerStart, length: nsText.length - innerStart))
+            guard closeRange.location != NSNotFound, closeRange.location > innerStart else {
+                pieces.append(nsText.substring(with: NSRange(location: openRange.location, length: nsText.length - openRange.location)))
+                break
+            }
+
+            pieces.append(nsText.substring(with: NSRange(location: innerStart, length: closeRange.location - innerStart)))
+            location = closeRange.location + 2
+        }
+
+        return pieces.joined()
+    }
+
+    private static func lineHasTrailingNewline(in text: NSString, fullLineRange: NSRange) -> Bool {
+        guard fullLineRange.length > 0 else { return false }
+        return text.character(at: fullLineRange.location + fullLineRange.length - 1) == 0x0A
     }
 }

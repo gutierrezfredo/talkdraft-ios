@@ -34,7 +34,11 @@ struct HomeView: View {
     @State var keyboardHeight: CGFloat = 0
     @State var draggingCategory: Category?
     @State var chipsBarHeight: CGFloat = 0
+    @State var searchPreviousCategory: UUID?
+    @State var showsSelectionSearchTransition = false
+    @State var selectionSearchTransitionTask: Task<Void, Never>?
     @Namespace var namespace
+    @Namespace var bottomBarNamespace
     @FocusState var searchFocused: Bool
 
     private let columns = [
@@ -89,7 +93,7 @@ struct HomeView: View {
                             }
                         }
                     }
-                    .simultaneousGesture(categorySwipeGesture)
+                    .simultaneousGesture(isSearching ? nil : categorySwipeGesture)
                     .onScrollGeometryChange(for: Bool.self) { geometry in
                         geometry.contentOffset.y > 20
                     } action: { _, newValue in
@@ -98,15 +102,20 @@ struct HomeView: View {
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         Color.clear.frame(height: 120)
                     }
-                    .contentMargins(.top, chipsBarHeight)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        Color.clear.frame(height: isSearching ? 0 : chipsBarHeight)
+                    }
                     .scrollBounceBehavior(.always)
                     .scrollIndicators(filteredNotes.isEmpty ? .hidden : .automatic)
                     .scrollDismissesKeyboard(.interactively)
                     .refreshable {
                         await noteStore.refresh()
                     }
+                    .animation(.snappy, value: isSearching)
 
-                    chipsBar
+                    if !isSearching {
+                        chipsBar
+                    }
                 }
 
                 // Bottom fade
@@ -147,32 +156,35 @@ struct HomeView: View {
             }
             .ignoresSafeArea(.keyboard)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(isSearching || isSelecting ? .hidden : .visible, for: .navigationBar)
+            .navigationTitle(isSearching ? "Search" : "")
+            .toolbar(isSelecting ? .hidden : .visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Section {
-                            Picker("Sort by", selection: $sortOrder) {
-                                Text(NoteSortOrder.updatedAt.rawValue).tag(NoteSortOrder.updatedAt)
-                                Text(NoteSortOrder.createdAt.rawValue).tag(NoteSortOrder.createdAt)
+                if !isSearching {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu {
+                            Section {
+                                Picker("Sort by", selection: $sortOrder) {
+                                    Text(NoteSortOrder.updatedAt.rawValue).tag(NoteSortOrder.updatedAt)
+                                    Text(NoteSortOrder.createdAt.rawValue).tag(NoteSortOrder.createdAt)
+                                }
                             }
-                        }
-                        Section {
-                            Picker("Sort by", selection: $sortOrder) {
-                                Text(NoteSortOrder.uncategorized.rawValue).tag(NoteSortOrder.uncategorized)
-                                Text(NoteSortOrder.actionItems.rawValue).tag(NoteSortOrder.actionItems)
+                            Section {
+                                Picker("Sort by", selection: $sortOrder) {
+                                    Text(NoteSortOrder.uncategorized.rawValue).tag(NoteSortOrder.uncategorized)
+                                    Text(NoteSortOrder.actionItems.rawValue).tag(NoteSortOrder.actionItems)
+                                }
                             }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        NavigationLink {
-                            SettingsView()
                         } label: {
-                            Image(systemName: "gearshape")
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HStack(spacing: 12) {
+                            NavigationLink {
+                                SettingsView()
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
                         }
                     }
                 }

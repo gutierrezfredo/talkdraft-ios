@@ -1,11 +1,46 @@
 import SwiftUI
 
 extension HomeView {
+    func beginSearch() {
+        selectionSearchTransitionTask?.cancel()
+        showsSelectionSearchTransition = false
+        searchPreviousCategory = selectedCategory
+        withAnimation(.snappy) {
+            selectedCategory = nil
+            isSearching = true
+        }
+        searchFocused = true
+    }
+
+    func endSearch() {
+        selectionSearchTransitionTask?.cancel()
+        withAnimation(.snappy) {
+            isSearching = false
+            query = ""
+            searchFocused = false
+            showsSelectionSearchTransition = false
+            selectedCategory = searchPreviousCategory
+        }
+        searchPreviousCategory = nil
+    }
+
     func enterSelection(_ noteId: UUID) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        let shouldAnimateSearchContext = isSearching && !query.isEmpty
+        selectionSearchTransitionTask?.cancel()
         withAnimation(.snappy) {
+            searchFocused = false
+            showsSelectionSearchTransition = shouldAnimateSearchContext
             isSelecting = true
             selectedIds = [noteId]
+        }
+        guard shouldAnimateSearchContext else { return }
+        selectionSearchTransitionTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(420))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                showsSelectionSearchTransition = false
+            }
         }
     }
 
@@ -24,8 +59,10 @@ extension HomeView {
     }
 
     func exitSelection() {
+        selectionSearchTransitionTask?.cancel()
         withAnimation(.snappy) {
             isSelecting = false
+            showsSelectionSearchTransition = false
             selectedIds = []
         }
     }
