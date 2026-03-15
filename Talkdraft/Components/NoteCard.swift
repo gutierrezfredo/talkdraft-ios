@@ -12,6 +12,7 @@ struct NoteCard: View {
 
     private var isDark: Bool { colorScheme == .dark }
     private var resolvedContent: String { content ?? note.content }
+    private var previewContent: String { NoteTextFormatting.plainDisplayText(for: resolvedContent) }
     private var bodyState: NoteBodyState { NoteBodyState(content: resolvedContent, source: note.source) }
 
     private var cardBackground: Color {
@@ -76,7 +77,7 @@ struct NoteCard: View {
                     }
                     .onDisappear { transcribingPulse = false }
             } else {
-                Text(resolvedContent)
+                Text(previewContent)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)

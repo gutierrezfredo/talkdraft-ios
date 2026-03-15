@@ -42,7 +42,7 @@ struct RecentlyDeletedView: View {
                                     }
                                 }
 
-                                Text(note.content)
+                                Text(NoteTextFormatting.plainDisplayText(for: note.content))
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)

@@ -101,7 +101,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
         let needsRefresh = context.coordinator.needsAttributeRefresh
         context.coordinator.needsAttributeRefresh = false
-        let mapper = NoteTextMapper(attributedText: tv.attributedText)
+        let mapper = Self.mapper(for: tv)
         let currentPlain = mapper.plainText
         if currentPlain != text || needsRefresh {
             let selectedPlainRange = mapper.plainRange(forAttributedRange: tv.selectedRange)
@@ -218,6 +218,7 @@ struct ExpandingTextView: UIViewRepresentable {
         var pendingScrollOffsetRestore: DispatchWorkItem?
         var pendingTrailingDeletionFollow: DispatchWorkItem?
         var pendingCheckboxTapSelection: NSRange?
+        var pendingSystemEdit: (updatedText: String, selectedPlainRange: NSRange)?
         var pendingDeletionAnchorCaretBottom: CGFloat?
         var pendingEndInsertionSavedOffset: CGPoint?
         var suppressNextScrollOffsetRestore = false
@@ -324,7 +325,7 @@ struct ExpandingTextView: UIViewRepresentable {
 
         func showHighlightOverlay(range: NSRange, in tv: UITextView) {
             DispatchQueue.main.async { [weak self] in
-                let mapper = NoteTextMapper(attributedText: tv.attributedText)
+                let mapper = ExpandingTextView.mapper(for: tv)
                 let attributedRange = mapper.attributedRange(forPlainRange: range)
                 self?.addHighlightViews(range: attributedRange, in: tv)
             }
