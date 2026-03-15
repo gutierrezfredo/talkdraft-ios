@@ -378,11 +378,6 @@ extension NoteDetailView {
                 transcriptionFailedView
                     .padding(.top, 40)
             } else {
-                if isRewriting {
-                    rewriteInProgressBanner
-                        .padding(.top, 28)
-                        .padding(.horizontal, 24)
-                }
                 if !detectedSpeakers.isEmpty {
                     speakerChipsRow
                         .padding(.top, 28)
@@ -395,36 +390,6 @@ extension NoteDetailView {
                 contentField
             }
         }
-    }
-
-    var rewriteInProgressBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "wand.and.stars")
-                .font(.body)
-                .foregroundStyle(Color.brand)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Rewrite in progress")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
-                Text("Safe to leave — we’ll finish it in the background.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(colorScheme == .dark ? Color.darkSurface : Color.white.opacity(0.88))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.brand.opacity(0.2), lineWidth: 1)
-        )
     }
 
     var titleField: some View {
