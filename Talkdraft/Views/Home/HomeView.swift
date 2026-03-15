@@ -34,6 +34,7 @@ struct HomeView: View {
     @State var keyboardHeight: CGFloat = 0
     @State var draggingCategory: Category?
     @State var chipsBarHeight: CGFloat = 0
+    @State var searchPreviousCategory: UUID?
     @Namespace var namespace
     @FocusState var searchFocused: Bool
 

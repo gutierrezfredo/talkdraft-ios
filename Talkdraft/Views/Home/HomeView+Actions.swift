@@ -1,6 +1,25 @@
 import SwiftUI
 
 extension HomeView {
+    func beginSearch() {
+        searchPreviousCategory = selectedCategory
+        withAnimation(.snappy) {
+            selectedCategory = nil
+            isSearching = true
+        }
+        searchFocused = true
+    }
+
+    func endSearch() {
+        withAnimation(.snappy) {
+            isSearching = false
+            query = ""
+            searchFocused = false
+            selectedCategory = searchPreviousCategory
+        }
+        searchPreviousCategory = nil
+    }
+
     func enterSelection(_ noteId: UUID) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         withAnimation(.snappy) {

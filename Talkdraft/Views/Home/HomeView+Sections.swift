@@ -230,11 +230,7 @@ extension HomeView {
                 .matchedTransitionSource(id: "record", in: namespace)
 
             Button {
-                withAnimation(.snappy) {
-                    selectedCategory = nil
-                    isSearching = true
-                }
-                searchFocused = true
+                beginSearch()
             } label: {
                 Image(systemName: "magnifyingglass")
                     .fontWeight(.medium)
@@ -276,11 +272,7 @@ extension HomeView {
             .glassEffect(.regular, in: .capsule)
 
             Button {
-                withAnimation(.snappy) {
-                    isSearching = false
-                    query = ""
-                    searchFocused = false
-                }
+                endSearch()
             } label: {
                 Image(systemName: "xmark")
                     .font(.body)
