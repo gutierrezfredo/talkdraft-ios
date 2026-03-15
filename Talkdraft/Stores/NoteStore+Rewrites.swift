@@ -183,7 +183,12 @@ extension NoteStore {
             applyRewriteJobSnapshot(relevant, replacingAll: true)
 
             for job in rewriteJobsByNoteId.values where job.status == .queued && !attemptedRewriteTriggerIds.contains(job.id) {
-                try? await triggerRewriteJob(job.id)
+                do {
+                    try await triggerRewriteJob(job.id)
+                } catch {
+                    rewriteErrorsByNoteId[job.noteId] = "Rewrite failed to start. Please try again."
+                    logger.error("triggerRewriteJob failed for queued job \(job.id): \(error.localizedDescription, privacy: .public)")
+                }
             }
 
             let currentActiveIds = Set(rewriteJobsByNoteId.values.compactMap { $0.status.isActive ? $0.noteId : nil })
@@ -372,10 +377,12 @@ extension NoteStore {
 
     private func triggerRewriteJob(_ jobId: UUID) async throws {
         attemptedRewriteTriggerIds.insert(jobId)
+        let accessToken = try await supabase.auth.session.accessToken
         let _: RewriteJobTriggerResponse = try await supabase.functions.invoke(
             "process-rewrite-job",
             options: .init(
                 method: .post,
+                headers: ["Authorization": "Bearer \(accessToken)"],
                 body: RewriteJobTriggerPayload(jobId: jobId)
             )
         )
