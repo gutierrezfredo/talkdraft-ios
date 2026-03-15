@@ -1,6 +1,6 @@
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse";
 
 export type RewritePromptInput = {
   text: string;
@@ -157,8 +157,22 @@ export async function rewriteText(input: RewritePromptInput): Promise<string> {
     throw new Error(`Gemini API error: ${await response.text()}`);
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const raw = await response.text();
+  let text = "";
+
+  for (const line of raw.split("\n")) {
+    if (!line.startsWith("data: ")) continue;
+    const jsonStr = line.slice(6).trim();
+    if (!jsonStr) continue;
+
+    try {
+      const chunk = JSON.parse(jsonStr);
+      text += chunk.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    } catch {
+      // Ignore malformed chunks and continue building the response.
+    }
+  }
+
   if (!text) {
     throw new Error("Gemini returned an empty rewrite");
   }

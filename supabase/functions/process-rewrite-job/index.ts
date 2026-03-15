@@ -3,7 +3,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { rewriteText } from "../_shared/rewrite.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const corsHeaders = {
@@ -51,30 +50,13 @@ Deno.serve(async (req) => {
   let jobId: string | undefined;
 
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error("Supabase environment variables are not configured");
     }
 
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false },
-      global: { headers: { Authorization: authHeader } },
-    });
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
-
-    const { data: authData, error: authError } = await userClient.auth
-      .getUser();
-    if (authError || !authData.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
 
     ({ jobId } = await req.json());
     if (!jobId) {
@@ -98,16 +80,6 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Rewrite job not found" }),
         {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    if (job.user_id !== authData.user.id) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        {
-          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
