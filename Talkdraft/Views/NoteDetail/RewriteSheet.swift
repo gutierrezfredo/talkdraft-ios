@@ -164,7 +164,7 @@ struct RewriteSheet: View {
                 .padding(.top, 8)
                 .animation(.snappy, value: selectedTab)
                 .onChange(of: selectedTab) {
-                    customFocused = false
+                    customFocused = selectedTab == 1
                 }
 
                 if selectedTab == 0 {
@@ -497,38 +497,43 @@ struct RewriteSheet: View {
 
     // MARK: - Custom
 
+    private var isCustomValid: Bool {
+        !customInstructions.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private var customView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
-                .font(.body)
+                .font(.brandTitle2)
                 .lineLimit(3...8)
                 .focused($customFocused)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                )
-                .padding(.horizontal, 20)
-
-            Button {
-                onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces), nil, nil)
-                dismiss()
-            } label: {
-                Text("Rewrite")
-                    .font(.body)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Capsule().fill(Color.brand))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .disabled(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(customInstructions.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                .padding(.horizontal, 24)
+                .padding(.top, 32)
+                .onSubmit { if isCustomValid { submitCustom() } }
 
             Spacer()
+
+            Button {
+                submitCustom()
+            } label: {
+                Text("Rewrite")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(isCustomValid ? .white : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        Capsule().fill(isCustomValid ? Color.brand : (colorScheme == .dark ? Color.darkSurface : Color.secondary.opacity(0.12)))
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!isCustomValid)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
         }
-        .padding(.top, 20)
+    }
+
+    private func submitCustom() {
+        onSelect(nil, customInstructions.trimmingCharacters(in: .whitespaces), nil, nil)
+        dismiss()
     }
 }

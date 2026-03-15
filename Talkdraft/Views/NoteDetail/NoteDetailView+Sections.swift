@@ -309,7 +309,7 @@ extension NoteDetailView {
                     Button {
                         startAppendRecording(scrollToBottom: true)
                     } label: {
-                        Label("Record More", systemImage: "mic")
+                        Label(note.source == .voice ? "Record More" : "Record", systemImage: "mic")
                     }
                     .disabled(isAppendRecording || isAppendTranscribing || isRewriting)
 
@@ -320,11 +320,13 @@ extension NoteDetailView {
                             if isDownloadingAudio {
                                 Label { Text("Downloading…") } icon: { ProgressView() }
                             } else {
-                                Label("Download Audio", systemImage: "arrow.down.circle")
+                                Label("Export Audio", systemImage: "arrow.down.circle")
                             }
                         }
                         .disabled(isDownloadingAudio)
                     }
+
+                    Divider()
 
                     if let rewriteId = activeRewriteId,
                        let rewrite = rewrites.first(where: { $0.id == rewriteId }) {

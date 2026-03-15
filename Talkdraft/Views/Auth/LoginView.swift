@@ -78,7 +78,7 @@ struct LoginView: View {
                 Button {
                     Task { await authStore.signInAnonymously() }
                 } label: {
-                    Text("Continue without login")
+                    Text("Skip login")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

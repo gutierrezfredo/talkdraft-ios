@@ -231,6 +231,7 @@ extension HomeView {
 
             Button {
                 withAnimation(.snappy) {
+                    selectedCategory = nil
                     isSearching = true
                 }
                 searchFocused = true
