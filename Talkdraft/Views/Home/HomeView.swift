@@ -27,6 +27,7 @@ struct HomeView: View {
     @State var showCategoryPicker = false
 
     @State var showAudioImporter = false
+    @State var pendingImportURL: URL?
     @State var showAddCategory = false
     @State var editingCategory: Category?
     @State var categoryToDelete: Category?
@@ -219,6 +220,16 @@ struct HomeView: View {
             allowsMultipleSelection: false
         ) { result in
             handleAudioImport(result)
+        }
+        .sheet(isPresented: .init(
+            get: { pendingImportURL != nil },
+            set: { if !$0 { pendingImportURL = nil } }
+        )) {
+            AudioImportSheet(fileName: pendingImportURL?.lastPathComponent ?? "") { multiSpeaker in
+                confirmAudioImport(multiSpeaker: multiSpeaker)
+            }
+            .presentationDetents([.height(220)])
+            .presentationBackground { SheetBackground() }
         }
         .alert("Delete \(selectedIds.count) Note\(selectedIds.count == 1 ? "" : "s")?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {

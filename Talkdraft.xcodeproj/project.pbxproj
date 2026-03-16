@@ -49,6 +49,7 @@
 		67D7C9DB4B013785AE342B9D /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB92BBFFE4739EE0C8BB2DC /* MockData.swift */; };
 		7952FC78CE874662D3E53919 /* mail-received.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 348BCF1A7877A6D7EEE0611F /* mail-received.mp4 */; };
 		7AA965130CF159D8D1DA7B4E /* NoteStore+Transcription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DFA2669E18D72E94C0B4F85 /* NoteStore+Transcription.swift */; };
+		7B2B494C2C40900111EF74B5 /* AudioImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73A6FB64E6A7AA4E37417B89 /* AudioImportSheet.swift */; };
 		7B6635F24439460A67156B89 /* while-hobby.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 2B4F8F9533EB78A39C8B0096 /* while-hobby.mp4 */; };
 		7E4991614F7FDD1C5C1F55DA /* NoteCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F175F2B6D8263BF06EA07FB4 /* NoteCard.swift */; };
 		7F67DA0B520591C43991913F /* ExpandingTextView+Editing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E433694E72A2A39CA47B73 /* ExpandingTextView+Editing.swift */; };
@@ -145,6 +146,7 @@
 		6BA8589752960054085DA758 /* transcribing-1.mp4 */ = {isa = PBXFileReference; path = "transcribing-1.mp4"; sourceTree = "<group>"; };
 		6D5E4C47C5BA609ADDA45748 /* NoteDetailView+RewriteActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+RewriteActions.swift"; sourceTree = "<group>"; };
 		700D07AB41C365FB7CE2F5F4 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		73A6FB64E6A7AA4E37417B89 /* AudioImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportSheet.swift; sourceTree = "<group>"; };
 		7436ED41BD4751A753747357 /* RewriteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteSheet.swift; sourceTree = "<group>"; };
 		782B65C30787C51E9687143E /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		78B62096A620FFE1EBE3755B /* while-work.mp4 */ = {isa = PBXFileReference; path = "while-work.mp4"; sourceTree = "<group>"; };
@@ -405,6 +407,7 @@
 		B428D5F8AD757026EC672D4C /* Home */ = {
 			isa = PBXGroup;
 			children = (
+				73A6FB64E6A7AA4E37417B89 /* AudioImportSheet.swift */,
 				C45C2752E0BED51698E4C2DB /* HomeNoteQuery.swift */,
 				56D177D92B1D0A5C79907332 /* HomeView.swift */,
 				033A9C4A387C05783A8B5AD4 /* HomeView+Actions.swift */,
@@ -550,6 +553,7 @@
 			files = (
 				C230A828D9479B392014AF9A /* AIService.swift in Sources */,
 				01ACE6E562F49178483573B3 /* AudioCompressor.swift in Sources */,
+				7B2B494C2C40900111EF74B5 /* AudioImportSheet.swift in Sources */,
 				33CE1A9C063E4F0348D629D6 /* AudioPlayer.swift in Sources */,
 				2F49EC3070F7357DFAB5B45F /* AudioRecorder.swift in Sources */,
 				35F5DA9385067C04FD8143BF /* AuthStore.swift in Sources */,

@@ -7,6 +7,7 @@ extension NoteStore {
         categoryId: UUID?,
         language: String?,
         customDictionary: [String],
+        multiSpeaker: Bool = false,
         requiresSecurityScopedAccess: Bool = true
     ) async throws -> Note {
         if requiresSecurityScopedAccess {
@@ -21,6 +22,7 @@ extension NoteStore {
                 categoryId: categoryId,
                 language: language,
                 customDictionary: customDictionary,
+                multiSpeaker: multiSpeaker,
                 requiresSecurityScopedAccess: false
             )
         }
@@ -53,7 +55,8 @@ extension NoteStore {
             audioFileURL: destinationURL,
             language: language,
             userId: userId,
-            customDictionary: customDictionary
+            customDictionary: customDictionary,
+            multiSpeaker: multiSpeaker
         )
         return note
     }
