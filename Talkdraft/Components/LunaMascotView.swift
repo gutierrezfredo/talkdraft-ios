@@ -84,7 +84,6 @@ enum LunaPose: String, CaseIterable {
     case binge
     case box
     case email
-    case headphone
     case hobby
     case moon
     case read
