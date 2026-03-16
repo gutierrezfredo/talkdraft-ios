@@ -122,9 +122,15 @@ extension NoteStore {
                     .value
 
                 applyRewriteJobSnapshot([created])
-                try await triggerRewriteJob(created.id)
-                await refreshRewriteJobs()
                 startRewriteJobPolling()
+
+                do {
+                    try await triggerRewriteJob(created.id)
+                    await refreshRewriteJobs()
+                } catch {
+                    logger.error("triggerRewriteJob failed for new job \(created.id): \(error.localizedDescription, privacy: .public)")
+                    await refreshRewriteJobs()
+                }
             } catch {
                 if introducedOriginalContent,
                    var reverted = notes.first(where: { $0.id == note.id }) {
