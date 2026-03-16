@@ -73,7 +73,6 @@ struct RecordView: View {
                 .background(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
                 .fixedSize()
                 .contentShape(Capsule())
-                .onTapGesture { withAnimation(.snappy(duration: 0.2)) { multiSpeaker.toggle() } }
                 .padding(.bottom, 72)
 
                 // Controls

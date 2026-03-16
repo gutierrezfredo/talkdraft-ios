@@ -89,6 +89,9 @@ extension HomeView {
                     selectedCategory = category.id
                 }
             }
+            .onDisappear {
+                addCategoryFromBulk = false
+            }
         }
         .sheet(item: $editingCategory) { category in
             CategoryFormSheet(mode: .edit(category))

@@ -36,7 +36,6 @@ struct AudioImportSheet: View {
                 Capsule().strokeBorder(borderColor, lineWidth: 1)
             )
             .contentShape(Capsule())
-            .onTapGesture { withAnimation(.snappy(duration: 0.2)) { multiSpeaker.toggle() } }
 
             Button {
                 onImport(multiSpeaker)
