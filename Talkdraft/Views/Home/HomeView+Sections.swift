@@ -80,7 +80,14 @@ extension HomeView {
         }
         .sheet(isPresented: $showAddCategory) {
             CategoryFormSheet(mode: .add) { category in
-                selectedCategory = category.id
+                if addCategoryFromBulk {
+                    noteStore.moveNotes(ids: selectedIds, toCategoryId: category.id)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    exitSelection()
+                    addCategoryFromBulk = false
+                } else {
+                    selectedCategory = category.id
+                }
             }
         }
         .sheet(item: $editingCategory) { category in
@@ -129,10 +136,10 @@ extension HomeView {
     var emptyState: some View {
         SwiftUI.Group {
             if isSearching && !query.isEmpty || selectedCategory != nil {
-                VStack(spacing: 12) {
+                VStack(spacing: 4) {
                     LunaMascotView(
                         isSearching && !query.isEmpty ? .search : .box,
-                        size: 120
+                        size: 180
                     )
 
                     Text(isSearching && !query.isEmpty ? "No results" : "No notes yet")
@@ -146,7 +153,7 @@ extension HomeView {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 80)
+                .padding(.top, 40)
             } else {
                 VStack(spacing: 16) {
                     VStack(spacing: 8) {
@@ -359,48 +366,67 @@ extension HomeView {
 
     var bulkCategoryPicker: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
+            VStack {
+                ScrollView {
                     FlowLayout(spacing: 8) {
-                        ForEach(noteStore.categories) { cat in
-                            Button {
-                                noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
-                                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                                exitSelection()
-                                showCategoryPicker = false
-                            } label: {
-                                Text(cat.name)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(Color.categoryColor(hex: cat.color))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: 200)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
-                                    .background(
-                                        Capsule()
-                                            .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                    )
-                            }
-                            .buttonStyle(.plain)
+                    ForEach(noteStore.categories) { cat in
+                        Button {
+                            noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            exitSelection()
+                            showCategoryPicker = false
+                        } label: {
+                            Text(cat.name)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(Color.categoryColor(hex: cat.color))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: 200)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                                .background(
+                                    Capsule()
+                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                )
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 20)
-
                     Button {
-                        noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        exitSelection()
                         showCategoryPicker = false
+                        addCategoryFromBulk = true
+                        showAddCategory = true
                     } label: {
-                        Text("Remove category")
+                        Image(systemName: "plus")
                             .font(.subheadline)
+                            .fontWeight(.semibold)
                             .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                Circle()
+                                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                            )
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.top, 20)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                }
+
+                Spacer()
+
+                Button {
+                    noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    exitSelection()
+                    showCategoryPicker = false
+                } label: {
+                    Text("Remove category")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 32)
             }
             .navigationTitle("Move to Category")
             .navigationBarTitleDisplayMode(.inline)

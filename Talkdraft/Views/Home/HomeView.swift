@@ -29,6 +29,7 @@ struct HomeView: View {
     @State var showAudioImporter = false
     @State var pendingImportURL: URL?
     @State var showAddCategory = false
+    @State var addCategoryFromBulk = false
     @State var editingCategory: Category?
     @State var categoryToDelete: Category?
     @State var pendingNote: Note?

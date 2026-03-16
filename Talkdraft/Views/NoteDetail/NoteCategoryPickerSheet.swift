@@ -14,9 +14,8 @@ struct CategoryPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Category grid
+            VStack {
+                ScrollView {
                     FlowLayout(spacing: 8) {
                         ForEach(noteStore.categories) { cat in
                             let isSelected = selectedCategoryId == cat.id
@@ -52,7 +51,6 @@ struct CategoryPickerSheet: View {
                             .buttonStyle(.plain)
                         }
 
-                        // Add category button
                         Button {
                             showAddCategory = true
                         } label: {
@@ -74,26 +72,27 @@ struct CategoryPickerSheet: View {
                         .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-
-                    // Remove category
-                    if selectedCategoryId != nil {
-                        Button {
-                            selectedCategoryId = nil
-                            var updated = note
-                            updated.categoryId = nil
-                            updated.updatedAt = Date()
-                            noteStore.updateNote(updated)
-                            dismiss()
-                        } label: {
-                            Text("Remove category")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    .padding(.top, 20)
                 }
-                .padding(.top, 20)
+
+                Spacer()
+
+                if selectedCategoryId != nil {
+                    Button {
+                        selectedCategoryId = nil
+                        var updated = note
+                        updated.categoryId = nil
+                        updated.updatedAt = Date()
+                        noteStore.updateNote(updated)
+                        dismiss()
+                    } label: {
+                        Text("Remove category")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 32)
+                }
             }
             .navigationTitle("Move to category")
             .navigationBarTitleDisplayMode(.inline)
