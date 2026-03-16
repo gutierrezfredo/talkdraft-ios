@@ -6,7 +6,7 @@ struct ContentView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.scenePhase) private var scenePhase
-    @State private var onboardingComplete = false
+    @State private var completedOnboardingUserId: UUID?
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
@@ -19,7 +19,7 @@ struct ContentView: View {
         guard let userId = authStore.userId else { return false }
         if UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") { return false }
         if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty { return false }
-        return !onboardingComplete
+        return completedOnboardingUserId != userId
     }
 
     private var colorScheme: ColorScheme? {
@@ -43,7 +43,7 @@ struct ContentView: View {
                     if shouldShowOnboarding {
                         OnboardingView {
                             withAnimation(.easeInOut(duration: 0.4)) {
-                                onboardingComplete = true
+                                completedOnboardingUserId = authStore.userId
                             }
                         }
                     } else {
@@ -88,6 +88,7 @@ struct ContentView: View {
                     Task { await subscriptionStore.login(userId: userId) }
                 }
             } else {
+                completedOnboardingUserId = nil
                 noteStore.resetSession()
                 settingsStore.resetSession()
                 Task { await subscriptionStore.logout() }
@@ -100,6 +101,7 @@ struct ContentView: View {
                   oldValue != newValue
             else { return }
 
+            completedOnboardingUserId = nil
             noteStore.resetSession()
             noteStore.beginSession(userId: newValue)
             noteStore.startRewriteJobPolling()

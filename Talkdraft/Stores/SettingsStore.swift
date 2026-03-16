@@ -35,6 +35,8 @@ final class SettingsStore {
         self.userId = userId
         if let language, !language.isEmpty {
             self.language = language
+        } else {
+            self.language = "auto"
         }
         customDictionary = dictionary
     }
@@ -61,6 +63,7 @@ final class SettingsStore {
 
     func resetSession() {
         userId = nil
+        language = "auto"
         customDictionary = []
     }
 

@@ -2,7 +2,7 @@ import StoreKit
 import SwiftUI
 
 struct OnboardingPaywallStep: View {
-    let onTrialStarted: () -> Void
+    let onPurchaseCompleted: (_ startedTrial: Bool) -> Void
     let onRestored: () -> Void
 
     @Environment(SubscriptionStore.self) private var subscriptionStore
@@ -14,12 +14,18 @@ struct OnboardingPaywallStep: View {
         colorScheme == .dark ? .darkSurface : .white
     }
 
+    private var showsTrialMessaging: Bool {
+        subscriptionStore.isTrialEligible
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 header
                 featureList
-                trialTimeline
+                if showsTrialMessaging {
+                    trialTimeline
+                }
                 planSelection
                 subscribeButton
 
@@ -69,7 +75,9 @@ struct OnboardingPaywallStep: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 16)
 
-            Text("Record longer, organize everything, and turn rough notes into something useful.")
+            Text(showsTrialMessaging
+                 ? "Record longer, organize everything, and start with a free trial."
+                 : "Record longer, organize everything, and turn rough notes into something useful.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -271,6 +279,7 @@ struct OnboardingPaywallStep: View {
         VStack(spacing: 8) {
             Button {
                 Task {
+                    let startedTrial = subscriptionStore.isTrialEligible
                     let product: StoreKit.Product? = switch selectedPlan {
                     case .monthly: subscriptionStore.monthlyProduct
                     case .yearly: subscriptionStore.yearlyProduct
@@ -282,7 +291,7 @@ struct OnboardingPaywallStep: View {
                     do {
                         try await subscriptionStore.purchase(product)
                         if subscriptionStore.isPro {
-                            onTrialStarted()
+                            onPurchaseCompleted(startedTrial)
                         }
                     } catch {
                         errorMessage = "Purchase failed: \(error.localizedDescription)"
@@ -294,7 +303,7 @@ struct OnboardingPaywallStep: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text(subscriptionStore.isTrialEligible ? "Start Free Trial" : "Subscribe Now")
+                        Text(showsTrialMessaging ? "Start Free Trial" : "Subscribe Now")
                             .fontWeight(.bold)
                     }
                 }
@@ -306,7 +315,7 @@ struct OnboardingPaywallStep: View {
             .buttonStyle(.plain)
             .disabled(subscriptionStore.isLoading)
 
-            if subscriptionStore.isTrialEligible {
+            if showsTrialMessaging {
                 Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

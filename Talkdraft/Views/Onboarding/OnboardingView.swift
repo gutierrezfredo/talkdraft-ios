@@ -6,13 +6,11 @@ struct OnboardingView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
-    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var step: OnboardingStep = .welcome
     @State private var selectedLanguage: String = "auto"
     @State private var selectedCategoryIndices: Set<Int> = []
-    @State private var trialJustStarted = false
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -67,9 +65,12 @@ struct OnboardingView: View {
 
                     case .paywall:
                         OnboardingPaywallStep(
-                            onTrialStarted: {
-                                trialJustStarted = true
-                                advance()
+                            onPurchaseCompleted: { startedTrial in
+                                if startedTrial {
+                                    step = .notifications
+                                } else {
+                                    finishOnboarding()
+                                }
                             },
                             onRestored: { finishOnboarding() }
                         )
@@ -86,12 +87,15 @@ struct OnboardingView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: step)
+        .onAppear {
+            selectedLanguage = settingsStore.language
+        }
     }
 
     // MARK: - Navigation
 
     private func advance() {
-        guard let next = step.next(trialStarted: trialJustStarted) else {
+        guard let next = step.next else {
             finishOnboarding()
             return
         }
@@ -164,12 +168,12 @@ private enum OnboardingStep: Int, CaseIterable {
         }
     }
 
-    func next(trialStarted: Bool) -> OnboardingStep? {
+    var next: OnboardingStep? {
         switch self {
         case .welcome: .language
         case .language: .categories
         case .categories: .paywall
-        case .paywall: trialStarted ? .notifications : nil
+        case .paywall: nil
         case .notifications: nil
         }
     }
