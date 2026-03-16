@@ -12,10 +12,14 @@ struct OnboardingWelcomeStep: View {
             // Luna mascot in brand circle
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(colorScheme == .dark ? 1.0 : 0.20))
+                    .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
                     .frame(width: 220, height: 220)
 
-                LunaMascotView(.moon, size: 180)
+                Image("luna-headphone")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 184, height: 184)
+                    .accessibilityHidden(true)
             }
             .padding(.bottom, 32)
 
@@ -38,7 +42,7 @@ struct OnboardingWelcomeStep: View {
             Button {
                 onNext()
             } label: {
-                Text("Continue")
+                Text("Get Started")
                     .fontWeight(.semibold)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
