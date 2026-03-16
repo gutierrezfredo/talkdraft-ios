@@ -24,6 +24,7 @@
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
 | RecentlyDeletedView | `Views/Settings/RecentlyDeletedView.swift` | Built — browse, restore, permanently delete soft-deleted notes |
 | CategoriesView | `Views/Categories/` | Built — CRUD with color picker, category form sheet |
+| OnboardingView | `Views/Onboarding/` | Built — 5-screen flow: Welcome, Language, Categories, Paywall, Notifications |
 
 ### Components
 
@@ -92,9 +93,23 @@
 - [x] Mandatory paywall gate after sign-in (subscription-only, no free tier)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
 - [x] Feedback & support in Settings (sentiment gate → App Store review, pre-filled support email)
+- [x] Onboarding flow (Welcome → Language → Categories → Paywall → Trial notifications)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-03-16 (Session 15)
+- Onboarding flow: 5-screen first-run experience between login and Home
+- Welcome screen: Luna mascot with "Say it messy. Read it clean." brand tagline
+- Language picker: searchable full language list with Auto-detect default, saves to SettingsStore + Supabase profile
+- Starter categories: 8 multi-select colored pill chips (Ideas, Tasks, Journal, Meetings, Work, Personal, Content, Reminders), idempotent creation
+- Onboarding paywall: feature list + trial timeline card + plan selection, mandatory (no skip)
+- Trial notification: permission screen only after fresh trial start, schedules local reminder 5 days out (2 days before expiry)
+- Onboarding gate: skips for returning users (has notes or categories), per-user completion in UserDefaults
+- Profile language hydration: AuthStore now passes profile.language to SettingsStore on login
+- SettingsStore: extracted supportedLanguages to shared static property, resetSession clears language to "auto"
+- LunaMascotView: optional zColor parameter, white Z's on dark splash screens
+- TalkdraftApp: skip RevenueCat setup during test runs
 
 ### 2026-03-09 (Session 14)
 - Multi-speaker recording: toggle in RecordView routes to `transcribe-diarized` Supabase edge function
