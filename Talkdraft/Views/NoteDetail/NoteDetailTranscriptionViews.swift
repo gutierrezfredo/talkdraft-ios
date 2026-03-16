@@ -1,47 +1,24 @@
-import AVFoundation
 import SwiftUI
 
 struct NoteDetailTranscribingIndicatorView: View {
-    let videoPlayer: AVQueuePlayer?
+    let lunaPose: LunaPose
     let subtitle: String
-    let onAppear: () -> Void
-    let onDisappear: () -> Void
 
-    @State private var pulse = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 24) {
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(0.12))
+                    .fill(Color.brand.opacity(colorScheme == .dark ? 1.0 : 0.20))
                     .frame(width: 220, height: 220)
 
-                if let videoPlayer {
-                    LoopingVideoView(player: videoPlayer)
-                        .frame(width: 180, height: 180)
-                } else {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 44, weight: .medium))
-                        .foregroundStyle(Color.brand)
-                        .symbolEffect(.pulse.byLayer, options: .repeating)
-                }
-            }
-            .onAppear {
-                onAppear()
-                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                    pulse = true
-                }
-            }
-            .onDisappear {
-                onDisappear()
-                pulse = false
+                LunaMascotView(lunaPose, size: 180)
             }
 
-            VStack(spacing: 8) {
-                Text("Transcribing your note…")
+            VStack(spacing: 20) {
+                ShimmerTextView("Transcribing your note…")
                     .font(.brandTitle2)
-                    .multilineTextAlignment(.center)
-                    .opacity(pulse ? 0.4 : 1.0)
 
                 Text(subtitle)
                     .font(.subheadline)
@@ -52,6 +29,44 @@ struct NoteDetailTranscribingIndicatorView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .padding(.top, 40)
+    }
+}
+
+// MARK: - Shimmer Text
+
+private struct ShimmerTextView: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    @State private var shimmerOffset: CGFloat = -1
+
+    var body: some View {
+        Text(text)
+            .multilineTextAlignment(.center)
+            .overlay {
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.6), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 80)
+                .offset(x: shimmerOffset)
+                .mask {
+                    Text(text)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .onAppear {
+                withAnimation(
+                    .linear(duration: 2.0)
+                    .repeatForever(autoreverses: false)
+                ) {
+                    shimmerOffset = 300
+                }
+            }
     }
 }
 

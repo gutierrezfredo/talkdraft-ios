@@ -281,11 +281,7 @@ struct RewriteSheet: View {
             VStack(alignment: .leading, spacing: 28) {
                 if isPresetsEmpty {
                     VStack(spacing: 12) {
-                        Image("search-empty")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: 60)
-                            .foregroundStyle(.secondary)
+                        LunaMascotView(.search, size: 120)
                         Text("No results")
                             .font(.headline)
                         Text("No presets matching \"\(searchText.trimmingCharacters(in: .whitespaces))\".")

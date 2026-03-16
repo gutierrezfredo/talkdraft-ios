@@ -1,4 +1,3 @@
-import AVFoundation
 import SwiftUI
 
 extension NoteDetailView {
@@ -35,23 +34,24 @@ extension NoteDetailView {
             : transcribingPhrases[transcribingPhraseIndex]
     }
 
+    var transcribingLunaPose: LunaPose {
+        if transcribingIsLong {
+            return whilePhrases[whileIndex].pose
+        } else {
+            return .moon
+        }
+    }
+
     var transcribingIndicator: some View {
         NoteDetailTranscribingIndicatorView(
-            videoPlayer: transcribingVideoPlayer,
-            subtitle: transcribingSubtitle,
-            onAppear: setupTranscribingVideo,
-            onDisappear: { transcribingVideoPlayer?.pause() }
+            lunaPose: transcribingLunaPose,
+            subtitle: transcribingSubtitle
         )
     }
 
     func updateTranscribingPresentation(for state: NoteBodyState) {
-        guard state == .transcribing else {
-            teardownTranscribingVideo()
-            return
-        }
-
+        guard state == .transcribing else { return }
         setupTranscribingState()
-        setupTranscribingVideo()
     }
 
     func setupTranscribingState() {
@@ -65,30 +65,6 @@ extension NoteDetailView {
         } else {
             transcribingPhraseIndex = hash % transcribingPhrases.count
         }
-    }
-
-    func setupTranscribingVideo() {
-        guard transcribingVideoPlayer == nil else { return }
-        let name: String
-        if transcribingIsLong {
-            name = whilePhrases[whileIndex].video
-        } else {
-            let shortVideos = ["transcribing-1", "transcribing-2"]
-            name = shortVideos[abs(noteId.hashValue) % shortVideos.count]
-        }
-        guard let url = Bundle.main.url(forResource: name, withExtension: "mp4") else { return }
-        let item = AVPlayerItem(url: url)
-        let player = AVQueuePlayer(playerItem: item)
-        transcribingPlayerLooper = AVPlayerLooper(player: player, templateItem: item)
-        player.isMuted = true
-        player.play()
-        transcribingVideoPlayer = player
-    }
-
-    func teardownTranscribingVideo() {
-        transcribingVideoPlayer?.pause()
-        transcribingVideoPlayer = nil
-        transcribingPlayerLooper = nil
     }
 
     var waitingForConnectionView: some View {
