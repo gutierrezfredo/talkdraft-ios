@@ -1,6 +1,11 @@
 import AVFoundation
 import SwiftUI
 
+enum RewriteSourceChoice {
+    case original
+    case currentVersion
+}
+
 /// Walks up from a SwiftUI scroll content view to find the parent UIScrollView
 /// and configures it for native interactive keyboard dismissal.
 private struct ScrollViewKeyboardDismissSetup: UIViewRepresentable {
@@ -40,6 +45,8 @@ struct NoteDetailView: View {
     @State var didDelete = false
     @State var showCategoryPicker = false
     @State var showRewriteSheet = false
+    @State var showRewriteSourceDialog = false
+    @State var rewriteSourceChoice: RewriteSourceChoice = .original
     @State var pendingRewrite: (tone: String?, instructions: String?, toneLabel: String?, toneEmoji: String?)?
     @State var rewrites: [NoteRewrite] = []
     @State var activeRewriteId: UUID?
@@ -72,6 +79,7 @@ struct NoteDetailView: View {
     @State var transcribingPhraseIndex = 0
     @State var transcribingIsLong = false
     @State var whileIndex = 0
+    @State var selectedSpeaker: String? = nil
     @State var renamingSpeaker: String? = nil
     @State var renameText: String = ""
     @State var rewriteSweep: CGFloat = 0
@@ -331,6 +339,9 @@ struct NoteDetailView: View {
             }
             .onChange(of: editedContent) { _, newValue in
                 syncBodyState(with: newValue)
+                if let selectedSpeaker, !detectedSpeakers.contains(selectedSpeaker) {
+                    self.selectedSpeaker = nil
+                }
                 scheduleAutosave()
             }
             .onChange(of: cursorPosition) { _, newPos in
@@ -381,6 +392,16 @@ struct NoteDetailView: View {
                         SheetBackground()
                     }
             }
+            .sheet(isPresented: $showRewriteSourceDialog) {
+                NoteDetailRewriteSourceSheet(
+                    onRewriteOriginal: { presentRewriteSheet(using: .original) },
+                    onRewriteCurrent: { presentRewriteSheet(using: .currentVersion) }
+                )
+                .presentationDetents([.height(214)])
+                .presentationBackground {
+                    SheetBackground()
+                }
+            }
             .sheet(isPresented: $showRewriteSheet, onDismiss: {
                 guard let rewrite = pendingRewrite else { return }
                 pendingRewrite = nil
@@ -388,7 +409,8 @@ struct NoteDetailView: View {
                     tone: rewrite.tone,
                     instructions: rewrite.instructions,
                     toneLabel: rewrite.toneLabel,
-                    toneEmoji: rewrite.toneEmoji
+                    toneEmoji: rewrite.toneEmoji,
+                    sourceChoice: rewriteSourceChoice
                 )
             }) {
                 RewriteSheet { tone, instructions, toneLabel, toneEmoji in

@@ -47,6 +47,7 @@ extension ExpandingTextView {
             font: font,
             lineSpacing: lineSpacing,
             speakerColors: speakerColors,
+            selectedSpeaker: selectedSpeaker,
             traitCollection: tv.traitCollection
         )
 

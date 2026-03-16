@@ -187,6 +187,20 @@ struct NoteEditorRules {
             }
         }
 
+        if range.length == 0,
+           replacementText.count == 1,
+           nsText.length > 0,
+           checkboxPrefixLengthIfEmptyTaskLine(in: nsText, at: range.location) != nil,
+           replacementText == replacementText.lowercased(),
+           replacementText != replacementText.uppercased() {
+            let insertedText = replacementText.uppercased()
+            let updatedText = nsText.replacingCharacters(in: range, with: insertedText)
+            return .apply(
+                updatedText: updatedText,
+                selectedRange: NSRange(location: range.location + (insertedText as NSString).length, length: 0)
+            )
+        }
+
         guard replacementText == "\n", nsText.length > 0, range.location <= nsText.length else {
             return .allowSystem
         }
@@ -259,6 +273,24 @@ struct NoteEditorRules {
         }
 
         return NSRange(location: start, length: end - start)
+    }
+
+    private static func checkboxPrefixLengthIfEmptyTaskLine(in text: NSString, at location: Int) -> Int? {
+        let lineRange = currentLineRange(in: text, at: location)
+        guard lineRange.location < text.length else { return nil }
+        let lineText = trimmedLine(in: text, lineRange: lineRange)
+        guard lineText.hasPrefix(uncheckedPrefix) || lineText.hasPrefix(checkedPrefix) else { return nil }
+
+        let prefixLength = lineText.hasPrefix(uncheckedPrefix)
+            ? (uncheckedPrefix as NSString).length
+            : (checkedPrefix as NSString).length
+        let lineBody = (lineText as NSString).substring(from: prefixLength)
+        guard lineBody.isEmpty else { return nil }
+
+        let lineStart = lineRange.location
+        let insertionRange = NSRange(location: lineStart + prefixLength, length: 0)
+        guard location == insertionRange.location else { return nil }
+        return prefixLength
     }
 }
 
@@ -480,6 +512,7 @@ enum NoteTextFormatting {
         font: UIFont,
         lineSpacing: CGFloat,
         speakerColors: [String: UIColor],
+        selectedSpeaker: String?,
         traitCollection: UITraitCollection
     ) -> EditorRenderResult {
         let baseParagraphStyle = NSMutableParagraphStyle()
@@ -507,6 +540,11 @@ enum NoteTextFormatting {
         let bodyBoldFont = boldFont(from: font)
         let resolvedBrandColor = ExpandingTextView.brandColor.resolvedColor(with: traitCollection)
         let resolvedUncheckedCheckboxColor = ExpandingTextView.uncheckedCheckboxColor.resolvedColor(with: traitCollection)
+        let dimmedTextColor = UIColor.label.withAlphaComponent(
+            traitCollection.userInterfaceStyle == .dark ? 0.42 : 0.5
+        )
+        let dimmedSpeakerAlpha: CGFloat = traitCollection.userInterfaceStyle == .dark ? 0.45 : 0.5
+        var activeSpeakerBlock: String?
 
         var lineLocation = 0
         while lineLocation < nsText.length {
@@ -515,8 +553,22 @@ enum NoteTextFormatting {
             let contentLength = hasNewline ? fullLineRange.length - 1 : fullLineRange.length
             let contentRange = NSRange(location: fullLineRange.location, length: max(0, contentLength))
             let rawLine = nsText.substring(with: contentRange)
+            let lineSpeaker = speakerColors[rawLine] != nil ? rawLine : activeSpeakerBlock
+            let lineForegroundColor: UIColor = {
+                guard let selectedSpeaker, let lineSpeaker, lineSpeaker != selectedSpeaker else {
+                    return UIColor.label
+                }
+                return dimmedTextColor
+            }()
 
             if let speakerColor = speakerColors[rawLine] {
+                activeSpeakerBlock = rawLine
+                let renderedSpeakerColor: UIColor
+                if let selectedSpeaker, rawLine != selectedSpeaker {
+                    renderedSpeakerColor = speakerColor.withAlphaComponent(dimmedSpeakerAlpha)
+                } else {
+                    renderedSpeakerColor = speakerColor
+                }
                 appendVisibleText(
                     rawLine,
                     plainLocation: contentRange.location,
@@ -524,7 +576,7 @@ enum NoteTextFormatting {
                     hiddenSuffixLength: 0,
                     attributes: [
                         .font: UIFont.systemFont(ofSize: font.pointSize, weight: .semibold),
-                        .foregroundColor: speakerColor,
+                        .foregroundColor: renderedSpeakerColor,
                         .paragraphStyle: baseParagraphStyle,
                     ],
                     attributed: attributed,
@@ -551,12 +603,16 @@ enum NoteTextFormatting {
                     leadingHiddenPrefixLength: 0,
                     normalAttributes: isChecked
                         ? checkedTextAttributes(from: baseAttributes)
-                        : baseAttributes,
+                        : [
+                            .font: font,
+                            .foregroundColor: lineForegroundColor,
+                            .paragraphStyle: baseParagraphStyle,
+                        ],
                     boldAttributes: isChecked
                         ? checkedTextAttributes(from: baseAttributes, font: bodyBoldFont)
                         : [
                             .font: bodyBoldFont,
-                            .foregroundColor: UIColor.label,
+                            .foregroundColor: lineForegroundColor,
                             .paragraphStyle: baseParagraphStyle,
                         ],
                     attributed: attributed,
@@ -586,10 +642,14 @@ enum NoteTextFormatting {
                     remainingText,
                     rawContentStart: contentRange.location + (NoteEditorRules.bulletPrefix as NSString).length,
                     leadingHiddenPrefixLength: 0,
-                    normalAttributes: baseAttributes,
+                    normalAttributes: [
+                        .font: font,
+                        .foregroundColor: lineForegroundColor,
+                        .paragraphStyle: baseParagraphStyle,
+                    ],
                     boldAttributes: [
                         .font: bodyBoldFont,
-                        .foregroundColor: UIColor.label,
+                        .foregroundColor: lineForegroundColor,
                         .paragraphStyle: baseParagraphStyle,
                     ],
                     attributed: attributed,
@@ -613,12 +673,12 @@ enum NoteTextFormatting {
                     leadingHiddenPrefixLength: shouldRenderHeading ? headingPrefixLength : 0,
                     normalAttributes: [
                         .font: shouldRenderHeading ? headingFont : font,
-                        .foregroundColor: UIColor.label,
+                        .foregroundColor: lineForegroundColor,
                         .paragraphStyle: baseParagraphStyle,
                     ],
                     boldAttributes: [
                         .font: shouldRenderHeading ? headingBoldFont : bodyBoldFont,
-                        .foregroundColor: UIColor.label,
+                        .foregroundColor: lineForegroundColor,
                         .paragraphStyle: baseParagraphStyle,
                     ],
                     attributed: attributed,
@@ -648,7 +708,13 @@ enum NoteTextFormatting {
         )
 
         applyPlaceholderStyling(to: attributed, font: font)
-        applyLegacySpeakerStyling(to: attributed, speakerColors: speakerColors, font: font)
+        applyLegacySpeakerStyling(
+            to: attributed,
+            speakerColors: speakerColors,
+            selectedSpeaker: selectedSpeaker,
+            font: font,
+            dimmedSpeakerAlpha: dimmedSpeakerAlpha
+        )
         applyParagraphStyles(
             to: attributed,
             mapper: mapper,
@@ -837,7 +903,9 @@ enum NoteTextFormatting {
     private static func applyLegacySpeakerStyling(
         to attributed: NSMutableAttributedString,
         speakerColors: [String: UIColor],
-        font: UIFont
+        selectedSpeaker: String?,
+        font: UIFont,
+        dimmedSpeakerAlpha: CGFloat
     ) {
         guard !speakerColors.isEmpty else { return }
         let boldFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
@@ -845,11 +913,17 @@ enum NoteTextFormatting {
 
         for (key, color) in speakerColors {
             let label = "[\(key)]:"
+            let renderedColor: UIColor
+            if let selectedSpeaker, key != selectedSpeaker {
+                renderedColor = color.withAlphaComponent(dimmedSpeakerAlpha)
+            } else {
+                renderedColor = color
+            }
             var searchRange = NSRange(location: 0, length: nsText.length)
             while searchRange.location < nsText.length {
                 let range = nsText.range(of: label, range: searchRange)
                 guard range.location != NSNotFound else { break }
-                attributed.addAttribute(.foregroundColor, value: color, range: range)
+                attributed.addAttribute(.foregroundColor, value: renderedColor, range: range)
                 attributed.addAttribute(.font, value: boldFont, range: range)
                 searchRange.location = range.location + range.length
                 searchRange.length = nsText.length - searchRange.location

@@ -6,9 +6,12 @@ struct NoteDetailNormalBottomBar: View {
     let isAppendTranscribing: Bool
     let onShowCategoryPicker: () -> Void
     let onShowRewriteSheet: () -> Void
+    let onShowRewriteSourceOptions: () -> Void
     let onShare: () -> Void
     let onStartAppendRecording: () -> Void
     let onDismissKeyboard: () -> Void
+
+    @State private var suppressNextRewriteTap = false
 
     var body: some View {
         HStack(spacing: keyboardVisible ? 12 : 40) {
@@ -21,7 +24,13 @@ struct NoteDetailNormalBottomBar: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: onShowRewriteSheet) {
+            Button {
+                if suppressNextRewriteTap {
+                    suppressNextRewriteTap = false
+                    return
+                }
+                onShowRewriteSheet()
+            } label: {
                 if keyboardVisible {
                     Image(systemName: "wand.and.stars")
                         .font(.callout)
@@ -38,6 +47,13 @@ struct NoteDetailNormalBottomBar: View {
                 }
             }
             .buttonStyle(.plain)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.45)
+                    .onEnded { _ in
+                        suppressNextRewriteTap = true
+                        onShowRewriteSourceOptions()
+                    }
+            )
 
             Button(action: onShare) {
                 Image(systemName: "arrowshape.turn.up.right")
@@ -143,6 +159,63 @@ struct NoteDetailAppendRecordingControls: View {
             )
             .offset(y: -44)
         }
+    }
+}
+
+struct NoteDetailRewriteSourceSheet: View {
+    let onRewriteOriginal: () -> Void
+    let onRewriteCurrent: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text("Rewrite From")
+                .font(.brandTitle2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            rewriteOption(
+                title: "Rewrite Original",
+                systemImage: "doc.text"
+            ) {
+                onRewriteOriginal()
+            }
+
+            rewriteOption(
+                title: "Rewrite Current Version",
+                systemImage: "wand.and.stars.inverse"
+            ) {
+                onRewriteCurrent()
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+        .padding(.bottom, 16)
+    }
+
+    @ViewBuilder
+    private func rewriteOption(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.brand)
+                    .frame(width: 22)
+
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
+        }
+        .buttonStyle(.plain)
     }
 }
 

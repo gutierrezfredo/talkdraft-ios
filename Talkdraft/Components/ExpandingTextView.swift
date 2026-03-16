@@ -16,9 +16,12 @@ struct ExpandingTextView: UIViewRepresentable {
     var lineSpacing: CGFloat = 6
     var placeholder: String = ""
     var speakerColors: [String: UIColor] = [:]
+    var selectedSpeaker: String? = nil
     var horizontalPadding: CGFloat = 0
     var moveCursorToEnd: Binding<Bool> = .constant(false)
     var onCheckboxToggle: ((String) -> Void)?
+    var onSpeakerTap: ((String) -> Void)?
+    var onSpeakerLongPress: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
     // Placeholder markers styled differently (brand color + italic + pulse).
@@ -69,9 +72,30 @@ struct ExpandingTextView: UIViewRepresentable {
             target: context.coordinator,
             action: #selector(Coordinator.handleCheckboxTap(_:))
         )
+        checkboxTap.name = "checkboxTap"
         checkboxTap.cancelsTouchesInView = true
         checkboxTap.delegate = context.coordinator
         tv.addGestureRecognizer(checkboxTap)
+
+        let speakerTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleSpeakerTap(_:))
+        )
+        speakerTap.name = "speakerTap"
+        speakerTap.cancelsTouchesInView = true
+        speakerTap.delegate = context.coordinator
+        tv.addGestureRecognizer(speakerTap)
+
+        let speakerLongPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleSpeakerLongPress(_:))
+        )
+        speakerLongPress.name = "speakerLongPress"
+        speakerLongPress.cancelsTouchesInView = true
+        speakerLongPress.minimumPressDuration = 0.45
+        speakerLongPress.delegate = context.coordinator
+        tv.addGestureRecognizer(speakerLongPress)
+        speakerTap.require(toFail: speakerLongPress)
 
         // Placeholder label
         let label = UILabel()
@@ -96,6 +120,10 @@ struct ExpandingTextView: UIViewRepresentable {
         let newSpeakerKeys = speakerColors.keys.sorted().joined(separator: ",")
         if newSpeakerKeys != context.coordinator.lastSpeakerColorKeys {
             context.coordinator.lastSpeakerColorKeys = newSpeakerKeys
+            context.coordinator.needsAttributeRefresh = true
+        }
+        if selectedSpeaker != context.coordinator.lastSelectedSpeaker {
+            context.coordinator.lastSelectedSpeaker = selectedSpeaker
             context.coordinator.needsAttributeRefresh = true
         }
 
@@ -230,6 +258,7 @@ struct ExpandingTextView: UIViewRepresentable {
         var preserveScrollOnNextUpdate = false
         var needsAttributeRefresh = false
         var lastSpeakerColorKeys: String = ""
+        var lastSelectedSpeaker: String?
         private static let highlightOverlayTag = 888
 
         init(_ parent: ExpandingTextView) {

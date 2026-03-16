@@ -205,6 +205,14 @@ extension NoteDetailView {
         rewriteToolbarState.labelText
     }
 
+    var canChooseRewriteSource: Bool {
+        note.originalContent != nil && effectiveRewriteSelectionId != nil
+    }
+
+    var currentRewriteSourceName: String {
+        inferredVisibleRewrite?.displayLabel ?? "Current Version"
+    }
+
     func repairMissingActiveRewriteSelection() {
         guard activeRewriteId == nil,
               note.activeRewriteId == nil,
@@ -400,7 +408,24 @@ extension NoteDetailView {
     }
 
     var titleField: some View {
-        Group {
+        let titleInputBinding = Binding<String>(
+            get: { editedTitle },
+            set: { newValue in
+                guard newValue.contains(where: \.isNewline) else {
+                    editedTitle = newValue
+                    return
+                }
+
+                editedTitle = newValue
+                    .components(separatedBy: .newlines)
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+                titleFocused = false
+                contentFocused = true
+            }
+        )
+
+        return Group {
             if isGeneratingTitle {
                 Text(titlePhrases[titlePhraseIndex])
                     .font(.brandTitle)
@@ -410,11 +435,12 @@ extension NoteDetailView {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal, 24)
             } else {
-                TextField("Untitled", text: editedTitleBinding, axis: .vertical)
+                TextField("Untitled", text: titleInputBinding, axis: .vertical)
                     .font(.brandTitle)
                     .tint(Color.brand)
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
+                    .lineLimit(1...3)
                     .focused($titleFocused)
                     .disabled(isRewriting)
                     .padding(.horizontal, 24)
@@ -427,10 +453,8 @@ extension NoteDetailView {
             HStack(spacing: 8) {
                 ForEach(detectedSpeakers, id: \.self) { key in
                     let color = speakerColor(for: key)
-
                     Button {
-                        renamingSpeaker = key
-                        renameText = ""
+                        presentSpeakerRename(key)
                     } label: {
                         HStack(spacing: 6) {
                             Circle()
@@ -445,12 +469,18 @@ extension NoteDetailView {
                         .padding(.vertical, 8)
                         .background(
                             Capsule()
-                                .fill(color.opacity(colorScheme == .dark ? 0.15 : 0.1))
+                                .fill(color.opacity(selectedSpeaker == key
+                                    ? (colorScheme == .dark ? 0.24 : 0.18)
+                                    : (colorScheme == .dark ? 0.15 : 0.1)))
                         )
                         .overlay(
                             Capsule()
-                                .strokeBorder(color.opacity(0.25), lineWidth: 1)
+                                .strokeBorder(
+                                    color.opacity(selectedSpeaker == key ? 0.5 : 0.25),
+                                    lineWidth: selectedSpeaker == key ? 1.5 : 1
+                                )
                         )
+                        .opacity(selectedSpeaker != nil && selectedSpeaker != key ? 0.45 : 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -470,8 +500,11 @@ extension NoteDetailView {
             lineSpacing: 6,
             placeholder: "Start typing...",
             speakerColors: speakerColorMap,
+            selectedSpeaker: selectedSpeaker,
             horizontalPadding: 24,
-            moveCursorToEnd: $moveCursorToEnd
+            moveCursorToEnd: $moveCursorToEnd,
+            onSpeakerTap: { toggleSpeakerSelection($0) },
+            onSpeakerLongPress: { presentSpeakerRename($0) }
         )
         .opacity(contentOpacity)
     }
@@ -497,6 +530,7 @@ extension NoteDetailView {
                     isAppendTranscribing: isAppendTranscribing,
                     onShowCategoryPicker: presentCategoryPicker,
                     onShowRewriteSheet: presentRewriteSheet,
+                    onShowRewriteSourceOptions: presentRewriteSourceOptions,
                     onShare: presentTextShareSheet,
                     onStartAppendRecording: { startAppendRecording() },
                     onDismissKeyboard: { contentFocused = false }

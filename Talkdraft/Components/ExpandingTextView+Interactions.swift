@@ -14,33 +14,56 @@ extension ExpandingTextView.Coordinator {
         DispatchQueue.main.async { tv.suppressBecomeFirstResponder = false }
     }
 
+    @objc func handleSpeakerTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended,
+              let tv = recognizer.view as? CheckboxTextView else { return }
+        let point = recognizer.location(in: tv)
+        guard let speaker = speakerNameLine(at: point, in: tv) else { return }
+        parent.onSpeakerTap?(speaker)
+        DispatchQueue.main.async { tv.suppressBecomeFirstResponder = false }
+    }
+
+    @objc func handleSpeakerLongPress(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began,
+              let tv = recognizer.view as? CheckboxTextView else { return }
+        let point = recognizer.location(in: tv)
+        guard let speaker = speakerNameLine(at: point, in: tv) else { return }
+        parent.onSpeakerLongPress?(speaker)
+        DispatchQueue.main.async { tv.suppressBecomeFirstResponder = false }
+    }
+
     // MARK: - UIGestureRecognizerDelegate
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // Only begin for taps that land on a checkbox attachment. Returning false
-        // immediately for all other taps lets UIKit process them normally (cursor
-        // placement, focus) without any interference from our recognizer.
         guard let tv = gestureRecognizer.view as? CheckboxTextView else { return true }
         let point = gestureRecognizer.location(in: tv)
-        let maxTapX: CGFloat = tv.textContainerInset.left + 44
-        guard point.x <= maxTapX,
-              checkboxIndex(near: point, in: tv) != nil else {
-            pendingCheckboxTapSelection = nil
-            return false
+        switch gestureRecognizer.name {
+        case "checkboxTap":
+            let maxTapX: CGFloat = tv.textContainerInset.left + 44
+            guard point.x <= maxTapX,
+                  checkboxIndex(near: point, in: tv) != nil else {
+                pendingCheckboxTapSelection = nil
+                return false
+            }
+            if tv.isFirstResponder {
+                let mapper = ExpandingTextView.mapper(for: tv)
+                pendingCheckboxTapSelection = mapper.plainRange(forAttributedRange: tv.selectedRange)
+            } else {
+                pendingCheckboxTapSelection = nil
+            }
+            if !tv.isFirstResponder {
+                tv.suppressBecomeFirstResponder = true
+            }
+            return true
+        case "speakerTap", "speakerLongPress":
+            guard speakerNameLine(at: point, in: tv) != nil else { return false }
+            if !tv.isFirstResponder {
+                tv.suppressBecomeFirstResponder = true
+            }
+            return true
+        default:
+            return true
         }
-        if tv.isFirstResponder {
-            let mapper = ExpandingTextView.mapper(for: tv)
-            pendingCheckboxTapSelection = mapper.plainRange(forAttributedRange: tv.selectedRange)
-        } else {
-            pendingCheckboxTapSelection = nil
-        }
-        // Suppress becomeFirstResponder for the duration of the gesture so UITextView's
-        // built-in tap recognizer (which fires simultaneously) can't show the keyboard.
-        // Only suppress if the view isn't already editing — if it is, keep the keyboard open.
-        if !tv.isFirstResponder {
-            tv.suppressBecomeFirstResponder = true
-        }
-        return true
     }
 
     func gestureRecognizer(
