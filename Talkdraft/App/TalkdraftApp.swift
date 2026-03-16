@@ -1,6 +1,12 @@
 import GoogleSignIn
 import SwiftUI
 
+private enum AppRuntime {
+    static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+}
+
 @main
 struct TalkdraftApp: App {
     @State private var authStore = AuthStore()
@@ -10,7 +16,9 @@ struct TalkdraftApp: App {
 
     init() {
         settingsStore.loadSettings()
-        subscriptionStore.configure()
+        if !AppRuntime.isRunningTests {
+            subscriptionStore.configure()
+        }
     }
 
     var body: some Scene {

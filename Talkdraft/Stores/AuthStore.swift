@@ -235,7 +235,7 @@ final class AuthStore {
 
             if let profile = profiles.first {
                 user = profile
-                settingsStore?.configure(userId: userId, dictionary: profile.customDictionary)
+                settingsStore?.configure(userId: userId, language: profile.language, dictionary: profile.customDictionary)
                 return
             }
 
@@ -259,7 +259,7 @@ final class AuthStore {
                 // Profile creation failed — user can still use the app
                 user = newProfile
             }
-            settingsStore?.configure(userId: userId, dictionary: [])
+            settingsStore?.configure(userId: userId, language: nil, dictionary: [])
         } catch {
             self.error = "Unable to load your profile right now."
         }

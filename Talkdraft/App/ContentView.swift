@@ -6,12 +6,20 @@ struct ContentView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.scenePhase) private var scenePhase
+    @State private var completedOnboardingUserId: UUID?
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
             get: { false },
             set: { _ in }
         )
+    }
+
+    private var shouldShowOnboarding: Bool {
+        guard let userId = authStore.userId else { return false }
+        if UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") { return false }
+        if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty { return false }
+        return completedOnboardingUserId != userId
     }
 
     private var colorScheme: ColorScheme? {
@@ -28,18 +36,26 @@ struct ContentView: View {
                 // Splash / loading
                 ZStack {
                     Color.darkBackground.ignoresSafeArea()
-                    LunaMascotView(.moon, size: 200)
+                    LunaMascotView(.moon, size: 200, zColor: .white)
                 }
             } else if authStore.isAuthenticated {
                 if subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded {
-                    HomeView()
-                        .fullScreenCover(isPresented: showMandatoryPaywall) {
-                            PaywallView(mandatory: true)
+                    if shouldShowOnboarding {
+                        OnboardingView {
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                completedOnboardingUserId = authStore.userId
+                            }
                         }
+                    } else {
+                        HomeView()
+                            .fullScreenCover(isPresented: showMandatoryPaywall) {
+                                PaywallView(mandatory: true)
+                            }
+                    }
                 } else {
                     ZStack {
                         Color.darkBackground.ignoresSafeArea()
-                        LunaMascotView(.moon, size: 200)
+                        LunaMascotView(.moon, size: 200, zColor: .white)
                     }
                 }
             } else {
@@ -72,6 +88,7 @@ struct ContentView: View {
                     Task { await subscriptionStore.login(userId: userId) }
                 }
             } else {
+                completedOnboardingUserId = nil
                 noteStore.resetSession()
                 settingsStore.resetSession()
                 Task { await subscriptionStore.logout() }
@@ -84,6 +101,7 @@ struct ContentView: View {
                   oldValue != newValue
             else { return }
 
+            completedOnboardingUserId = nil
             noteStore.resetSession()
             noteStore.beginSession(userId: newValue)
             noteStore.startRewriteJobPolling()
