@@ -73,7 +73,6 @@ struct OnboardingPaywallStep: View {
             Text("Unlock the full\nTalkdraft experience")
                 .font(.brandTitle)
                 .multilineTextAlignment(.center)
-                .padding(.top, 16)
 
             Text(showsTrialMessaging
                  ? "Record longer, organize everything, and start with a free trial."
@@ -92,9 +91,9 @@ struct OnboardingPaywallStep: View {
             Divider().padding(.leading, 52)
             featureRow("Unlimited notes and categories", systemImage: "note.text")
             Divider().padding(.leading, 52)
-            featureRow("Turn captures into summaries, action items, emails, and posts", systemImage: "wand.and.stars")
+            featureRow("AI rewrites for summaries, action items, and more", systemImage: "wand.and.stars")
             Divider().padding(.leading, 52)
-            featureRow("Multi-speaker transcription for meetings", systemImage: "person.2.fill")
+            featureRow("Multi-speaker transcription", systemImage: "person.2.fill")
         }
         .background(cardColor)
         .clipShape(RoundedRectangle(cornerRadius: 24))

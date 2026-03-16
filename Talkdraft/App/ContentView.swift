@@ -7,6 +7,8 @@ struct ContentView: View {
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var completedOnboardingUserId: UUID?
+    @State private var didFinishInitialAuthBootstrap = false
+    @State private var showPostAuthTransition = false
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
@@ -30,16 +32,27 @@ struct ContentView: View {
         }
     }
 
+    private var isPostAuthBootstrapReady: Bool {
+        subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded
+    }
+
+    private var shouldShowPostAuthTransition: Bool {
+        authStore.isAuthenticated && showPostAuthTransition && !isPostAuthBootstrapReady
+    }
+
+    private var splashView: some View {
+        ZStack {
+            Color.darkBackground.ignoresSafeArea()
+            LunaMascotView(.moon, size: 200, zColor: .white)
+        }
+    }
+
     var body: some View {
         Group {
             if authStore.isLoading {
-                // Splash / loading
-                ZStack {
-                    Color.darkBackground.ignoresSafeArea()
-                    LunaMascotView(.moon, size: 200, zColor: .white)
-                }
+                splashView
             } else if authStore.isAuthenticated {
-                if subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded {
+                if isPostAuthBootstrapReady {
                     if shouldShowOnboarding {
                         OnboardingView {
                             withAnimation(.easeInOut(duration: 0.4)) {
@@ -52,20 +65,21 @@ struct ContentView: View {
                                 PaywallView(mandatory: true)
                             }
                     }
+                } else if shouldShowPostAuthTransition {
+                    LoginView(phase: .transitioning)
                 } else {
-                    ZStack {
-                        Color.darkBackground.ignoresSafeArea()
-                        LunaMascotView(.moon, size: 200, zColor: .white)
-                    }
+                    splashView
                 }
             } else {
                 LoginView()
             }
         }
         .animation(.easeInOut(duration: 0.4), value: noteStore.hasInitiallyLoaded)
+        .animation(.easeInOut(duration: 0.4), value: showPostAuthTransition)
         .preferredColorScheme(colorScheme)
         .task {
             await authStore.initialize(settingsStore: settingsStore, noteStore: noteStore)
+            didFinishInitialAuthBootstrap = true
             // Belt-and-suspenders: if startup auth state was already available before onChange
             // hooks settled, initialize the user session here too.
             if authStore.isAuthenticated, let userId = authStore.userId {
@@ -81,6 +95,9 @@ struct ContentView: View {
         }
         .onChange(of: authStore.isAuthenticated) { _, authenticated in
             if authenticated {
+                if didFinishInitialAuthBootstrap {
+                    showPostAuthTransition = true
+                }
                 if let userId = authStore.userId {
                     noteStore.beginSession(userId: userId)
                     noteStore.startRewriteJobPolling()
@@ -89,6 +106,7 @@ struct ContentView: View {
                 }
             } else {
                 completedOnboardingUserId = nil
+                showPostAuthTransition = false
                 noteStore.resetSession()
                 settingsStore.resetSession()
                 Task { await subscriptionStore.logout() }
@@ -102,11 +120,19 @@ struct ContentView: View {
             else { return }
 
             completedOnboardingUserId = nil
+            if didFinishInitialAuthBootstrap {
+                showPostAuthTransition = true
+            }
             noteStore.resetSession()
             noteStore.beginSession(userId: newValue)
             noteStore.startRewriteJobPolling()
             Task { await noteStore.refresh() }
             Task { await subscriptionStore.login(userId: newValue) }
+        }
+        .onChange(of: isPostAuthBootstrapReady) { _, ready in
+            if ready {
+                showPostAuthTransition = false
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task {
