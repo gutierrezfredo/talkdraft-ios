@@ -69,6 +69,12 @@ extension HomeView {
 
     func handleAudioImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let sourceURL = urls.first else { return }
+        pendingImportURL = sourceURL
+    }
+
+    func confirmAudioImport(multiSpeaker: Bool) {
+        guard let sourceURL = pendingImportURL else { return }
+        pendingImportURL = nil
 
         Task { @MainActor in
             do {
@@ -77,7 +83,8 @@ extension HomeView {
                     userId: authStore.userId,
                     categoryId: selectedCategory,
                     language: settingsStore.language == "auto" ? nil : settingsStore.language,
-                    customDictionary: settingsStore.customDictionary
+                    customDictionary: settingsStore.customDictionary,
+                    multiSpeaker: multiSpeaker
                 )
                 withAnimation(.snappy) {
                     selectedNote = note

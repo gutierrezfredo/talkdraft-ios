@@ -123,6 +123,8 @@ extension NoteStore {
 
                 applyRewriteJobSnapshot([created])
                 try await triggerRewriteJob(created.id)
+                await refreshRewriteJobs()
+                startRewriteJobPolling()
             } catch {
                 if introducedOriginalContent,
                    var reverted = notes.first(where: { $0.id == note.id }) {

@@ -80,7 +80,8 @@ struct NoteCard: View {
                     }
                     .onDisappear { transcribingPulse = false }
             } else if isRewriting {
-                Label("Rewriting…", systemImage: "wand.and.stars")
+                Text("Rewriting…")
+                    .italic()
                     .font(.caption)
                     .foregroundStyle(Color.brand)
                     .opacity(rewritePulse ? 0.35 : 1.0)
