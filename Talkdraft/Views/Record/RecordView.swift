@@ -66,13 +66,13 @@ struct RecordView: View {
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.85))
                 }
-                .toggleStyle(RecordToggleStyle(colorScheme: colorScheme))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .toggleStyle(.switch)
+                .tint(colorScheme == .dark ? Color.brand : .white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
                 .background(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
                 .fixedSize()
                 .contentShape(Capsule())
-                .onTapGesture { withAnimation(.snappy(duration: 0.2)) { multiSpeaker.toggle() } }
                 .padding(.bottom, 72)
 
                 // Controls

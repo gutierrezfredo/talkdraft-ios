@@ -110,8 +110,8 @@ struct CategoriesView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            LunaMascotView(.box, size: 120)
+        VStack(spacing: 4) {
+            LunaMascotView(.box, size: 180)
 
             Text("No Categories")
                 .font(.brandTitle2)

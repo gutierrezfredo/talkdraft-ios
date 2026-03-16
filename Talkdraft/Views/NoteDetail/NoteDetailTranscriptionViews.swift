@@ -36,35 +36,53 @@ struct NoteDetailTranscribingIndicatorView: View {
 
 private struct ShimmerTextView: View {
     let text: String
+    @Environment(\.colorScheme) private var colorScheme
 
     init(_ text: String) {
         self.text = text
     }
 
-    @State private var shimmerOffset: CGFloat = -1
+    @State private var shimmerSweep: CGFloat = 0
 
     var body: some View {
         Text(text)
             .multilineTextAlignment(.center)
+            .hidden()
             .overlay {
-                LinearGradient(
-                    colors: [.clear, .white.opacity(0.6), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: 80)
-                .offset(x: shimmerOffset)
-                .mask {
-                    Text(text)
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .onAppear {
-                withAnimation(
-                    .linear(duration: 2.0)
-                    .repeatForever(autoreverses: false)
-                ) {
-                    shimmerOffset = 300
+                GeometryReader { proxy in
+                    let textWidth = proxy.size.width
+                    let shimmerWidth = textWidth * 0.78
+
+                    ZStack(alignment: .leading) {
+                        Color.primary.opacity(0.95)
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                colorScheme == .dark
+                                    ? Color.black.opacity(0.45)
+                                    : Color.white.opacity(0.7),
+                                .clear,
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: shimmerWidth)
+                        .offset(
+                            x: shimmerSweep * (textWidth + shimmerWidth) - shimmerWidth
+                        )
+                    }
+                    .mask {
+                        Text(text)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    .onAppear {
+                        shimmerSweep = 0
+                        withAnimation(.linear(duration: 2.15).repeatForever(autoreverses: false)) {
+                            shimmerSweep = 1
+                        }
+                    }
+                    .onDisappear { shimmerSweep = 0 }
                 }
             }
     }

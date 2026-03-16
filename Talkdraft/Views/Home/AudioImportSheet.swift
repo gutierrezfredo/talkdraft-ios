@@ -1,15 +1,18 @@
 import SwiftUI
 
 struct AudioImportSheet: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("importMultiSpeaker") private var multiSpeaker = false
 
     let fileName: String
     let onImport: (Bool) -> Void
 
+    private var borderColor: Color {
+        colorScheme == .dark ? .white.opacity(0.25) : .secondary.opacity(0.3)
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 28) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Import Audio")
                     .font(.brandTitle2)
@@ -22,12 +25,19 @@ struct AudioImportSheet: View {
 
             Toggle(isOn: $multiSpeaker) {
                 Label("Multi-speaker", systemImage: "person.2.fill")
-                    .font(.body)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.85))
             }
+            .toggleStyle(.switch)
             .tint(Color.brand)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(
+                Capsule().strokeBorder(borderColor, lineWidth: 1)
+            )
+            .contentShape(Capsule())
 
             Button {
-                dismiss()
                 onImport(multiSpeaker)
             } label: {
                 Text("Import")
@@ -40,6 +50,7 @@ struct AudioImportSheet: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 24)
-        .padding(.top, 24)
+        .padding(.top, 32)
+        .padding(.bottom, 16)
     }
 }

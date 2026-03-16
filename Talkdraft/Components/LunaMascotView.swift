@@ -11,8 +11,6 @@ struct LunaMascotView: View {
         self.size = size
     }
 
-    @State private var breatheIn = false
-
     var body: some View {
         ZStack(alignment: .top) {
             // Floating Z's
@@ -24,22 +22,12 @@ struct LunaMascotView: View {
             .frame(width: size, height: size * 0.4)
             .offset(y: size * 0.05)
 
-            // Luna illustration with breathing
             Image(pose.assetName)
                 .resizable()
                 .scaledToFit()
                 .frame(width: size, height: size)
-                .scaleEffect(breatheIn ? 1.05 : 1.0, anchor: .center)
         }
         .accessibilityHidden(true)
-        .onAppear {
-            withAnimation(
-                .easeInOut(duration: 2.5)
-                .repeatForever(autoreverses: true)
-            ) {
-                breatheIn = true
-            }
-        }
     }
 
     private var zBaseX: CGFloat {

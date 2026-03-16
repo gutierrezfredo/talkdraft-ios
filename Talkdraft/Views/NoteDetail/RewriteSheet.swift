@@ -280,8 +280,8 @@ struct RewriteSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 if isPresetsEmpty {
-                    VStack(spacing: 12) {
-                        LunaMascotView(.search, size: 120)
+                    VStack(spacing: 4) {
+                        LunaMascotView(.search, size: 180)
                         Text("No results")
                             .font(.headline)
                         Text("No presets matching \"\(searchText.trimmingCharacters(in: .whitespaces))\".")
