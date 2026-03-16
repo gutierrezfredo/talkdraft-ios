@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct AudioImportSheet: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("importMultiSpeaker") private var multiSpeaker = false
 
@@ -27,7 +26,6 @@ struct AudioImportSheet: View {
             .tint(Color.brand)
 
             Button {
-                dismiss()
                 onImport(multiSpeaker)
             } label: {
                 Text("Import")
