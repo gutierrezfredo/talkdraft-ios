@@ -49,23 +49,27 @@ struct LunaMascotView: View {
 private struct FloatingZView: View {
     let delay: Double
 
+    @State private var visible = false
     @State private var animate = false
 
     var body: some View {
         Text("z")
             .font(.system(size: 22, weight: .bold, design: .rounded))
             .foregroundStyle(.secondary)
-            .opacity(animate ? 0 : 0.7)
+            .opacity(visible ? (animate ? 0 : 0.7) : 0)
             .offset(y: animate ? -30 : 0)
             .scaleEffect(animate ? 0.6 : 1.0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .onAppear {
-                withAnimation(
-                    .easeOut(duration: 2.0)
-                    .repeatForever(autoreverses: false)
-                    .delay(delay)
-                ) {
-                    animate = true
+                Task {
+                    try? await Task.sleep(for: .seconds(delay))
+                    visible = true
+                    withAnimation(
+                        .easeOut(duration: 2.0)
+                        .repeatForever(autoreverses: false)
+                    ) {
+                        animate = true
+                    }
                 }
             }
     }
@@ -96,7 +100,7 @@ enum LunaPose: String, CaseIterable {
     var zPosition: ZPosition {
         switch self {
         case .read: return .left
-        case .box: return .center
+        case .box, .snack, .moon: return .center
         default: return .right
         }
     }

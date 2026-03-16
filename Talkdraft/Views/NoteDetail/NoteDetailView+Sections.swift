@@ -355,7 +355,7 @@ extension NoteDetailView {
         VStack(spacing: 0) {
             Color.clear.frame(height: 0).id("scrollTop")
 
-            if !isTranscribing {
+            if !(isTranscribing && transcribingIsLong) {
                 deadZone(height: 12)
                 metadataRow
 
@@ -369,8 +369,15 @@ extension NoteDetailView {
                 titleField
             }
 
-            if isTranscribing {
+            if isTranscribing && transcribingIsLong {
                 transcribingIndicator
+            } else if isTranscribing {
+                Text("Transcribing…")
+                    .font(.body)
+                    .foregroundStyle(Color.brand)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
             } else if isWaitingForConnection {
                 waitingForConnectionView
                     .padding(.top, 40)
