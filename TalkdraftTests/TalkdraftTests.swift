@@ -522,6 +522,7 @@ struct AudioWorkflowRegressionTests {
 
     let tap = FixedPointTapGestureRecognizer()
     harness.textView.addGestureRecognizer(tap)
+    tap.name = "checkboxTap"
     tap.fixedPoint = CGPoint(x: hit.iconRect.maxX + 8, y: hit.iconRect.midY)
 
     #expect(!harness.coordinator.gestureRecognizerShouldBegin(tap))
