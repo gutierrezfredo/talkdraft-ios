@@ -111,6 +111,7 @@ struct NoteDetailView: View {
     let whilePhrases: [(pose: LunaPose, subtitle: String)] = [
         (.binge, "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
         (.hobby, "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
+        (.moon, "This one might take a bit — maybe take a quick nap? Your note will be here when you wake up"),
         (.read, "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
         (.snack, "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
         (.work, "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),

@@ -28,9 +28,7 @@ struct ContentView: View {
                 // Splash / loading
                 ZStack {
                     Color.darkBackground.ignoresSafeArea()
-                    ProgressView()
-                        .tint(Color.brand)
-                        .scaleEffect(1.5)
+                    LunaMascotView(.moon, size: 200)
                 }
             } else if authStore.isAuthenticated {
                 if subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded {
@@ -41,15 +39,14 @@ struct ContentView: View {
                 } else {
                     ZStack {
                         Color.darkBackground.ignoresSafeArea()
-                        ProgressView()
-                            .tint(Color.brand)
-                            .scaleEffect(1.5)
+                        LunaMascotView(.moon, size: 200)
                     }
                 }
             } else {
                 LoginView()
             }
         }
+        .animation(.easeInOut(duration: 0.4), value: noteStore.hasInitiallyLoaded)
         .preferredColorScheme(colorScheme)
         .task {
             await authStore.initialize(settingsStore: settingsStore, noteStore: noteStore)
