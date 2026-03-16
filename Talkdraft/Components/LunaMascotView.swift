@@ -31,6 +31,7 @@ struct LunaMascotView: View {
                 .frame(width: size, height: size)
                 .scaleEffect(breatheIn ? 1.05 : 1.0, anchor: .center)
         }
+        .accessibilityHidden(true)
         .onAppear {
             withAnimation(
                 .easeInOut(duration: 2.5)
