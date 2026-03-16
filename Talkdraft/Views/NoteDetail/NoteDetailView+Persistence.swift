@@ -90,8 +90,31 @@ extension NoteDetailView {
 
     func presentRewriteSheet() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        rewriteSourceChoice = .original
+        showRewriteSourceDialog = false
         presentAfterKeyboardDismiss {
             showRewriteSheet = true
+        }
+    }
+
+    func presentRewriteSheet(using sourceChoice: RewriteSourceChoice) {
+        rewriteSourceChoice = sourceChoice
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        showRewriteSourceDialog = false
+        presentAfterKeyboardDismiss {
+            showRewriteSheet = true
+        }
+    }
+
+    func presentRewriteSourceOptions() {
+        guard canChooseRewriteSource else {
+            presentRewriteSheet()
+            return
+        }
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.snappy) {
+            showRewriteSourceDialog = true
         }
     }
 

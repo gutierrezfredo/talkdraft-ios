@@ -1,7 +1,13 @@
 import SwiftUI
 
 extension NoteDetailView {
-    func performRewrite(tone: String?, instructions: String?, toneLabel: String? = nil, toneEmoji: String? = nil) {
+    func performRewrite(
+        tone: String?,
+        instructions: String?,
+        toneLabel: String? = nil,
+        toneEmoji: String? = nil,
+        sourceChoice: RewriteSourceChoice = .original
+    ) {
         rewriteLabelOpacity = 1
         if let emoji = toneEmoji, let name = toneLabel {
             rewriteLabelFallback = "\(emoji) \(name)"
@@ -17,11 +23,19 @@ extension NoteDetailView {
         scrollToTop()
         contentFocused = false
 
+        let rewriteSourceContent: String
+        switch sourceChoice {
+        case .original:
+            rewriteSourceContent = note.originalContent ?? persistedEditedContent
+        case .currentVersion:
+            rewriteSourceContent = persistedEditedContent
+        }
+
         noteStore.startRewrite(
             for: note,
             title: editedTitle,
             visibleContent: persistedEditedContent,
-            sourceContent: note.originalContent ?? persistedEditedContent,
+            sourceContent: rewriteSourceContent,
             userId: authStore.userId,
             tone: tone,
             instructions: instructions,
