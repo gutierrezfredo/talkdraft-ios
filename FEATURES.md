@@ -103,10 +103,21 @@
 - Deepgram edge function: `detect_language=true` for auto-detection, respects explicit language setting
 - Deepgram edge function: `Content-Type: audio/mp4` (correct MIME for M4A; `audio/m4a` is non-standard)
 - Edge function errors surfaced as note content (200 response) instead of HTTP 500 for better debugging
-- Empty states: custom SVG images for Home (notes-empty) and Categories (category-empty)
+- Empty states: Luna mascot poses for Home (box), Search (search bar), Categories (box), Rewrite search (search bar)
 - HomeView: search always enabled regardless of note count; scroll always bounces
 - NoteDetailView: title-cased menu items, keyboard dismissed before presenting sheets, rewrite tones reordered
 - Paywall disabled in ContentView for testing (`showMandatoryPaywall` returns false)
+
+### 2026-03-15 (Session 14)
+- Luna mascot: replaced MP4 video animations and SVG empty states with static PNG mascot + SwiftUI animations
+- LunaMascotView component: 10 poses (binge, box, email, headphone, hobby, moon, read, search, snack, work), breathing scale animation, floating ZzZ with pose-aware positioning (left/center/right)
+- Transcription loading: Luna with headphones for short recordings, rotating "while you wait" poses for long recordings (binge, hobby, read, snack, work)
+- Shimmer text effect on "Transcribing your note…" title (replaces opacity pulse)
+- Empty states: Luna box pose for categories, Luna search pose for search, rewrite search
+- Login confirmation: Luna email pose replaces mail-received.mp4 video
+- Adaptive brand circle: full violet (#8B5CF6) in dark mode, 20% opacity in light mode
+- Accessibility: LunaMascotView marked `.accessibilityHidden(true)` (decorative only)
+- Removed: LoopingVideoView video player dependency from transcription and login views, AVFoundation imports from LoginView
 
 ### 2026-03-04 (Session 13)
 - Mandatory paywall gate: fullScreenCover paywall after sign-in for non-Pro users, blocks all access until subscribed/trial started
