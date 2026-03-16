@@ -6,12 +6,20 @@ struct ContentView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.scenePhase) private var scenePhase
+    @State private var onboardingComplete = false
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
             get: { false },
             set: { _ in }
         )
+    }
+
+    private var shouldShowOnboarding: Bool {
+        guard let userId = authStore.userId else { return false }
+        if UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") { return false }
+        if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty { return false }
+        return !onboardingComplete
     }
 
     private var colorScheme: ColorScheme? {
@@ -28,18 +36,26 @@ struct ContentView: View {
                 // Splash / loading
                 ZStack {
                     Color.darkBackground.ignoresSafeArea()
-                    LunaMascotView(.moon, size: 200)
+                    LunaMascotView(.moon, size: 200, zColor: .white)
                 }
             } else if authStore.isAuthenticated {
                 if subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded {
-                    HomeView()
-                        .fullScreenCover(isPresented: showMandatoryPaywall) {
-                            PaywallView(mandatory: true)
+                    if shouldShowOnboarding {
+                        OnboardingView {
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                onboardingComplete = true
+                            }
                         }
+                    } else {
+                        HomeView()
+                            .fullScreenCover(isPresented: showMandatoryPaywall) {
+                                PaywallView(mandatory: true)
+                            }
+                    }
                 } else {
                     ZStack {
                         Color.darkBackground.ignoresSafeArea()
-                        LunaMascotView(.moon, size: 200)
+                        LunaMascotView(.moon, size: 200, zColor: .white)
                     }
                 }
             } else {

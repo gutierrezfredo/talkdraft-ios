@@ -5,10 +5,12 @@ import SwiftUI
 struct LunaMascotView: View {
     let pose: LunaPose
     let size: CGFloat
+    let zColor: Color?
 
-    init(_ pose: LunaPose, size: CGFloat = 180) {
+    init(_ pose: LunaPose, size: CGFloat = 180, zColor: Color? = nil) {
         self.pose = pose
         self.size = size
+        self.zColor = zColor
     }
 
     var body: some View {
@@ -39,7 +41,7 @@ struct LunaMascotView: View {
     }
 
     private func floatingZ(delay: Double, xOffset: CGFloat) -> some View {
-        FloatingZView(delay: delay)
+        FloatingZView(delay: delay, color: zColor)
             .offset(x: xOffset)
     }
 }
@@ -48,6 +50,7 @@ struct LunaMascotView: View {
 
 private struct FloatingZView: View {
     let delay: Double
+    var color: Color?
 
     @State private var visible = false
     @State private var animate = false
@@ -55,7 +58,7 @@ private struct FloatingZView: View {
     var body: some View {
         Text("z")
             .font(.system(size: 22, weight: .bold, design: .rounded))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(color ?? Color.secondary)
             .opacity(visible ? (animate ? 0 : 0.7) : 0)
             .offset(y: animate ? -30 : 0)
             .scaleEffect(animate ? 0.6 : 1.0)
