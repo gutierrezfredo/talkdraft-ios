@@ -1,5 +1,4 @@
 import AuthenticationServices
-import AVKit
 import SwiftUI
 
 struct LoginView: View {
@@ -130,8 +129,6 @@ private struct EmailSignInSheet: View {
     @State private var email = ""
     @State private var magicLinkSent = false
     @State private var resendCooldown = 0
-    @State private var videoPlayer: AVQueuePlayer?
-    @State private var playerLooper: AVPlayerLooper?
     @FocusState private var emailFocused: Bool
 
     private var isValid: Bool {
@@ -279,26 +276,16 @@ private struct EmailSignInSheet: View {
 
     private var sentConfirmation: some View {
         VStack(spacing: 0) {
-            Spacer()
-
-            // Video
+            // Luna mascot
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(0.12))
+                    .fill(Color.brand.opacity(colorScheme == .dark ? 1.0 : 0.20))
                     .frame(width: 220, height: 220)
 
-                if let player = videoPlayer {
-                    LoopingVideoView(player: player)
-                        .frame(width: 180, height: 180)
-                } else {
-                    Image(systemName: "envelope.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(Color.brand)
-                }
+                LunaMascotView(.email, size: 180)
             }
+            .padding(.top, 40)
             .padding(.bottom, 24)
-            .onAppear { setupVideoPlayer() }
-            .onDisappear { videoPlayer?.pause() }
 
             // Title
             Text("Check your email")
@@ -377,18 +364,6 @@ private struct EmailSignInSheet: View {
                 authStore.error = nil
             }
         }
-    }
-
-    private func setupVideoPlayer() {
-        guard videoPlayer == nil,
-              let url = Bundle.main.url(forResource: "mail-received", withExtension: "mp4")
-        else { return }
-        let item = AVPlayerItem(url: url)
-        let player = AVQueuePlayer(playerItem: item)
-        playerLooper = AVPlayerLooper(player: player, templateItem: item)
-        player.isMuted = true
-        player.play()
-        videoPlayer = player
     }
 
     private func sendLink() {

@@ -130,20 +130,10 @@ extension HomeView {
         SwiftUI.Group {
             if isSearching && !query.isEmpty || selectedCategory != nil {
                 VStack(spacing: 12) {
-                    Group {
-                        if isSearching && !query.isEmpty {
-                            Image("search-empty")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 60)
-                        } else {
-                            Image("notes-empty")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 60)
-                        }
-                    }
-                    .foregroundStyle(.secondary)
+                    LunaMascotView(
+                        isSearching && !query.isEmpty ? .search : .box,
+                        size: 120
+                    )
 
                     Text(isSearching && !query.isEmpty ? "No results" : "No notes yet")
                         .font(.brandTitle2)

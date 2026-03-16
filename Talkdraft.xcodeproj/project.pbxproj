@@ -47,6 +47,7 @@
 		5E67C33088D4CFCD3A6E856F /* TranscriptSpeakerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = E885A7EF279B817BB8E09D23 /* TranscriptSpeakerDetector.swift */; };
 		5F8077E9F7DD0B0E54D39E8F /* RewriteToolbarState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E018B7EE421DE1A2720D2FAF /* RewriteToolbarState.swift */; };
 		67D7C9DB4B013785AE342B9D /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB92BBFFE4739EE0C8BB2DC /* MockData.swift */; };
+		68014CA502953072CA6C3DF3 /* LunaMascotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F79FB78E3E662CBF392BE5 /* LunaMascotView.swift */; };
 		7952FC78CE874662D3E53919 /* mail-received.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 348BCF1A7877A6D7EEE0611F /* mail-received.mp4 */; };
 		7AA965130CF159D8D1DA7B4E /* NoteStore+Transcription.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DFA2669E18D72E94C0B4F85 /* NoteStore+Transcription.swift */; };
 		7B6635F24439460A67156B89 /* while-hobby.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 2B4F8F9533EB78A39C8B0096 /* while-hobby.mp4 */; };
@@ -163,6 +164,7 @@
 		9F577723DEEC18FAF0089876 /* NoteDetailView+Sections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+Sections.swift"; sourceTree = "<group>"; };
 		A4232CA248B9B1557A9DE06B /* NoteStore+PendingSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+PendingSync.swift"; sourceTree = "<group>"; };
 		A68ECE94C6FED483CA520BB9 /* NoteDetailView+Reveal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+Reveal.swift"; sourceTree = "<group>"; };
+		A9F79FB78E3E662CBF392BE5 /* LunaMascotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunaMascotView.swift; sourceTree = "<group>"; };
 		ABEF7F24CF9CB395FF5B460F /* CategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoriesView.swift; sourceTree = "<group>"; };
 		C4411B61BE34B3B25458CAC4 /* NoteDetailView+ContentSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+ContentSync.swift"; sourceTree = "<group>"; };
 		C45C2752E0BED51698E4C2DB /* HomeNoteQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeNoteQuery.swift; sourceTree = "<group>"; };
@@ -365,6 +367,7 @@
 				92C370238C90495234645097 /* ExpandingTextView+Scrolling.swift */,
 				D24E060500AB3B88B6789593 /* FlowLayout.swift */,
 				7A8E79BBEEBEEEF5C8C1621F /* LoopingVideoView.swift */,
+				A9F79FB78E3E662CBF392BE5 /* LunaMascotView.swift */,
 				F175F2B6D8263BF06EA07FB4 /* NoteCard.swift */,
 				61A8303FE9ABA91C12C9B54C /* NoteEditorCore.swift */,
 				4F0A222998090F21E6ABDC78 /* ShareSheet.swift */,
@@ -572,6 +575,7 @@
 				568A5495AA2A5D8AC0BFBFF4 /* HomeView.swift in Sources */,
 				D2527FC4CD3C328EC40EC91B /* LoginView.swift in Sources */,
 				FC6FC8952F3CEF0F438967BD /* LoopingVideoView.swift in Sources */,
+				68014CA502953072CA6C3DF3 /* LunaMascotView.swift in Sources */,
 				67D7C9DB4B013785AE342B9D /* MockData.swift in Sources */,
 				AC172818C85D4D874DC04A76 /* Note.swift in Sources */,
 				7E4991614F7FDD1C5C1F55DA /* NoteCard.swift in Sources */,

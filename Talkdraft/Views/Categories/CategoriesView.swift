@@ -111,11 +111,7 @@ struct CategoriesView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image("category-empty")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 60)
-                .foregroundStyle(.secondary)
+            LunaMascotView(.box, size: 120)
 
             Text("No Categories")
                 .font(.brandTitle2)

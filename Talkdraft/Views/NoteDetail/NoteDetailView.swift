@@ -69,8 +69,6 @@ struct NoteDetailView: View {
     @State var preserveScroll = false
     @State var autosaveTask: Task<Void, Never>?
 
-    @State var transcribingVideoPlayer: AVQueuePlayer?
-    @State var transcribingPlayerLooper: AVPlayerLooper?
     @State var transcribingPhraseIndex = 0
     @State var transcribingIsLong = false
     @State var whileIndex = 0
@@ -110,13 +108,12 @@ struct NoteDetailView: View {
         "You're free to go. We'll finish this in the background",
     ]
 
-    let whilePhrases: [(video: String, subtitle: String)] = [
-        ("while-binge", "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
-        ("while-hobby", "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
-        ("while-read", "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
-        ("while-snack", "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
-        ("while-work", "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
-        ("while-rest", "This one might take a bit — maybe take a little rest? Your note will be waiting when you wake up"),
+    let whilePhrases: [(pose: LunaPose, subtitle: String)] = [
+        (.binge, "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
+        (.hobby, "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
+        (.read, "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
+        (.snack, "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
+        (.work, "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
     ]
     @State var titlePhraseIndex = 0
     @State var titleTypewriterTask: Task<Void, Never>?
@@ -327,7 +324,6 @@ struct NoteDetailView: View {
             .onDisappear {
                 typewriterTask?.cancel()
                 titleTypewriterTask?.cancel()
-                teardownTranscribingVideo()
             }
             .onChange(of: editedTitle) {
                 scheduleAutosave()
