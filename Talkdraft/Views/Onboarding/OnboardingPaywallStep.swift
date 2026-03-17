@@ -175,7 +175,7 @@ struct OnboardingPaywallStep: View {
             VStack(spacing: 0) {
                 ZStack {
                     Circle()
-                        .fill(cardColor)
+                        .fill(Color.brand.opacity(0.15))
                         .frame(width: 36, height: 36)
                     Image(systemName: icon)
                         .font(.callout)
@@ -184,7 +184,7 @@ struct OnboardingPaywallStep: View {
 
                 if !isLast {
                     Rectangle()
-                        .fill(cardColor)
+                        .fill(Color.brand.opacity(0.2))
                         .frame(width: 2)
                         .frame(maxHeight: .infinity)
                 }
