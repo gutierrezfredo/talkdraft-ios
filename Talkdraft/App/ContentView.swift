@@ -65,6 +65,9 @@ struct ContentView: View {
                                 PaywallView(mandatory: true)
                             }
                     }
+                } else if shouldShowOnboarding {
+                    // Keep login visible until onboarding is ready (no flash)
+                    LoginView(phase: .signIn)
                 } else if shouldShowPostAuthTransition {
                     LoginView(phase: .transitioning)
                 } else {
