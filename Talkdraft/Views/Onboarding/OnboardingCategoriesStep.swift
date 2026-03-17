@@ -14,7 +14,7 @@ struct OnboardingCategoriesStep: View {
                 Text("What do you want to capture?")
                     .font(.brandTitle)
 
-                Text("Pick a few to set up your categories. You can always add your own later.")
+                Text("Pick a few to get started. You can always add more later.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

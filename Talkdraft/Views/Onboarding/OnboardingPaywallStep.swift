@@ -78,7 +78,7 @@ struct OnboardingPaywallStep: View {
     // MARK: - Header
 
     private var headerBackground: Color {
-        colorScheme == .dark ? Color.brand.opacity(0.24) : Color.brand.opacity(0.12)
+        colorScheme == .dark ? Color.brand.opacity(0.12) : Color.brand.opacity(0.06)
     }
 
     private var header: some View {
@@ -324,18 +324,13 @@ struct OnboardingPaywallStep: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .foregroundStyle(.white)
-                .background(Color.brand, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Color.brand, in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(subscriptionStore.isLoading)
 
             if showsTrialMessaging {
-                Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Text("We’ll send a reminder before your trial ends.")
+                Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime — we’ll remind you before it ends.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
