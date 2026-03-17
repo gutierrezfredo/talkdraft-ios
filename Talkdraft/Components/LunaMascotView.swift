@@ -42,6 +42,7 @@ struct LunaMascotView: View {
 
     private func floatingZ(delay: Double, xOffset: CGFloat) -> some View {
         FloatingZView(delay: delay, color: zColor)
+            .offset(x: xOffset)
     }
 }
 

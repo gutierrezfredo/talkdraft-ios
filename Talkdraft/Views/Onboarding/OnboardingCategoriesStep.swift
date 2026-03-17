@@ -92,7 +92,7 @@ struct OnboardingCategoriesStep: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 24)
-            .padding(.bottom, 32)
+            .padding(.bottom, 12)
         }
         .sensoryFeedback(.selection, trigger: selectedIndices.count)
     }
