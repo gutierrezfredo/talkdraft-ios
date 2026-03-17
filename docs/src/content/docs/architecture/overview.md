@@ -24,14 +24,15 @@ Talkdraft follows Apple's Human Interface Guidelines with iOS 26's Liquid Glass 
        │              ┌──────────────────┐
        │              │  Edge Functions   │
        │              │  ├─ transcribe    │
+       │              │  ├─ transcribe-diarized │
        │              │  ├─ generate-title│
        │              │  ├─ rewrite       │
-       │              │  └─ translate     │
        │              └────────┬─────────┘
        │                       │
        │              ┌────────┴─────────┐
        │              │  External APIs    │
        │              │  ├─ Groq Whisper  │
+       │              │  ├─ Deepgram      │
        │              │  └─ Gemini Flash  │
        │              └──────────────────┘
        │

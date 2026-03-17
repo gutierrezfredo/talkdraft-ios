@@ -8,9 +8,9 @@ description: External services that power Talkdraft.
 Talkdraft's backend runs entirely on Supabase:
 
 - **Postgres** — stores notes, categories, and user profiles
-- **Auth** — handles Apple, Google, Email/Password, and Anonymous sign-in
+- **Auth** — handles Apple sign-in, email magic links, and guest/anonymous sign-in
 - **Storage** — stores uploaded audio files
-- **Edge Functions** — serverless functions for AI processing (transcription, titles, rewrite, translation)
+- **Edge Functions** — serverless functions for AI processing (transcription, titles, rewrite)
 
 Edge functions act as a proxy layer, keeping API keys (Groq, Google) server-side.
 
@@ -24,13 +24,12 @@ Voice-to-text transcription. Audio is compressed on-device to 16kHz mono AAC bef
 
 ## Gemini Flash
 
-Google's fast language model, used for three features:
+Google's fast language model, used for two shipped features:
 
 | Feature | Edge Function | Behavior |
 |---------|--------------|----------|
 | **AI Title** | `generate-title` | Generates a short title from note content. Runs automatically in background after capture. |
 | **AI Rewrite** | `rewrite` | Rewrites note content in a chosen tone (17 presets + custom instructions). Temperature 0.7. |
-| **Translation** | `translate` | Translates note content to a target language. |
 
 ## StoreKit 2 + RevenueCat
 
@@ -50,4 +49,4 @@ This architecture was chosen because RevenueCat's SDK couldn't reliably resolve 
 
 ### Entitlement
 
-The Pro entitlement unlocks: 15-minute recordings, unlimited notes, unlimited categories. The entitlement lookup key is `"spiritnotes Pro"` (legacy name, immutable in RevenueCat).
+The Pro entitlement unlocks the full app experience, including unlimited notes/categories, AI rewrite, and the current onboarding paywall flow. The entitlement lookup key is `"spiritnotes Pro"` (legacy name, immutable in RevenueCat).

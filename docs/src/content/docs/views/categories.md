@@ -5,7 +5,7 @@ description: Creating, editing, and organizing categories.
 
 ## Purpose
 
-Categories let users organize notes into color-coded buckets (e.g., Ideas, Tasks, Journal, Work). Each category has a name and a color.
+Categories let users organize notes into color-coded buckets (e.g., Ideas, Action Items, Journal, Work). Each category has a name and a color.
 
 ## Categories List
 
@@ -43,13 +43,6 @@ When a category is deleted:
 ## Reordering
 
 Categories can be reordered by long-pressing and dragging on the home screen's category chip bar. The sort order persists across sessions.
-
-## Limits
-
-- **Free users:** 4 categories maximum
-- **Pro users:** Unlimited categories
-
-Attempting to create a category beyond the free limit triggers the paywall.
 
 ## Related
 

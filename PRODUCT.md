@@ -2,7 +2,7 @@
 
 ## Overview
 
-**What:** Voice + text capture app with AI-generated titles, transcription, translation, and manual categorization
+**What:** Voice + text capture app with AI-generated titles, transcription, AI rewrites, and manual categorization
 **Client:** Talkdraft
 **For:** Anyone who captures thoughts throughout the day and wants fast, organized note-taking
 **Platform:** iOS only (iOS 26+)
@@ -23,12 +23,12 @@
 
 ## Pricing
 
-| State | Access |
-|-------|--------|
-| Free | Read-only — view, play, search, delete only |
-| Pro ($5.99/mo or $59.99/yr) | Full access — 60 min recordings, unlimited notes/categories, AI features |
+Talkdraft is a subscription app with a StoreKit introductory offer when eligible.
 
-7-day free trial available via StoreKit introductory offer (configured in App Store Connect).
+| Access | Details |
+|--------|---------|
+| Intro Trial (if eligible) | 7-day free trial with full Pro access |
+| Pro ($5.99/mo or $59.99/yr) | Full access — unlimited notes/categories, AI rewrite, multi-speaker transcription |
 
 ## Key Flows
 
@@ -50,18 +50,16 @@ Settings → Categories → Add/edit/delete/reorder → Name + color per categor
 ### AI Rewrite
 Note detail → Rewrite action → Choose tone or custom instructions → Preview → Accept or discard
 
-### Translation
-Note detail → Translate action → Choose target language → Translated content
-
 ## Screens
 
-1. **Auth** — Sign in / Sign up
-2. **Home (Note List)** — Grouped list, category filter menu, search, record button in toolbar
-3. **Record** — Full-screen recording interface with timer
-4. **Note Detail** — Full content, edit, change category, AI rewrite, translate, share/copy, download audio, append recording, delete
-5. **Categories** — List with colors, add/edit/delete/reorder
-6. **Settings** — General + Legal + Account sections
-7. **Paywall** — Feature list, StoreKit intro offer trial, subscribe CTA
+1. **Welcome / Auth** — Brand intro with Apple sign-in, email magic link, or guest entry
+2. **Onboarding** — Recording language, starter categories, onboarding paywall, optional trial reminder permission
+3. **Home (Note List)** — Grouped list, category filter menu, search, record button in toolbar
+4. **Record** — Full-screen recording interface with timer
+5. **Note Detail** — Full content, edit, change category, AI rewrite, share/copy, download audio, append recording, delete
+6. **Categories** — List with colors, add/edit/delete/reorder
+7. **Settings** — General + Legal + Account sections
+8. **Paywall** — Feature list, trial timeline, plan selection, subscribe CTA
 
 ## Terminology
 

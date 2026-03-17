@@ -11,7 +11,7 @@ The settings screen provides access to preferences, utility tools, and account m
 
 ### General
 
-- **Language** — sets the app's display language
+- **Recording Language** — sets the preferred transcription language (or Auto-detect)
 - **Theme** — light, dark, or system (follows device setting)
 
 ### Tools
