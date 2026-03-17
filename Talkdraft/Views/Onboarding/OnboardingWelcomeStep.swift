@@ -47,7 +47,7 @@ struct OnboardingWelcomeStep: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
-            .padding(.bottom, 0)
+            .padding(.bottom, 32)
         }
     }
 }

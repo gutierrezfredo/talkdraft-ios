@@ -11,6 +11,7 @@ struct OnboardingView: View {
     @State private var step: OnboardingStep = .welcome
     @State private var selectedLanguage: String = "auto"
     @State private var selectedCategoryIndices: Set<Int> = []
+    @State private var includesNotificationsStep = false
 
     private var backgroundColor: Color {
         if step == .paywall {
@@ -76,6 +77,7 @@ struct OnboardingView: View {
                         OnboardingPaywallStep(
                             onPurchaseCompleted: { startedTrial in
                                 if startedTrial {
+                                    includesNotificationsStep = true
                                     step = .notifications
                                 } else {
                                     finishOnboarding()
@@ -104,12 +106,11 @@ struct OnboardingView: View {
     // MARK: - Progress Bar
 
     private var progressBar: some View {
-        let steps = OnboardingStep.allCases
-        let currentIndex = step.rawValue
+        let steps = visibleSteps
+        let currentIndex = steps.firstIndex(of: step) ?? max(steps.count - 1, 0)
 
         return HStack(spacing: 6) {
-            ForEach(steps, id: \.rawValue) { s in
-                let index = s.rawValue
+            ForEach(Array(steps.enumerated()), id: \.element.rawValue) { index, s in
                 if index == currentIndex {
                     Capsule()
                         .fill(Color.brand)
@@ -122,6 +123,10 @@ struct OnboardingView: View {
             }
         }
         .animation(.snappy, value: step)
+    }
+
+    private var visibleSteps: [OnboardingStep] {
+        includesNotificationsStep ? OnboardingStep.allCases : OnboardingStep.allCases.filter { $0 != .notifications }
     }
 
     // MARK: - Navigation
