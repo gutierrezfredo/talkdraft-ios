@@ -17,14 +17,14 @@
 | View | Location | Status |
 |------|----------|--------|
 | HomeView | `Views/Home/HomeView.swift` | Built — category chips, notes grid, search, bulk select, sort options |
-| LoginView | `Views/Auth/LoginView.swift` | Built — Apple, Google, Email/Password, Anonymous sign-in |
+| LoginView | `Views/Auth/LoginView.swift` | Built — merged welcome/auth screen with Apple sign-in, email magic link, and guest entry |
 | PaywallView | `Views/Paywall/PaywallView.swift` | Built — StoreKit intro offer trial, feature list, monthly/yearly selection, purchase, restore |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
 | RecentlyDeletedView | `Views/Settings/RecentlyDeletedView.swift` | Built — browse, restore, permanently delete soft-deleted notes |
 | CategoriesView | `Views/Categories/` | Built — CRUD with color picker, category form sheet |
-| OnboardingView | `Views/Onboarding/` | Built — 5-screen flow: Welcome, Language, Categories, Paywall, Notifications |
+| OnboardingView | `Views/Onboarding/` | Built — post-auth flow: Language, Categories, Paywall, Notifications |
 
 ### Components
 
@@ -48,7 +48,7 @@
 
 | Store | Location | Description |
 |-------|----------|-------------|
-| AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple/Google/Email/Anonymous sign-in, account deletion |
+| AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple sign-in, email magic link, guest/anonymous sign-in, account deletion |
 | NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen, soft delete with 30-day auto-purge, restore |
 | SettingsStore | `Stores/SettingsStore.swift` | Language + theme + custom dictionary preferences |
 | SubscriptionStore | `Stores/SubscriptionStore.swift` | StoreKit2 purchases, RevenueCat entitlements, intro offer trial eligibility, entitlement gate for mandatory paywall |
@@ -66,7 +66,7 @@
 
 ## Planned Features
 
-- [x] Supabase auth (Apple, Google, Email/Password, Anonymous sign-in)
+- [x] Supabase auth (Apple, email magic link, guest/anonymous sign-in)
 - [x] Fetch notes and categories from Supabase
 - [x] Voice recording with AVFoundation + FFT visualization
 - [x] Transcription via edge function (with on-device compression)
@@ -93,7 +93,7 @@
 - [x] Mandatory paywall gate after sign-in (subscription-only, no free tier)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
 - [x] Feedback & support in Settings (sentiment gate → App Store review, pre-filled support email)
-- [x] Onboarding flow (Welcome → Language → Categories → Paywall → Trial notifications)
+- [x] Onboarding flow (Welcome/Auth → Language → Categories → Paywall → Trial notifications)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
@@ -110,6 +110,12 @@
 - SettingsStore: extracted supportedLanguages to shared static property, resetSession clears language to "auto"
 - LunaMascotView: optional zColor parameter, white Z's on dark splash screens
 - TalkdraftApp: skip RevenueCat setup during test runs
+
+### 2026-03-17 (Session 16)
+- LoginView: merged welcome/auth screen with Apple sign-in, email magic link, and guest entry
+- Onboarding now begins at Language after auth and keeps progress limited to post-auth setup screens
+- Starter category suggestions updated to Ideas, Action Items, Journal, Meetings, Goals, Work, Personal, Content, Reminders, Travel
+- Onboarding paywall copy tightened and includes trial timeline messaging for review
 
 ### 2026-03-09 (Session 14)
 - Multi-speaker recording: toggle in RecordView routes to `transcribe-diarized` Supabase edge function

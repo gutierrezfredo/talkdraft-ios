@@ -26,10 +26,8 @@ The record screen captures voice memos with real-time audio visualization. It op
 
 ## Limits
 
-- **Free users:** 3-minute maximum recording length. A timer warning appears as the limit approaches. Recording auto-stops at the limit.
-- **Pro users:** 15-minute maximum recording length.
-
-If a free user hits the limit, the recording is saved and transcribed normally — nothing is lost.
+- Recordings currently auto-stop at **60 minutes**
+- The timer continues to show elapsed time while recording is active
 
 ## Related
 
