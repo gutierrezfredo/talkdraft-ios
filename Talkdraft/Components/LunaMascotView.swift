@@ -22,7 +22,7 @@ struct LunaMascotView: View {
                 floatingZ(delay: 2.4, xOffset: zBaseX - 6)
             }
             .frame(width: size, height: size * 0.4)
-            .offset(y: size * 0.05)
+            .offset(y: pose == .paywall ? size * 0.05 : size * 0.15)
 
             Image(pose.assetName)
                 .resizable()
@@ -34,7 +34,7 @@ struct LunaMascotView: View {
 
     private var zBaseX: CGFloat {
         switch pose.zPosition {
-        case .left: return -size * 0.3
+        case .left: return -size * 0.38
         case .center: return 0
         case .right: return size * 0.3
         }
@@ -86,6 +86,8 @@ enum LunaPose: String, CaseIterable {
     case email
     case hobby
     case moon
+    case notes
+    case paywall
     case read
     case search
     case snack
@@ -101,7 +103,7 @@ enum LunaPose: String, CaseIterable {
 
     var zPosition: ZPosition {
         switch self {
-        case .read: return .left
+        case .read, .notes, .paywall: return .left
         case .box, .snack, .moon: return .center
         default: return .right
         }

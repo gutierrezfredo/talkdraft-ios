@@ -74,11 +74,7 @@ struct OnboardingPaywallStep: View {
     private var header: some View {
         VStack(spacing: 4) {
             ZStack(alignment: .top) {
-                Image("luna-paywall")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 140, height: 140)
-                    .accessibilityHidden(true)
+                LunaMascotView(.paywall, size: 125)
                     .zIndex(1)
             }
             .padding(.top, 20)
@@ -87,18 +83,11 @@ struct OnboardingPaywallStep: View {
                     .fill(bodyBackground)
                     .frame(height: 2000)
                     .padding(.horizontal, -300)
-                    .offset(y: 1600)
+                    .offset(y: 1615)
             }
 
             Text("Unlock the full\nTalkdraft experience")
                 .font(.brandTitle)
-                .multilineTextAlignment(.center)
-
-            Text(showsTrialMessaging
-                 ? "Record longer, organize everything, and start with a free trial."
-                 : "Record longer, organize everything, and turn rough notes into something useful.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
     }

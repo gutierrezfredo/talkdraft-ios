@@ -32,21 +32,35 @@ struct LoginView: View {
 
             VStack(spacing: 0) {
                 Spacer()
+                Spacer()
 
                 onboardingHero
-                    .padding(.bottom, 32)
+                    .padding(.bottom, 40)
 
-                Text("Say it messy.\nRead it clean.")
-                    .font(.brandLargeTitle)
-                    .multilineTextAlignment(.center)
-                    .padding(.bottom, 16)
+                VStack(spacing: 0) {
+                    Text("Say it messy.")
+                        .font(.brandLargeTitle)
+
+                    ZStack(alignment: .bottom) {
+                        Text("Read it clean.")
+                            .font(.brandLargeTitle)
+
+                        Rectangle()
+                            .fill(Color.brand)
+                            .frame(width: 80, height: 2.5)
+                            .clipShape(Capsule())
+                            .offset(x: 58, y: 2)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 16)
 
                 Text("Capture voice notes and quick thoughts, then let Talkdraft turn them into organized notes.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                    .padding(.bottom, 28)
+                    .padding(.bottom, 56)
 
                 if isInteractive {
                     if let error = authStore.error {
@@ -130,7 +144,7 @@ struct LoginView: View {
                 .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
                 .frame(width: 220, height: 220)
 
-            LunaMascotView(.moon, size: 180)
+            LunaMascotView(.notes, size: 180)
         }
     }
 
@@ -182,13 +196,16 @@ private struct EmailSignInSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
                 if magicLinkSent {
                     sentConfirmation
+                        .transition(.opacity)
                 } else {
                     emailForm
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.4), value: magicLinkSent)
             .background(backgroundColor.ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -311,7 +328,7 @@ private struct EmailSignInSheet: View {
             // Luna mascot
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(colorScheme == .dark ? 1.0 : 0.20))
+                    .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
                     .frame(width: 220, height: 220)
 
                 LunaMascotView(.email, size: 180)
@@ -430,5 +447,19 @@ private struct EmailSignInSheet: View {
                 resendCooldown -= 1
             }
         }
+    }
+}
+
+// MARK: - Brand Underline
+
+private struct BrandUnderline: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.maxY + 2)
+        )
+        return path
     }
 }

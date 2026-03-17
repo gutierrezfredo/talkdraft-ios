@@ -105,21 +105,32 @@ struct OnboardingLanguageStep: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button {
-                onNext()
-            } label: {
-                Text("Continue")
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Color.brand, in: Capsule())
+            VStack(spacing: 0) {
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        (colorScheme == .dark ? Color.darkBackground : .warmBackground).opacity(0.85),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 20)
+
+                Button {
+                    onNext()
+                } label: {
+                    Text("Continue")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(Color.brand, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
+                .background(colorScheme == .dark ? Color.darkBackground : .warmBackground)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 24)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
-            .background(Color.clear)
         }
         .sensoryFeedback(.selection, trigger: selectedLanguage)
     }

@@ -141,7 +141,7 @@ extension HomeView {
             if isSearching && !query.isEmpty || selectedCategory != nil {
                 VStack(spacing: 4) {
                     LunaMascotView(
-                        isSearching && !query.isEmpty ? .search : .box,
+                        isSearching && !query.isEmpty ? .search : .notes,
                         size: 180
                     )
 
