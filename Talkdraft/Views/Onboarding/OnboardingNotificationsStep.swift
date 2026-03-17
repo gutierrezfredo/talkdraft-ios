@@ -13,7 +13,7 @@ struct OnboardingNotificationsStep: View {
             // Luna mascot in brand circle
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(colorScheme == .dark ? 1.0 : 0.20))
+                    .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
                     .frame(width: 220, height: 220)
 
                 LunaMascotView(.email, size: 180)
@@ -37,7 +37,7 @@ struct OnboardingNotificationsStep: View {
             Spacer()
 
             // CTAs
-            VStack(spacing: 16) {
+            VStack(spacing: 8) {
                 Button {
                     Task {
                         await requestAndSchedule()
@@ -59,6 +59,9 @@ struct OnboardingNotificationsStep: View {
                     Text("Not Now")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -78,8 +81,8 @@ struct OnboardingNotificationsStep: View {
 
     private func scheduleTrialReminder() {
         let content = UNMutableNotificationContent()
-        content.title = "Your free trial ends soon"
-        content.body = "Your Talkdraft trial ends in 2 days. Cancel anytime if you don't want to continue."
+        content.title = "Your Talkdraft trial ends in 2 days"
+        content.body = "Cancel before then if you don't want your subscription to continue."
         content.sound = .default
 
         // Fire 5 days from now (2 days before 7-day trial ends)

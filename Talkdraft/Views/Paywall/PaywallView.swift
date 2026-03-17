@@ -44,8 +44,12 @@ struct PaywallView: View {
                         Text("Restore Purchases")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.top, 4)
                     .padding(.bottom, 20)
                 }
                 .padding(.horizontal, 20)

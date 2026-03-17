@@ -89,9 +89,12 @@ struct OnboardingCategoriesStep: View {
                 Text("Skip")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.top, 24)
+            .padding(.top, 4)
             .padding(.bottom, 8)
         }
         .sensoryFeedback(.selection, trigger: selectedIndices.count)
