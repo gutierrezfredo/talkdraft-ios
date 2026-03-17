@@ -381,11 +381,16 @@ extension NoteDetailView {
                 transcribingIndicator
             } else if isTranscribing {
                 Text("Transcribing…")
-                    .font(.body)
+                    .font(.body.italic())
                     .foregroundStyle(Color.brand)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
+                    .phaseAnimator([false, true]) { content, pulse in
+                        content.opacity(pulse ? 0.4 : 1.0)
+                    } animation: { _ in
+                        .easeInOut(duration: 1.5)
+                    }
             } else if isWaitingForConnection {
                 waitingForConnectionView
                     .padding(.top, 40)
