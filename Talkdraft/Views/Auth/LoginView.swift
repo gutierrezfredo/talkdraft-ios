@@ -32,10 +32,10 @@ struct LoginView: View {
 
             VStack(spacing: 0) {
                 Spacer()
-                Spacer()
 
                 onboardingHero
-                    .padding(.bottom, 40)
+                    .padding(.top, 12)
+                    .padding(.bottom, 32)
 
                 VStack(spacing: 0) {
                     Text("Say it messy.")
@@ -60,77 +60,15 @@ struct LoginView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                    .padding(.bottom, 56)
+                    .padding(.bottom, 40)
 
-                if isInteractive {
-                    if let error = authStore.error {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 12)
-                    }
-
-                    VStack(spacing: 12) {
-                        SignInWithAppleButton(.continue) { request in
-                            authStore.appleSignInRequest(request)
-                        } onCompletion: { result in
-                            Task { await authStore.handleAppleSignIn(result) }
-                        }
-                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                        .frame(height: 56)
-                        .clipShape(Capsule())
-
-                        Button {
-                            authStore.error = nil
-                            showEmailForm = true
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "envelope.fill")
-                                    .font(.body)
-                                Text("Continue with Email")
-                                    .font(.title3)
-                                    .fontWeight(.semibold)
-                            }
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                            .background(
-                                Capsule()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white)
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            Task { await authStore.signInAnonymously() }
-                        } label: {
-                            Text("Skip login")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 12)
-                    }
-                    .padding(.horizontal, 24)
-                } else {
-                    transitionState
-                        .padding(.horizontal, 24)
-                        .padding(.top, 4)
-                }
+                authSection
 
                 Spacer()
 
-                if isInteractive {
-                    Text("By signing in, you agree to our [Terms of Use](https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html) and [Privacy Policy](https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html).")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .tint(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 0)
-                }
+                legalText
+                    .opacity(isInteractive ? 1 : 0)
+                    .allowsHitTesting(isInteractive)
             }
         }
         .sheet(isPresented: $showEmailForm) {
@@ -146,6 +84,89 @@ struct LoginView: View {
 
             LunaMascotView(.notes, size: 180)
         }
+    }
+
+    private var authSection: some View {
+        ZStack(alignment: .top) {
+            if isInteractive {
+                interactiveActions
+            } else {
+                transitionState
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 184, alignment: .top)
+    }
+
+    private var interactiveActions: some View {
+        VStack(spacing: 0) {
+            if let error = authStore.error {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+            }
+
+            VStack(spacing: 12) {
+                SignInWithAppleButton(.continue) { request in
+                    authStore.appleSignInRequest(request)
+                } onCompletion: { result in
+                    Task { await authStore.handleAppleSignIn(result) }
+                }
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                .frame(height: 56)
+                .clipShape(Capsule())
+
+                Button {
+                    authStore.error = nil
+                    showEmailForm = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "envelope.fill")
+                            .font(.body)
+                        Text("Continue with Email")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        Capsule()
+                            .fill(colorScheme == .dark ? Color.darkSurface : .white)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Task { await authStore.signInAnonymously() }
+                } label: {
+                    Text("Skip login")
+                        .font(.subheadline)
+                        .foregroundStyle(colorScheme == .dark ? Color.secondary : Color.primary.opacity(0.62))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private var legalText: some View {
+        Text("By signing in, you agree to our [Terms of Use](https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html) and [Privacy Policy](https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html).")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .tint(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
     }
 
     private var transitionState: some View {

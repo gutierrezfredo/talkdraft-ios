@@ -9,13 +9,17 @@ struct OnboardingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var step: OnboardingStep = .language
+    @State private var navigationDirection: NavigationDirection = .forward
     @State private var selectedLanguage: String = "auto"
     @State private var selectedCategoryIndices: Set<Int> = []
 
+    #if DEBUG
+    private let forceShowTrialNotifications = true
+    #else
+    private let forceShowTrialNotifications = false
+    #endif
+
     private var backgroundColor: Color {
-        if step == .paywall {
-            return Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12)
-        }
         return colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
@@ -29,49 +33,33 @@ struct OnboardingView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 4)
 
-                // Back button
-                if step.showsBackButton {
-                    HStack {
-                        Button {
-                            goBack()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.left")
-                                    .font(.body)
-                                    .fontWeight(.semibold)
-                                Text("Back")
-                                    .font(.body)
-                            }
-                            .foregroundStyle(Color.brand)
-                        }
-                        .buttonStyle(.plain)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                }
+                backBar
 
-                // Step content
-                Group {
-                    switch step {
-                    case .language:
+                ZStack(alignment: .top) {
+                    if step == .language {
                         OnboardingLanguageStep(
                             selectedLanguage: $selectedLanguage,
                             onNext: advance,
                             onBack: goBack
                         )
+                        .id(stepViewID(for: .language))
+                        .transition(stepTransition)
+                    }
 
-                    case .categories:
+                    if step == .categories {
                         OnboardingCategoriesStep(
                             selectedIndices: $selectedCategoryIndices,
                             onNext: advance,
                             onBack: goBack
                         )
+                        .id(stepViewID(for: .categories))
+                        .transition(stepTransition)
+                    }
 
-                    case .paywall:
+                    if step == .paywall {
                         OnboardingPaywallStep(
                             onPurchaseCompleted: { startedTrial in
-                                if startedTrial {
+                                if startedTrial || forceShowTrialNotifications {
                                     step = .notifications
                                 } else {
                                     finishOnboarding()
@@ -79,16 +67,17 @@ struct OnboardingView: View {
                             },
                             onRestored: { finishOnboarding() }
                         )
+                        .id(stepViewID(for: .paywall))
+                        .transition(stepTransition)
+                    }
 
-                    case .notifications:
+                    if step == .notifications {
                         OnboardingNotificationsStep(onComplete: finishOnboarding)
+                            .id(stepViewID(for: .notifications))
+                            .transition(stepTransition)
                     }
                 }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
-                .id(step)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: step)
@@ -98,6 +87,31 @@ struct OnboardingView: View {
     }
 
     // MARK: - Progress Bar
+
+    private var backBar: some View {
+        HStack {
+            Button {
+                goBack()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.body)
+                        .fontWeight(.semibold)
+                    Text("Back")
+                        .font(.body)
+                }
+                .foregroundStyle(Color.brand)
+            }
+            .buttonStyle(.plain)
+            .opacity(step.showsBackButton ? 1 : 0)
+            .allowsHitTesting(step.showsBackButton)
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .frame(height: 32)
+    }
 
     private var progressSteps: [OnboardingStep] {
         switch step {
@@ -132,16 +146,37 @@ struct OnboardingView: View {
 
     // MARK: - Navigation
 
+    private var stepTransition: AnyTransition {
+        switch navigationDirection {
+        case .forward:
+            return .asymmetric(
+                insertion: .move(edge: .trailing),
+                removal: .move(edge: .leading)
+            )
+        case .backward:
+            return .asymmetric(
+                insertion: .move(edge: .leading),
+                removal: .identity
+            )
+        }
+    }
+
+    private func stepViewID(for step: OnboardingStep) -> String {
+        "\(step.rawValue)-\(navigationDirection)"
+    }
+
     private func advance() {
         guard let next = step.next else {
             finishOnboarding()
             return
         }
+        navigationDirection = .forward
         step = next
     }
 
     private func goBack() {
         guard let prev = step.previous else { return }
+        navigationDirection = .backward
         step = prev
     }
 
@@ -212,4 +247,9 @@ private enum OnboardingStep: Int, CaseIterable {
         case .notifications: nil
         }
     }
+}
+
+private enum NavigationDirection {
+    case forward
+    case backward
 }

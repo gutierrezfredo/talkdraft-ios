@@ -14,8 +14,14 @@ struct OnboardingPaywallStep: View {
         colorScheme == .dark ? .darkSurface : .white
     }
 
+    #if DEBUG
+    private let forceShowTrialTimeline = true
+    #else
+    private let forceShowTrialTimeline = false
+    #endif
+
     private var showsTrialMessaging: Bool {
-        subscriptionStore.isTrialEligible
+        forceShowTrialTimeline || subscriptionStore.isTrialEligible
     }
 
     var body: some View {
@@ -46,8 +52,12 @@ struct OnboardingPaywallStep: View {
                     Text("Restore Purchases")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .padding(.top, 4)
                 .padding(.bottom, 20)
             }
             .padding(.horizontal, 20)
@@ -67,8 +77,8 @@ struct OnboardingPaywallStep: View {
 
     // MARK: - Header
 
-    private var bodyBackground: Color {
-        colorScheme == .dark ? .darkBackground : .warmBackground
+    private var headerBackground: Color {
+        colorScheme == .dark ? Color.brand.opacity(0.24) : Color.brand.opacity(0.12)
     }
 
     private var header: some View {
@@ -80,7 +90,7 @@ struct OnboardingPaywallStep: View {
             .padding(.top, 20)
             .background(alignment: .bottom) {
                 ConcaveArchShape()
-                    .fill(bodyBackground)
+                    .fill(headerBackground)
                     .frame(height: 2000)
                     .padding(.horizontal, -300)
                     .offset(y: 1615)
@@ -96,8 +106,6 @@ struct OnboardingPaywallStep: View {
 
     private var featureList: some View {
         VStack(spacing: 0) {
-            featureRow("60-minute recordings", systemImage: "mic.fill")
-            Divider().padding(.leading, 52)
             featureRow("Unlimited notes and categories", systemImage: "note.text")
             Divider().padding(.leading, 52)
             featureRow("AI rewrites for summaries, action items, and more", systemImage: "wand.and.stars")
@@ -159,8 +167,6 @@ struct OnboardingPaywallStep: View {
             )
         }
         .padding(16)
-        .background(Color.secondary.opacity(colorScheme == .dark ? 0.15 : 0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
     private func timelineRow(icon: String, title: String, subtitle: String, isLast: Bool) -> some View {
@@ -325,6 +331,11 @@ struct OnboardingPaywallStep: View {
 
             if showsTrialMessaging {
                 Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Text("We’ll send a reminder before your trial ends.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
