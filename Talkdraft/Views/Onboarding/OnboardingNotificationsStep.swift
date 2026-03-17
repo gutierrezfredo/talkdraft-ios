@@ -18,14 +18,14 @@ struct OnboardingNotificationsStep: View {
 
                 LunaMascotView(.email, size: 180)
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, 0)
 
             // Headline
             Text("Get a reminder before your trial ends")
                 .font(.brandTitle)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
-                .padding(.bottom, 16)
+                .padding(.bottom, 0)
 
             // Body
             Text("Enable notifications and we'll let you know before you're charged.")
@@ -63,7 +63,7 @@ struct OnboardingNotificationsStep: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .padding(.bottom, 0)
         }
     }
 

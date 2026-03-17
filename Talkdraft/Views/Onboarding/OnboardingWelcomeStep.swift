@@ -15,7 +15,7 @@ struct OnboardingWelcomeStep: View {
                     .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
                     .frame(width: 220, height: 220)
 
-                LunaMascotView(.moon, size: 180)
+                LunaMascotView(.notes, size: 180)
             }
             .padding(.bottom, 32)
 
@@ -23,7 +23,7 @@ struct OnboardingWelcomeStep: View {
             Text("Say it messy.\nRead it clean.")
                 .font(.brandLargeTitle)
                 .multilineTextAlignment(.center)
-                .padding(.bottom, 16)
+                .padding(.bottom, 12)
 
             // Body
             Text("Capture voice notes and quick thoughts, then let Talkdraft turn them into organized notes.")
@@ -47,7 +47,7 @@ struct OnboardingWelcomeStep: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .padding(.bottom, 0)
         }
     }
 }

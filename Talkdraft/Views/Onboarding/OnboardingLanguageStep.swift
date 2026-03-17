@@ -118,7 +118,7 @@ struct OnboardingLanguageStep: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.top, 16)
-            .padding(.bottom, 32)
+            .padding(.bottom, 0)
         }
         .sensoryFeedback(.selection, trigger: selectedLanguage)
     }

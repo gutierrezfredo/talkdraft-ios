@@ -43,7 +43,7 @@ struct ContentView: View {
     private var splashView: some View {
         ZStack {
             Color.darkBackground.ignoresSafeArea()
-            LunaMascotView(.moon, size: 200, zColor: .white)
+            LunaMascotView(.moon, size: 200)
         }
     }
 

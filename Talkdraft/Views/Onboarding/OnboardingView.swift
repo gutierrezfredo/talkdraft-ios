@@ -13,7 +13,10 @@ struct OnboardingView: View {
     @State private var selectedCategoryIndices: Set<Int> = []
 
     private var backgroundColor: Color {
-        colorScheme == .dark ? .darkBackground : .warmBackground
+        if step == .paywall {
+            return Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12)
+        }
+        return colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
     var body: some View {
@@ -21,6 +24,12 @@ struct OnboardingView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
+                // Progress indicator
+                progressBar
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+
                 // Back button
                 if step.showsBackButton {
                     HStack {
@@ -90,6 +99,29 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = settingsStore.language
         }
+    }
+
+    // MARK: - Progress Bar
+
+    private var progressBar: some View {
+        let steps = OnboardingStep.allCases
+        let currentIndex = step.rawValue
+
+        return HStack(spacing: 6) {
+            ForEach(steps, id: \.rawValue) { s in
+                let index = s.rawValue
+                if index == currentIndex {
+                    Capsule()
+                        .fill(Color.brand)
+                        .frame(width: 24, height: 8)
+                } else {
+                    Circle()
+                        .fill(index < currentIndex ? Color.brand : Color.brand.opacity(0.25))
+                        .frame(width: 8, height: 8)
+                }
+            }
+        }
+        .animation(.snappy, value: step)
     }
 
     // MARK: - Navigation

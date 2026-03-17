@@ -51,7 +51,6 @@ struct OnboardingPaywallStep: View {
                 .padding(.bottom, 20)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 8)
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -68,8 +67,25 @@ struct OnboardingPaywallStep: View {
 
     // MARK: - Header
 
+    private var bodyBackground: Color {
+        colorScheme == .dark ? .darkBackground : .warmBackground
+    }
+
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 4) {
+            ZStack(alignment: .top) {
+                LunaMascotView(.paywall, size: 140)
+                    .zIndex(1)
+            }
+            .padding(.top, 20)
+            .background(alignment: .bottom) {
+                ConcaveArchShape()
+                    .fill(bodyBackground)
+                    .frame(height: 2000)
+                    .padding(.horizontal, -300)
+                    .offset(y: 2000 - 400)
+            }
+
             Text("Unlock the full\nTalkdraft experience")
                 .font(.brandTitle)
                 .multilineTextAlignment(.center)
@@ -150,7 +166,7 @@ struct OnboardingPaywallStep: View {
             )
         }
         .padding(16)
-        .background(cardColor)
+        .background(Color.secondary.opacity(colorScheme == .dark ? 0.15 : 0.10))
         .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
@@ -160,7 +176,7 @@ struct OnboardingPaywallStep: View {
             VStack(spacing: 0) {
                 ZStack {
                     Circle()
-                        .fill(Color.brand.opacity(0.15))
+                        .fill(cardColor)
                         .frame(width: 36, height: 36)
                     Image(systemName: icon)
                         .font(.callout)
@@ -169,7 +185,7 @@ struct OnboardingPaywallStep: View {
 
                 if !isLast {
                     Rectangle()
-                        .fill(Color.brand.opacity(0.3))
+                        .fill(cardColor)
                         .frame(width: 2)
                         .frame(maxHeight: .infinity)
                 }
@@ -343,4 +359,44 @@ struct OnboardingPaywallStep: View {
 private enum PlanOption {
     case monthly
     case yearly
+}
+
+// MARK: - Concave Arch Shape
+
+/// A rectangle with a concave semicircular bite out of the top center.
+private struct ConcaveArchShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let archRadius = rect.width * 0.45
+        let archCenter = CGPoint(x: rect.midX, y: rect.minY)
+
+        // Start top-left
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+
+        // Line to where the arch starts
+        path.addLine(to: CGPoint(x: archCenter.x - archRadius, y: rect.minY))
+
+        // Concave arch (curve downward into the rectangle)
+        path.addArc(
+            center: archCenter,
+            radius: archRadius,
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: true
+        )
+
+        // Line to top-right
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+
+        // Down to bottom-right
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+
+        // Bottom-left
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+
+        // Close
+        path.closeSubpath()
+
+        return path
+    }
 }
