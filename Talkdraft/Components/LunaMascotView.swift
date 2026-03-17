@@ -57,18 +57,18 @@ private struct FloatingZView: View {
 
     var body: some View {
         Text("z")
-            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .font(.system(size: 18, weight: .semibold, design: .rounded))
             .foregroundStyle(color ?? Color.secondary)
-            .opacity(visible ? (animate ? 0 : 0.7) : 0)
-            .offset(y: animate ? -30 : 0)
-            .scaleEffect(animate ? 0.6 : 1.0)
+            .opacity(visible ? (animate ? 0 : 0.45) : 0)
+            .offset(x: animate ? 4 : 0, y: animate ? -18 : 0)
+            .scaleEffect(animate ? 0.82 : 1.0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .onAppear {
                 Task {
                     try? await Task.sleep(for: .seconds(delay))
                     visible = true
                     withAnimation(
-                        .easeOut(duration: 2.0)
+                        .easeOut(duration: 3.8)
                         .repeatForever(autoreverses: false)
                     ) {
                         animate = true

@@ -103,8 +103,8 @@ struct OnboardingLanguageStep: View {
                 .padding(.horizontal, 20)
             }
             .scrollDismissesKeyboard(.interactively)
-
-            // CTA
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             Button {
                 onNext()
             } label: {
@@ -118,7 +118,8 @@ struct OnboardingLanguageStep: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.top, 16)
-            .padding(.bottom, 32)
+            .padding(.bottom, 8)
+            .background(Color.clear)
         }
         .sensoryFeedback(.selection, trigger: selectedLanguage)
     }

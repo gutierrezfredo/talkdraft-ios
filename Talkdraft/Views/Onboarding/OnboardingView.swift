@@ -8,12 +8,15 @@ struct OnboardingView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var step: OnboardingStep = .welcome
+    @State private var step: OnboardingStep = .language
     @State private var selectedLanguage: String = "auto"
     @State private var selectedCategoryIndices: Set<Int> = []
 
     private var backgroundColor: Color {
-        colorScheme == .dark ? .darkBackground : .warmBackground
+        if step == .paywall {
+            return Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12)
+        }
+        return colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
     var body: some View {
@@ -21,6 +24,11 @@ struct OnboardingView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
+                progressBar
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+
                 // Back button
                 if step.showsBackButton {
                     HStack {
@@ -46,9 +54,6 @@ struct OnboardingView: View {
                 // Step content
                 Group {
                     switch step {
-                    case .welcome:
-                        OnboardingWelcomeStep(onNext: advance)
-
                     case .language:
                         OnboardingLanguageStep(
                             selectedLanguage: $selectedLanguage,
@@ -90,6 +95,39 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = settingsStore.language
         }
+    }
+
+    // MARK: - Progress Bar
+
+    private var progressSteps: [OnboardingStep] {
+        switch step {
+        case .notifications:
+            [.language, .categories, .paywall, .notifications]
+        default:
+            [.language, .categories, .paywall]
+        }
+    }
+
+    private var progressBar: some View {
+        let currentIndex = progressSteps.firstIndex(of: step) ?? 0
+
+        return HStack(spacing: 6) {
+            ForEach(Array(progressSteps.enumerated()), id: \.offset) { index, _ in
+                if index == currentIndex {
+                    Capsule()
+                        .fill(Color.brand)
+                        .frame(width: 24, height: 8)
+                } else {
+                    Circle()
+                        .fill(index < currentIndex ? Color.brand : Color.brand.opacity(0.25))
+                        .frame(width: 8, height: 8)
+                }
+            }
+        }
+        .animation(.snappy, value: step)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Onboarding progress")
+        .accessibilityValue("\(currentIndex + 1) of \(progressSteps.count)")
     }
 
     // MARK: - Navigation
@@ -145,7 +183,6 @@ struct OnboardingView: View {
 // MARK: - Step Enum
 
 private enum OnboardingStep: Int, CaseIterable {
-    case welcome
     case language
     case categories
     case paywall
@@ -153,15 +190,14 @@ private enum OnboardingStep: Int, CaseIterable {
 
     var showsBackButton: Bool {
         switch self {
-        case .welcome, .paywall, .notifications: false
-        case .language, .categories: true
+        case .language, .paywall, .notifications: false
+        case .categories: true
         }
     }
 
     var previous: OnboardingStep? {
         switch self {
-        case .welcome: nil
-        case .language: .welcome
+        case .language: nil
         case .categories: .language
         case .paywall: nil
         case .notifications: nil
@@ -170,7 +206,6 @@ private enum OnboardingStep: Int, CaseIterable {
 
     var next: OnboardingStep? {
         switch self {
-        case .welcome: .language
         case .language: .categories
         case .categories: .paywall
         case .paywall: nil
