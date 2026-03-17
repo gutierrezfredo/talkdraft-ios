@@ -92,7 +92,7 @@ struct OnboardingCategoriesStep: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 24)
-            .padding(.bottom, 32)
+            .padding(.bottom, 8)
         }
         .sensoryFeedback(.selection, trigger: selectedIndices.count)
     }
@@ -106,9 +106,10 @@ struct CategorySuggestion {
 
     static let all: [CategorySuggestion] = [
         CategorySuggestion(name: "Ideas", color: "#6366F1"),
-        CategorySuggestion(name: "Tasks", color: "#EF4444"),
+        CategorySuggestion(name: "Action Items", color: "#EF4444"),
         CategorySuggestion(name: "Journal", color: "#10B981"),
         CategorySuggestion(name: "Meetings", color: "#F59E0B"),
+        CategorySuggestion(name: "Goals", color: "#14B8A6"),
         CategorySuggestion(name: "Work", color: "#3B82F6"),
         CategorySuggestion(name: "Personal", color: "#EC4899"),
         CategorySuggestion(name: "Content", color: "#8B5CF6"),

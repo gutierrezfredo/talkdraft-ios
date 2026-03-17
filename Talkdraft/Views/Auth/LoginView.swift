@@ -3,6 +3,7 @@ import SwiftUI
 
 enum LoginViewPhase {
     case signIn
+    case authenticating
     case transitioning
 }
 
@@ -30,16 +31,22 @@ struct LoginView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Demo area
-                demoPreview
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+                Spacer()
 
-                // Tagline
-                Text("Voice notes turned into\nclean, organized text.")
-                    .font(.brandTitle2)
+                onboardingHero
+                    .padding(.bottom, 32)
+
+                Text("Say it messy.\nRead it clean.")
+                    .font(.brandLargeTitle)
                     .multilineTextAlignment(.center)
-                    .padding(.bottom, isInteractive ? 28 : 20)
+                    .padding(.bottom, 16)
+
+                Text("Capture voice notes and quick thoughts, then let Talkdraft turn them into organized notes.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 28)
 
                 if isInteractive {
                     if let error = authStore.error {
@@ -48,7 +55,7 @@ struct LoginView: View {
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
-                            .padding(.bottom, 8)
+                            .padding(.bottom, 12)
                     }
 
                     VStack(spacing: 12) {
@@ -81,23 +88,25 @@ struct LoginView: View {
                             )
                         }
                         .buttonStyle(.plain)
+
+                        Button {
+                            Task { await authStore.signInAnonymously() }
+                        } label: {
+                            Text("Skip login")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 12)
                     }
                     .padding(.horizontal, 24)
-
-                    Button {
-                        Task { await authStore.signInAnonymously() }
-                    } label: {
-                        Text("Skip login")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 24)
                 } else {
                     transitionState
+                        .padding(.horizontal, 24)
+                        .padding(.top, 4)
                 }
 
-                Spacer(minLength: 32)
+                Spacer()
 
                 if isInteractive {
                     Text("By signing in, you agree to our [Terms of Use](https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html) and [Privacy Policy](https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html).")
@@ -106,7 +115,7 @@ struct LoginView: View {
                         .tint(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 0)
                 }
             }
         }
@@ -115,21 +124,14 @@ struct LoginView: View {
         }
     }
 
-    // MARK: - Demo Preview
+    private var onboardingHero: some View {
+        ZStack {
+            Circle()
+                .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
+                .frame(width: 220, height: 220)
 
-    private var demoPreview: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(Color.brand.opacity(0.1))
-                    .frame(width: 120, height: 120)
-
-                Image(systemName: "waveform")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.brand)
-            }
+            LunaMascotView(.moon, size: 180)
         }
-        .padding(.top, 32)
     }
 
     private var transitionState: some View {
@@ -137,16 +139,15 @@ struct LoginView: View {
             ProgressView()
                 .tint(Color.brand)
 
-            Text("Preparing your workspace...")
+            Text(phase == .authenticating ? "Signing you in..." : "Preparing your workspace...")
                 .font(.title3)
                 .fontWeight(.semibold)
 
-            Text("This will only take a moment.")
+            Text(phase == .authenticating ? "This will only take a moment." : "We’re getting everything ready.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .multilineTextAlignment(.center)
-        .padding(.horizontal, 24)
     }
 }
 

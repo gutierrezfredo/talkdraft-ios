@@ -49,7 +49,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authStore.isLoading {
+            if authStore.isLoading && !didFinishInitialAuthBootstrap {
                 splashView
             } else if authStore.isAuthenticated {
                 if isPostAuthBootstrapReady {
@@ -71,7 +71,7 @@ struct ContentView: View {
                     splashView
                 }
             } else {
-                LoginView()
+                LoginView(phase: authStore.isLoading ? .authenticating : .signIn)
             }
         }
         .animation(.easeInOut(duration: 0.4), value: noteStore.hasInitiallyLoaded)
