@@ -152,13 +152,13 @@ struct PaywallView: View {
                 title: "Yearly",
                 price: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99",
                 detail: "per year",
-                badge: "Save 17%"
+                badge: "Save 37%"
             )
 
             planCard(
                 option: .monthly,
                 title: "Monthly",
-                price: subscriptionStore.monthlyProduct?.displayPrice ?? "$5.99",
+                price: subscriptionStore.monthlyProduct?.displayPrice ?? "$7.99",
                 detail: "per month",
                 badge: nil
             )
@@ -277,7 +277,7 @@ struct PaywallView: View {
 
     private var selectedPlanPrice: String {
         switch selectedPlan {
-        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? "$5.99"
+        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? "$7.99"
         case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99"
         }
     }
