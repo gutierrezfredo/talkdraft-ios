@@ -28,7 +28,7 @@ Talkdraft is a subscription app with a StoreKit introductory offer when eligible
 | Access | Details |
 |--------|---------|
 | Intro Trial (if eligible) | 7-day free trial with full Pro access |
-| Pro ($5.99/mo or $59.99/yr) | Full access — unlimited notes/categories, AI rewrite, multi-speaker transcription |
+| Pro ($7.99/mo or $59.99/yr) | Full access — unlimited notes/categories, AI rewrite, multi-speaker transcription |
 
 ## Key Flows
 
