@@ -30,6 +30,8 @@
 	<array>
 		<string>Fraunces-Variable.ttf</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
