@@ -113,8 +113,6 @@ struct PaywallView: View {
 
     private var featureComparison: some View {
         VStack(spacing: 0) {
-            featureRow("60-minute recordings", systemImage: "mic.fill")
-            Divider().padding(.leading, 52)
             featureRow("Unlimited notes", systemImage: "note.text")
             Divider().padding(.leading, 52)
             featureRow("Unlimited categories", systemImage: "folder.fill")
