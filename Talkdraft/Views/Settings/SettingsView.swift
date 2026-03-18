@@ -181,12 +181,13 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     Button {
-                        openSupportEmail()
+                        openSupportPage()
                     } label: {
                         SettingsRow(
                             icon: "envelope",
                             title: "Contact Support",
-                            showChevron: false
+                            showChevron: false,
+                            trailingIcon: "arrow.up.right"
                         )
                     }
                     .buttonStyle(.plain)
@@ -361,20 +362,8 @@ struct SettingsView: View {
         }
     }
 
-    private var supportEmailSubject: String {
-        "Talkdraft Support (\(appVersion))"
-    }
-
-    private var supportEmailBody: String {
-        let device = UIDevice.current
-        let diagnostics = ErrorLogger.shared.exportText(maxEntries: 20)
-        return "\n\n---\nApp: Talkdraft \(appVersion)\niOS: \(device.systemVersion)\nDevice: \(device.model)\n\n\(diagnostics)"
-    }
-
-    private func openSupportEmail() {
-        let subject = supportEmailSubject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let body = supportEmailBody.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "mailto:support@talkdraft.app?subject=\(subject)&body=\(body)") {
+    private func openSupportPage() {
+        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/legal/support.html") {
             UIApplication.shared.open(url)
         }
     }
