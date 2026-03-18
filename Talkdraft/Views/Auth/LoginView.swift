@@ -71,7 +71,8 @@ struct LoginView: View {
                     .allowsHitTesting(isInteractive)
             }
         }
-        .sheet(isPresented: $showEmailForm) {
+        .ignoresSafeArea(.keyboard)
+        .fullScreenCover(isPresented: $showEmailForm) {
             EmailSignInSheet()
         }
     }
@@ -392,40 +393,24 @@ private struct EmailSignInSheet: View {
 
             Spacer()
 
-            // Bottom buttons
-            VStack(spacing: 12) {
-                Button {
-                    if let url = URL(string: "message://") {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    Text("Open Mail App")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(Capsule().fill(Color.brand))
+            // Bottom button
+            Button {
+                withAnimation(.snappy) {
+                    magicLinkSent = false
+                    authStore.error = nil
                 }
-                .buttonStyle(.plain)
-
-                Button {
-                    withAnimation(.snappy) {
-                        magicLinkSent = false
-                        authStore.error = nil
-                    }
-                } label: {
-                    Text("Back")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            Capsule()
-                                .fill(colorScheme == .dark ? Color.darkSurface : Color.secondary.opacity(0.1))
-                        )
-                }
-                .buttonStyle(.plain)
+            } label: {
+                Text("Back")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        Capsule()
+                            .fill(colorScheme == .dark ? Color.darkSurface : Color.secondary.opacity(0.1))
+                    )
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
         }

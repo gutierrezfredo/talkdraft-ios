@@ -11,7 +11,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.requestReview) private var requestReview
     @State private var showDeleteConfirmation = false
-    @State private var showFeedbackPrompt = false
     @State private var showSignOutConfirmation = false
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
@@ -161,7 +160,7 @@ struct SettingsView: View {
                         SettingsRow(
                             icon: "creditcard",
                             title: "Manage Subscription",
-                            value: subscriptionStore.isPro ? "Pro" : "Free"
+                            value: subscriptionStore.isPro ? "Pro" : "Not subscribed"
                         )
                     }
                     .buttonStyle(.plain)
@@ -169,11 +168,11 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     Button {
-                        showFeedbackPrompt = true
+                        requestReview()
                     } label: {
                         SettingsRow(
                             icon: "star.bubble",
-                            title: "Send Feedback",
+                            title: "Rate Talkdraft",
                             showChevron: false
                         )
                     }
@@ -187,6 +186,19 @@ struct SettingsView: View {
                         SettingsRow(
                             icon: "envelope",
                             title: "Contact Support",
+                            showChevron: false
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    SettingsDivider()
+
+                    Button {
+                        openFeedbackEmail()
+                    } label: {
+                        SettingsRow(
+                            icon: "square.and.pencil",
+                            title: "Send Feedback",
                             showChevron: false
                         )
                     }
@@ -240,20 +252,24 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    if authStore.user?.deletionScheduledAt == nil {
+                        SettingsDivider()
+
+                        Button {
+                            showDeleteConfirmation = true
+                        } label: {
+                            SettingsRow(
+                                icon: "trash",
+                                title: "Delete Account",
+                                showChevron: false
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .background(cardColor)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
-
-                if authStore.user?.deletionScheduledAt == nil {
-                    Button {
-                        showDeleteConfirmation = true
-                    } label: {
-                        Text("To delete your data permanently, \(Text("close your account").underline()).")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)
@@ -314,21 +330,6 @@ struct SettingsView: View {
         } message: {
             Text("Your account is scheduled for deletion. Would you like to cancel?")
         }
-        .confirmationDialog(
-            "Enjoying Talkdraft?",
-            isPresented: $showFeedbackPrompt,
-            titleVisibility: .visible
-        ) {
-            Button("Yes, I love it!") {
-                requestReview()
-            }
-            Button("Not really") {
-                openFeedbackEmail()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your feedback helps us improve.")
-        }
     }
 
     // MARK: - Helpers
@@ -380,8 +381,7 @@ struct SettingsView: View {
 
     private func openFeedbackEmail() {
         let subject = "Talkdraft Feedback (\(appVersion))".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let body = "I'd like to share some feedback:\n\n".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "mailto:support@talkdraft.app?subject=\(subject)&body=\(body)") {
+        if let url = URL(string: "mailto:support@talkdraft.app?subject=\(subject)") {
             UIApplication.shared.open(url)
         }
     }

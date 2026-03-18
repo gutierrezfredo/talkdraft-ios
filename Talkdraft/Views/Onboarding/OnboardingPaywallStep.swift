@@ -9,19 +9,15 @@ struct OnboardingPaywallStep: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedPlan: PlanOption = .yearly
     @State private var errorMessage: String?
+    private let fallbackMonthlyPrice = "$5.99"
+    private let fallbackYearlyPrice = "$59.99"
 
     private var cardColor: Color {
         colorScheme == .dark ? .darkSurface : .white
     }
 
-    #if DEBUG
-    private let forceShowTrialTimeline = true
-    #else
-    private let forceShowTrialTimeline = false
-    #endif
-
     private var showsTrialMessaging: Bool {
-        forceShowTrialTimeline || subscriptionStore.isTrialEligible
+        subscriptionStore.isTrialEligible
     }
 
     var body: some View {
@@ -171,7 +167,6 @@ struct OnboardingPaywallStep: View {
 
     private func timelineRow(icon: String, title: String, subtitle: String, isLast: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            // Icon + connecting line
             VStack(spacing: 0) {
                 ZStack {
                     Circle()
@@ -191,7 +186,6 @@ struct OnboardingPaywallStep: View {
             }
             .frame(width: 36)
 
-            // Text
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline)
@@ -213,15 +207,15 @@ struct OnboardingPaywallStep: View {
             planCard(
                 option: .yearly,
                 title: "Yearly",
-                price: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99",
+                price: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice,
                 detail: "per year",
-                badge: "Save 37%"
+                badge: yearlyBadgeText
             )
 
             planCard(
                 option: .monthly,
                 title: "Monthly",
-                price: subscriptionStore.monthlyProduct?.displayPrice ?? "$7.99",
+                price: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice,
                 detail: "per month",
                 badge: nil
             )
@@ -293,7 +287,7 @@ struct OnboardingPaywallStep: View {
         VStack(spacing: 8) {
             Button {
                 Task {
-                    let startedTrial = subscriptionStore.isTrialEligible
+                    let startedTrial = showsTrialMessaging
                     let product: StoreKit.Product? = switch selectedPlan {
                     case .monthly: subscriptionStore.monthlyProduct
                     case .yearly: subscriptionStore.yearlyProduct
@@ -340,9 +334,25 @@ struct OnboardingPaywallStep: View {
 
     private var selectedPlanPrice: String {
         switch selectedPlan {
-        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? "$7.99"
-        case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99"
+        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice
+        case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
         }
+    }
+
+    private var yearlyBadgeText: String? {
+        guard let monthlyPrice = subscriptionStore.monthlyProduct?.price,
+              let yearlyPrice = subscriptionStore.yearlyProduct?.price
+        else {
+            return "Save 17%"
+        }
+
+        let monthly = NSDecimalNumber(decimal: monthlyPrice).doubleValue
+        let yearly = NSDecimalNumber(decimal: yearlyPrice).doubleValue
+        let annualizedMonthly = monthly * 12
+        guard annualizedMonthly > yearly, annualizedMonthly > 0 else { return nil }
+
+        let savings = Int(round((1 - yearly / annualizedMonthly) * 100))
+        return savings > 0 ? "Save \(savings)%" : nil
     }
 
     private var selectedPlanPeriod: String {
