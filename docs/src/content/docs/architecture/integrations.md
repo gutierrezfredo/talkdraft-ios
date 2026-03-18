@@ -44,7 +44,7 @@ This architecture was chosen because RevenueCat's SDK couldn't reliably resolve 
 
 | ID | Price | Period |
 |----|-------|--------|
-| `talkdraft_monthly` | $5.99 | Monthly |
+| `talkdraft_monthly` | $7.99 | Monthly |
 | `talkdraft_yearly` | $59.99 | Yearly |
 
 ### Entitlement

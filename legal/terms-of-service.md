@@ -12,7 +12,7 @@ By using Talkdraft, you agree to these terms. If you do not agree, do not use th
 
 ## 2. Description of Service
 
-Talkdraft is a voice-first notes app that records audio, transcribes it using AI, and organizes your notes into categories. The service requires an account and an internet connection.
+Talkdraft is a voice-first notes app that records audio, transcribes it using AI, and lets you organize your notes into categories. The service requires an account and an internet connection.
 
 ## 3. Your Account
 

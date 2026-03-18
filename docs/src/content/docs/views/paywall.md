@@ -1,6 +1,6 @@
 ---
 title: Paywall
-description: Subscription upgrade screen.
+description: Subscription screen.
 ---
 
 ## Purpose
@@ -11,13 +11,13 @@ The paywall presents the Pro subscription, including the introductory trial when
 
 The paywall appears:
 - During onboarding for new users
-- From the standalone Pro upgrade flow when subscription access is needed
+- As a mandatory gate after sign-in for non-subscribed users
 
 ## Layout
 
 - **Feature list** — compact list of Pro benefits
 - **Trial timeline** — explains when access starts, reminder timing, and when billing begins
-- **Pricing options** — monthly ($5.99/mo) and yearly ($59.99/yr) selection
+- **Pricing options** — monthly ($7.99/mo) and yearly ($59.99/yr) selection
 - **Subscribe button** — initiates StoreKit 2 purchase flow
 - **Restore purchases** — for users who previously subscribed
 
