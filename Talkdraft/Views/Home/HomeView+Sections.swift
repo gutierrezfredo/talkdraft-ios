@@ -56,15 +56,7 @@ extension HomeView {
                     Button {
                         showAddCategory = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                Circle()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white)
-                            )
+                        AddCategoryBadge()
                     }
                     .buttonStyle(.plain)
                 }
@@ -410,6 +402,13 @@ extension HomeView {
                                             Capsule()
                                                 .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
                                         )
+                                        .overlay(
+                                            Capsule()
+                                                .strokeBorder(
+                                                    colorScheme == .dark ? Color.white.opacity(0.10) : .clear,
+                                                    lineWidth: 1
+                                                )
+                                        )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -419,15 +418,7 @@ extension HomeView {
                                 addCategoryFromBulk = true
                                 showAddCategory = true
                             } label: {
-                                Image(systemName: "plus")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 44, height: 44)
-                                    .background(
-                                        Circle()
-                                            .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                    )
+                                AddCategoryBadge()
                             }
                             .buttonStyle(.plain)
                         }
@@ -464,12 +455,12 @@ extension HomeView {
                     } label: {
                         Text("Create Category")
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 56)
                             .background(
                                 Capsule()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.9))
+                                    .fill(Color.brand)
                             )
                     }
                     .buttonStyle(.plain)
@@ -483,12 +474,37 @@ extension HomeView {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button {
                         showCategoryPicker = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .fontWeight(.semibold)
                     }
                 }
             }
         }
+    }
+}
+
+struct AddCategoryBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Image(systemName: "plus")
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+            )
+            .overlay(
+                Capsule()
+                    .inset(by: 3)
+                    .stroke(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            )
     }
 }
 

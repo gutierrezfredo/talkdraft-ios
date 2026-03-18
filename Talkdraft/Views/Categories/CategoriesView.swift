@@ -303,7 +303,7 @@ struct CategoryFormSheet: View {
                     } label: {
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
-                            .foregroundStyle(Color.brand)
+                            .foregroundStyle(isValid && !isSaving ? Color.brand : .secondary.opacity(0.6))
                     }
                     .disabled(!isValid || isSaving)
                 }

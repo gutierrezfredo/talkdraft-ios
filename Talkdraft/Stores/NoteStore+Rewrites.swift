@@ -395,6 +395,17 @@ extension NoteStore {
     private func triggerRewriteJob(_ jobId: UUID) async throws {
         attemptedRewriteTriggerIds.insert(jobId)
         let accessToken = try await supabase.auth.session.accessToken
+
+        do {
+            try await invokeRewriteJobTrigger(jobId: jobId, accessToken: accessToken)
+        } catch {
+            logger.warning("triggerRewriteJob first attempt failed for \(jobId): \(error.localizedDescription, privacy: .public)")
+            try? await Task.sleep(for: .seconds(1))
+            try await invokeRewriteJobTrigger(jobId: jobId, accessToken: accessToken)
+        }
+    }
+
+    private func invokeRewriteJobTrigger(jobId: UUID, accessToken: String) async throws {
         let _: RewriteJobTriggerResponse = try await supabase.functions.invoke(
             "process-rewrite-job",
             options: .init(

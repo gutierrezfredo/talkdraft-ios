@@ -16,63 +16,66 @@ struct CategoryPickerSheet: View {
         NavigationStack {
             VStack {
                 ScrollView {
-                    FlowLayout(spacing: 8) {
-                        ForEach(noteStore.categories) { cat in
-                            let isSelected = selectedCategoryId == cat.id
-                            Button {
-                                selectedCategoryId = cat.id
-                                var updated = note
-                                updated.categoryId = cat.id
-                                updated.updatedAt = Date()
-                                noteStore.updateNote(updated)
-                                dismiss()
-                            } label: {
-                                Text(cat.name)
+                    if noteStore.categories.isEmpty {
+                        VStack(spacing: 0) {
+                            LunaMascotView(.box, size: 180)
+
+                            VStack(spacing: 4) {
+                                Text("No Categories Yet")
+                                    .font(.brandTitle2)
+
+                                Text("Create your first category to organize this note.")
                                     .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(Color.categoryColor(hex: cat.color))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: 200)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
-                                    .background(
-                                        Capsule()
-                                            .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                    )
-                                    .overlay(
-                                        Capsule()
-                                            .strokeBorder(
-                                                isSelected ? Color.categoryColor(hex: cat.color) : .clear,
-                                                lineWidth: 2
-                                            )
-                                    )
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                        .padding(.horizontal, 24)
+                    } else {
+                        FlowLayout(spacing: 8) {
+                            ForEach(noteStore.categories) { cat in
+                                let isSelected = selectedCategoryId == cat.id
+                                Button {
+                                    assignCategory(cat.id)
+                                } label: {
+                                    Text(cat.name)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(Color.categoryColor(hex: cat.color))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .frame(maxWidth: 200)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 14)
+                                        .background(
+                                            Capsule()
+                                                .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                        )
+                                        .overlay(
+                                            Capsule()
+                                                .strokeBorder(
+                                                    isSelected
+                                                        ? Color.categoryColor(hex: cat.color)
+                                                        : (colorScheme == .dark ? Color.white.opacity(0.10) : .clear),
+                                                    lineWidth: isSelected ? 2 : 1
+                                                )
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Button {
+                                showAddCategory = true
+                            } label: {
+                                AddCategoryBadge()
                             }
                             .buttonStyle(.plain)
                         }
-
-                        Button {
-                            showAddCategory = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(
-                                    Capsule()
-                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                                )
-                        }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
                 }
 
                 Spacer()
@@ -94,6 +97,28 @@ struct CategoryPickerSheet: View {
                     .padding(.bottom, 32)
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if noteStore.categories.isEmpty {
+                    Button {
+                        showAddCategory = true
+                    } label: {
+                        Text("Create Category")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(
+                                Capsule()
+                                    .fill(Color.brand)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .background(.clear)
+                }
+            }
             .navigationTitle("Move to category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -110,15 +135,20 @@ struct CategoryPickerSheet: View {
         }
         .sheet(isPresented: $showAddCategory) {
             CategoryFormSheet(mode: .add) { newCategory in
-                selectedCategoryId = newCategory.id
-                var updated = note
-                updated.categoryId = newCategory.id
-                updated.updatedAt = Date()
-                noteStore.updateNote(updated)
+                assignCategory(newCategory.id)
             }
         }
         .onAppear {
             selectedCategoryId = note.categoryId
         }
+    }
+
+    private func assignCategory(_ categoryId: UUID?) {
+        selectedCategoryId = categoryId
+        var updated = note
+        updated.categoryId = categoryId
+        updated.updatedAt = Date()
+        noteStore.updateNote(updated)
+        dismiss()
     }
 }
