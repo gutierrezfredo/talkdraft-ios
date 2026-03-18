@@ -26,7 +26,10 @@ struct CategoryChip: View {
                 .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
                 .overlay(
                     Capsule()
-                        .strokeBorder(isSelected ? color : .clear, lineWidth: 2)
+                        .strokeBorder(
+                            isSelected ? color : (colorScheme == .dark ? .white.opacity(0.10) : .clear),
+                            lineWidth: isSelected ? 2 : 1
+                        )
                 )
                 .contentShape(Capsule())
                 .contentShape(.dragPreview, Capsule())

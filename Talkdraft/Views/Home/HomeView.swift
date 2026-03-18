@@ -230,7 +230,6 @@ struct HomeView: View {
                 confirmAudioImport(multiSpeaker: multiSpeaker)
             }
             .presentationDetents([.height(220)])
-            .presentationBackground { SheetBackground() }
         }
         .alert("Delete \(selectedIds.count) Note\(selectedIds.count == 1 ? "" : "s")?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -245,9 +244,6 @@ struct HomeView: View {
         .sheet(isPresented: $showCategoryPicker) {
             bulkCategoryPicker
                 .presentationDetents([.medium, .large])
-                .presentationBackground {
-                    SheetBackground()
-                }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {

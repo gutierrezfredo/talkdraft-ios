@@ -56,15 +56,7 @@ extension HomeView {
                     Button {
                         showAddCategory = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                Circle()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white)
-                            )
+                        AddCategoryBadge()
                     }
                     .buttonStyle(.plain)
                 }
@@ -371,76 +363,148 @@ extension HomeView {
         NavigationStack {
             VStack {
                 ScrollView {
-                    FlowLayout(spacing: 8) {
-                    ForEach(noteStore.categories) { cat in
-                        Button {
-                            noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
-                            UINotificationFeedbackGenerator().notificationOccurred(.success)
-                            exitSelection()
-                            showCategoryPicker = false
-                        } label: {
-                            Text(cat.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.categoryColor(hex: cat.color))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .frame(maxWidth: 200)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(
-                                    Capsule()
-                                        .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
-                                )
+                    if noteStore.categories.isEmpty {
+                        VStack(spacing: 0) {
+                            LunaMascotView(.box, size: 180)
+
+                            VStack(spacing: 4) {
+                                Text("No Categories Yet")
+                                    .font(.brandTitle2)
+
+                                Text("Create your first category to organize these notes.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                        .padding(.horizontal, 24)
+                    } else {
+                        FlowLayout(spacing: 8) {
+                            ForEach(noteStore.categories) { cat in
+                                Button {
+                                    noteStore.moveNotes(ids: selectedIds, toCategoryId: cat.id)
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                    exitSelection()
+                                    showCategoryPicker = false
+                                } label: {
+                                    Text(cat.name)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(Color.categoryColor(hex: cat.color))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .frame(maxWidth: 200)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 14)
+                                        .background(
+                                            Capsule()
+                                                .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                        )
+                                        .overlay(
+                                            Capsule()
+                                                .strokeBorder(
+                                                    colorScheme == .dark ? Color.white.opacity(0.10) : .clear,
+                                                    lineWidth: 1
+                                                )
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Button {
+                                showCategoryPicker = false
+                                addCategoryFromBulk = true
+                                showAddCategory = true
+                            } label: {
+                                AddCategoryBadge()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
                     }
+                }
+
+                Spacer()
+
+                if selectedIds.contains(where: { id in
+                    noteStore.notes.first(where: { $0.id == id })?.categoryId != nil
+                }) {
+                    Button {
+                        noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        exitSelection()
+                        showCategoryPicker = false
+                    } label: {
+                        Text("Remove category")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 32)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if noteStore.categories.isEmpty {
                     Button {
                         showCategoryPicker = false
                         addCategoryFromBulk = true
                         showAddCategory = true
                     } label: {
-                        Image(systemName: "plus")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
+                        Text("Create Category")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
                             .background(
-                                Circle()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+                                Capsule()
+                                    .fill(Color.brand)
                             )
                     }
                     .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 12)
+                    .background(.clear)
                 }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                }
-
-                Spacer()
-
-                Button {
-                    noteStore.moveNotes(ids: selectedIds, toCategoryId: nil)
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    exitSelection()
-                    showCategoryPicker = false
-                } label: {
-                    Text("Remove category")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 32)
             }
             .navigationTitle("Move to Category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button {
                         showCategoryPicker = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .fontWeight(.semibold)
                     }
                 }
             }
         }
+    }
+}
+
+struct AddCategoryBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Image(systemName: "plus")
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(colorScheme == .dark ? Color.darkSurface : .white.opacity(0.7))
+            )
+            .overlay(
+                Capsule()
+                    .inset(by: 3)
+                    .stroke(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            )
     }
 }
 

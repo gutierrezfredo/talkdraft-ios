@@ -18,10 +18,14 @@ struct ContentView: View {
     }
 
     private var shouldShowOnboarding: Bool {
+        #if DEBUG
+        false
+        #else
         guard let userId = authStore.userId else { return false }
         if UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") { return false }
         if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty { return false }
         return completedOnboardingUserId != userId
+        #endif
     }
 
     private var colorScheme: ColorScheme? {

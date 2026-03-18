@@ -509,7 +509,7 @@ struct RewriteSheet: View {
                         .focused($customFocused)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
-                        .padding(.top, 32)
+                        .padding(.top, 40)
                         .padding(.bottom, 24)
                         .onSubmit { if isCustomValid { submitCustom() } }
 

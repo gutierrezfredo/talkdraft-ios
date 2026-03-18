@@ -109,16 +109,17 @@ struct SettingsView: View {
 
                     SettingsDivider()
 
-                    NavigationLink {
-                        ThemePickerView()
-                    } label: {
+                    VStack(alignment: .leading, spacing: 12) {
                         SettingsRow(
                             icon: "circle.lefthalf.filled",
                             title: "Appearance",
-                            value: settingsStore.theme.displayName
+                            showChevron: false
                         )
+
+                        ThemeInlinePicker()
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 // MARK: - Tools
@@ -543,57 +544,17 @@ private struct LanguagePickerView: View {
 
 // MARK: - Theme Picker
 
-private struct ThemePickerView: View {
+private struct ThemeInlinePicker: View {
     @Environment(SettingsStore.self) private var settingsStore
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(Array(SettingsStore.AppTheme.allCases.enumerated()), id: \.offset) { index, theme in
-                    Button {
-                        settingsStore.theme = theme
-                        dismiss()
-                    } label: {
-                        HStack {
-                            Text(theme.displayName)
-                                .font(.body)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(
-                                    settingsStore.theme == theme ? Color.brand : .primary
-                                )
-                            Spacer()
-                            if settingsStore.theme == theme {
-                                Image(systemName: "checkmark")
-                                    .font(.body)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(Color.brand)
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .frame(height: 56)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .sensoryFeedback(.selection, trigger: settingsStore.theme)
-
-                    if index < SettingsStore.AppTheme.allCases.count - 1 {
-                        Divider()
-                            .padding(.leading, 16)
-                    }
-                }
+        Picker("Appearance", selection: Bindable(settingsStore).theme) {
+            ForEach(SettingsStore.AppTheme.allCases, id: \.self) { theme in
+                Text(theme.displayName)
+                    .tag(theme)
             }
-            .background(colorScheme == .dark ? Color.darkSurface : .white)
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
         }
-        .background(
-            (colorScheme == .dark ? Color.darkBackground : .warmBackground)
-                .ignoresSafeArea()
-        )
-        .navigationTitle("Appearance")
-        .navigationBarTitleDisplayMode(.inline)
+        .pickerStyle(.segmented)
+        .sensoryFeedback(.selection, trigger: settingsStore.theme)
     }
 }

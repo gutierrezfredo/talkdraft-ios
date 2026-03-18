@@ -388,9 +388,6 @@ struct NoteDetailView: View {
             .sheet(isPresented: $showCategoryPicker) {
                 CategoryPickerSheet(note: note)
                     .presentationDetents([.medium, .large])
-                    .presentationBackground {
-                        SheetBackground()
-                    }
             }
             .sheet(isPresented: $showRewriteSourceDialog) {
                 NoteDetailRewriteSourceSheet(
