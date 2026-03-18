@@ -9,7 +9,7 @@ struct OnboardingPaywallStep: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedPlan: PlanOption = .yearly
     @State private var errorMessage: String?
-    private let fallbackMonthlyPrice = "$5.99"
+    private let fallbackMonthlyPrice = "$7.99"
     private let fallbackYearlyPrice = "$59.99"
 
     private var cardColor: Color {
@@ -343,7 +343,7 @@ struct OnboardingPaywallStep: View {
         guard let monthlyPrice = subscriptionStore.monthlyProduct?.price,
               let yearlyPrice = subscriptionStore.yearlyProduct?.price
         else {
-            return "Save 17%"
+            return "Save 37%"
         }
 
         let monthly = NSDecimalNumber(decimal: monthlyPrice).doubleValue
