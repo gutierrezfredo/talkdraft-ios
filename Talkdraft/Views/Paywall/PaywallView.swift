@@ -9,6 +9,8 @@ struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPlan: PlanOption = .yearly
     @State private var errorMessage: String?
+    private let fallbackMonthlyPrice = "$5.99"
+    private let fallbackYearlyPrice = "$59.99"
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -150,15 +152,15 @@ struct PaywallView: View {
             planCard(
                 option: .yearly,
                 title: "Yearly",
-                price: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99",
+                price: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice,
                 detail: "per year",
-                badge: "Save 37%"
+                badge: yearlyBadgeText
             )
 
             planCard(
                 option: .monthly,
                 title: "Monthly",
-                price: subscriptionStore.monthlyProduct?.displayPrice ?? "$7.99",
+                price: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice,
                 detail: "per month",
                 badge: nil
             )
@@ -277,9 +279,25 @@ struct PaywallView: View {
 
     private var selectedPlanPrice: String {
         switch selectedPlan {
-        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? "$7.99"
-        case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? "$59.99"
+        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice
+        case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
         }
+    }
+
+    private var yearlyBadgeText: String? {
+        guard let monthlyPrice = subscriptionStore.monthlyProduct?.price,
+              let yearlyPrice = subscriptionStore.yearlyProduct?.price
+        else {
+            return "Save 17%"
+        }
+
+        let monthly = NSDecimalNumber(decimal: monthlyPrice).doubleValue
+        let yearly = NSDecimalNumber(decimal: yearlyPrice).doubleValue
+        let annualizedMonthly = monthly * 12
+        guard annualizedMonthly > yearly, annualizedMonthly > 0 else { return nil }
+
+        let savings = Int(round((1 - yearly / annualizedMonthly) * 100))
+        return savings > 0 ? "Save \(savings)%" : nil
     }
 
     private var selectedPlanPeriod: String {

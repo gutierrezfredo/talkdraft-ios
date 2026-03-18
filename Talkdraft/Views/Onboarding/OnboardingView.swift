@@ -13,12 +13,6 @@ struct OnboardingView: View {
     @State private var selectedLanguage: String = "auto"
     @State private var selectedCategoryIndices: Set<Int> = []
 
-    #if DEBUG
-    private let forceShowTrialNotifications = true
-    #else
-    private let forceShowTrialNotifications = false
-    #endif
-
     private var backgroundColor: Color {
         return colorScheme == .dark ? .darkBackground : .warmBackground
     }
@@ -56,10 +50,17 @@ struct OnboardingView: View {
                         .transition(stepTransition)
                     }
 
+                    if step == .notifications {
+                        OnboardingNotificationsStep(onComplete: finishOnboarding)
+                        .id(stepViewID(for: .notifications))
+                        .transition(stepTransition)
+                    }
+
                     if step == .paywall {
                         OnboardingPaywallStep(
                             onPurchaseCompleted: { startedTrial in
-                                if startedTrial || forceShowTrialNotifications {
+                                if startedTrial {
+                                    navigationDirection = .forward
                                     step = .notifications
                                 } else {
                                     finishOnboarding()
@@ -69,12 +70,6 @@ struct OnboardingView: View {
                         )
                         .id(stepViewID(for: .paywall))
                         .transition(stepTransition)
-                    }
-
-                    if step == .notifications {
-                        OnboardingNotificationsStep(onComplete: finishOnboarding)
-                            .id(stepViewID(for: .notifications))
-                            .transition(stepTransition)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -232,19 +227,27 @@ private enum OnboardingStep: Int, CaseIterable {
 
     var previous: OnboardingStep? {
         switch self {
-        case .language: nil
-        case .categories: .language
-        case .paywall: nil
-        case .notifications: nil
+        case .language:
+            nil
+        case .categories:
+            .language
+        case .paywall:
+            nil
+        case .notifications:
+            nil
         }
     }
 
     var next: OnboardingStep? {
         switch self {
-        case .language: .categories
-        case .categories: .paywall
-        case .paywall: nil
-        case .notifications: nil
+        case .language:
+            .categories
+        case .categories:
+            .paywall
+        case .paywall:
+            nil
+        case .notifications:
+            nil
         }
     }
 }

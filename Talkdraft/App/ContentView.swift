@@ -9,23 +9,25 @@ struct ContentView: View {
     @State private var completedOnboardingUserId: UUID?
     @State private var didFinishInitialAuthBootstrap = false
     @State private var showPostAuthTransition = false
+    @State private var isPerformingInteractiveAuth = false
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
-            get: { false },
+            get: {
+                authStore.isAuthenticated
+                    && isPostAuthBootstrapReady
+                    && !shouldShowOnboarding
+                    && !subscriptionStore.isPro
+            },
             set: { _ in }
         )
     }
 
     private var shouldShowOnboarding: Bool {
-        #if DEBUG
-        false
-        #else
         guard let userId = authStore.userId else { return false }
         if UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") { return false }
         if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty { return false }
         return completedOnboardingUserId != userId
-        #endif
     }
 
     private var colorScheme: ColorScheme? {
@@ -41,7 +43,7 @@ struct ContentView: View {
     }
 
     private var shouldShowPostAuthTransition: Bool {
-        authStore.isAuthenticated && showPostAuthTransition && !isPostAuthBootstrapReady
+        authStore.isAuthenticated && (showPostAuthTransition || isPerformingInteractiveAuth) && !isPostAuthBootstrapReady
     }
 
     private var splashView: some View {
@@ -110,11 +112,16 @@ struct ContentView: View {
                 }
             } else {
                 completedOnboardingUserId = nil
+                isPerformingInteractiveAuth = false
                 showPostAuthTransition = false
                 noteStore.resetSession()
                 settingsStore.resetSession()
                 Task { await subscriptionStore.logout() }
             }
+        }
+        .onChange(of: authStore.isLoading) { _, isLoading in
+            guard didFinishInitialAuthBootstrap, !authStore.isAuthenticated else { return }
+            isPerformingInteractiveAuth = isLoading
         }
         .onChange(of: authStore.userId) { oldValue, newValue in
             guard authStore.isAuthenticated,
@@ -135,6 +142,7 @@ struct ContentView: View {
         }
         .onChange(of: isPostAuthBootstrapReady) { _, ready in
             if ready {
+                isPerformingInteractiveAuth = false
                 showPostAuthTransition = false
             }
         }
