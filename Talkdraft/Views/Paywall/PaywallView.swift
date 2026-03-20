@@ -20,12 +20,23 @@ struct PaywallView: View {
         colorScheme == .dark ? .darkSurface : .white
     }
 
+    private var headerBackground: Color {
+        colorScheme == .dark ? Color.brand.opacity(0.12) : Color.brand.opacity(0.06)
+    }
+
+    private var showsTrialMessaging: Bool {
+        subscriptionStore.isTrialEligible
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
                     header
-                    featureComparison
+                    featureList
+                    if showsTrialMessaging {
+                        trialTimeline
+                    }
                     planSelection
                     subscribeButton
 
@@ -58,7 +69,7 @@ struct PaywallView: View {
                 .padding(.top, 8)
             }
             .background(backgroundColor.ignoresSafeArea())
-            .navigationTitle(subscriptionStore.isTrialEligible ? "Start my free week" : "Go Pro")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !mandatory {
@@ -90,34 +101,42 @@ struct PaywallView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "waveform.badge.plus")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.brand)
-                .padding(.top, 16)
+        VStack(spacing: 4) {
+            ZStack(alignment: .top) {
+                LunaMascotView(.paywall, size: 125)
+                    .zIndex(1)
+            }
+            .padding(.top, 20)
+            .background(alignment: .bottom) {
+                ConcaveArchShape()
+                    .fill(headerBackground)
+                    .frame(height: 2000)
+                    .padding(.horizontal, -300)
+                    .offset(y: 1615)
+            }
 
-            Text("Unlock Full Access")
-                .font(.brandTitle2)
+            Text("Unlock the full\nTalkdraft experience")
+                .font(.brandTitle)
                 .multilineTextAlignment(.center)
 
-            Text(subscriptionStore.isTrialEligible
-                 ? "Start your free trial to create notes, record, and use AI features."
-                 : "Subscribe to create notes, record, and use AI features.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            if !showsTrialMessaging {
+                Text("Subscribe to record, transcribe, and rewrite without limits.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
     }
 
-    // MARK: - Feature Comparison
+    // MARK: - Feature List
 
-    private var featureComparison: some View {
+    private var featureList: some View {
         VStack(spacing: 0) {
-            featureRow("Unlimited notes", systemImage: "note.text")
+            featureRow("Unlimited notes and categories", systemImage: "note.text")
             Divider().padding(.leading, 52)
-            featureRow("Unlimited categories", systemImage: "folder.fill")
+            featureRow("AI rewrites for summaries, action items, and more", systemImage: "wand.and.stars")
             Divider().padding(.leading, 52)
-            featureRow("AI titles & rewriting", systemImage: "wand.and.stars")
+            featureRow("Multi-speaker transcription", systemImage: "person.2.fill")
         }
         .background(cardColor)
         .clipShape(RoundedRectangle(cornerRadius: 24))
@@ -125,22 +144,90 @@ struct PaywallView: View {
 
     private func featureRow(_ title: String, systemImage: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.body)
-                .foregroundStyle(Color.brand)
-                .frame(width: 24)
+            ZStack {
+                Circle()
+                    .fill(Color.brand.opacity(0.15))
+                    .frame(width: 36, height: 36)
+                Image(systemName: systemImage)
+                    .font(.callout)
+                    .foregroundStyle(Color.brand)
+            }
+            .frame(width: 36)
+
             Text(title)
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundStyle(.primary)
+
             Spacer()
-            Image(systemName: "checkmark")
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundStyle(Color.brand)
         }
         .padding(.horizontal, 16)
-        .frame(height: 48)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Trial Timeline
+
+    private var trialTimeline: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("How your free trial works")
+                .font(.headline)
+                .padding(.bottom, 16)
+
+            timelineRow(
+                icon: "gift.fill",
+                title: "Today",
+                subtitle: "Full access starts",
+                isLast: false
+            )
+            timelineRow(
+                icon: "bell.fill",
+                title: "Before your trial ends",
+                subtitle: "We send a reminder",
+                isLast: false
+            )
+            timelineRow(
+                icon: "creditcard.fill",
+                title: "After 7 days",
+                subtitle: "Your subscription begins unless canceled",
+                isLast: true
+            )
+        }
+        .padding(16)
+    }
+
+    private func timelineRow(icon: String, title: String, subtitle: String, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle()
+                        .fill(Color.brand.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .font(.callout)
+                        .foregroundStyle(Color.brand)
+                }
+
+                if !isLast {
+                    Rectangle()
+                        .fill(Color.brand.opacity(0.2))
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 36)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, isLast ? 0 : 20)
+
+            Spacer()
+        }
     }
 
     // MARK: - Plan Selection
@@ -253,7 +340,7 @@ struct PaywallView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text(subscriptionStore.isTrialEligible ? "Start my free week" : "Subscribe now")
+                        Text(showsTrialMessaging ? "Start Free Trial" : "Subscribe Now")
                             .fontWeight(.bold)
                     }
                 }
@@ -266,8 +353,8 @@ struct PaywallView: View {
             .buttonStyle(.plain)
             .disabled(subscriptionStore.isLoading)
 
-            if subscriptionStore.isTrialEligible {
-                Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime.")
+            if showsTrialMessaging {
+                Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime — we’ll remind you before it ends.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -311,4 +398,27 @@ struct PaywallView: View {
 private enum PlanOption {
     case monthly
     case yearly
+}
+
+private struct ConcaveArchShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let archRadius = rect.width * 0.45
+        let archCenter = CGPoint(x: rect.midX, y: rect.minY)
+
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: archCenter.x - archRadius, y: rect.minY))
+        path.addArc(
+            center: archCenter,
+            radius: archRadius,
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: true
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
 }
