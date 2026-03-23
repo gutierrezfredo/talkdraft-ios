@@ -87,6 +87,7 @@ final class AuthStore {
 
     /// Prepare an Apple authorization request with a hashed nonce.
     func appleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
+        error = nil
         let nonce = randomNonce()
         currentNonce = nonce
         request.requestedScopes = [.email, .fullName]
@@ -97,7 +98,10 @@ final class AuthStore {
     func handleAppleSignIn(_ result: Result<ASAuthorization, any Error>) async {
         isLoading = true
         error = nil
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            currentNonce = nil
+        }
 
         do {
             let authorization = try result.get()
@@ -114,15 +118,21 @@ final class AuthStore {
                 credentials: .init(provider: .apple, idToken: identityToken, nonce: nonce)
             )
             await handleSession(session)
+        } catch let authError as ASAuthorizationError where authError.code == .canceled {
+            return
         } catch {
-            self.error = error.localizedDescription
+            self.error = Self.appleSignInMessage(for: error)
         }
     }
 
     private func randomNonce(length: Int = 32) -> String {
         var bytes = [UInt8](repeating: 0, count: length)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
         let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        if status != errSecSuccess {
+            let fallback = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            return String(fallback.prefix(length))
+        }
         return String(bytes.map { charset[Int($0) % charset.count] })
     }
 
@@ -130,6 +140,24 @@ final class AuthStore {
         let data = Data(input.utf8)
         let hash = SHA256.hash(data: data)
         return hash.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func appleSignInMessage(for error: any Error) -> String {
+        let nsError = error as NSError
+
+        if let authError = error as? ASAuthorizationError {
+            switch authError.code {
+            case .failed:
+                return "Apple Sign In failed. Please try again."
+            case .invalidResponse, .notHandled, .unknown:
+                return "Apple Sign In isn't available right now. Please try again or continue with Email."
+            default:
+                break
+            }
+        }
+
+        let message = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? "Apple Sign In isn't available right now. Please try again or continue with Email." : message
     }
 
     // MARK: - Google Sign-In

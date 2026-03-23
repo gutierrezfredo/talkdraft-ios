@@ -7,6 +7,7 @@ struct OnboardingPaywallStep: View {
 
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     @State private var selectedPlan: PlanOption = .yearly
     @State private var errorMessage: String?
     private let fallbackMonthlyPrice = "$7.99"
@@ -30,6 +31,7 @@ struct OnboardingPaywallStep: View {
                 }
                 planSelection
                 subscribeButton
+                subscriptionDetails
 
                 Button {
                     Task {
@@ -151,8 +153,8 @@ struct OnboardingPaywallStep: View {
             )
             timelineRow(
                 icon: "bell.fill",
-                title: "Before your trial ends",
-                subtitle: "We send a reminder",
+                title: "Before renewal",
+                subtitle: "Cancel anytime in Apple ID Settings",
                 isLast: false
             )
             timelineRow(
@@ -323,19 +325,76 @@ struct OnboardingPaywallStep: View {
             .buttonStyle(.plain)
             .disabled(subscriptionStore.isLoading)
 
-            if showsTrialMessaging {
-                Text("7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Cancel anytime — we’ll remind you before it ends.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            Text(subscriptionFooterText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
+    }
+
+    private var subscriptionDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Subscription details")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                subscriptionDetailRow(
+                    title: "Plan",
+                    detail: "Talkdraft Pro \(selectedPlanTitle) • \(selectedPlanPrice)/\(selectedPlanPeriod)"
+                )
+                subscriptionDetailRow(
+                    title: "Billing",
+                    detail: billingDescription
+                )
+                subscriptionDetailRow(
+                    title: "Cancellation",
+                    detail: "Manage or cancel anytime in Apple ID Settings."
+                )
+            }
+
+            HStack(spacing: 12) {
+                legalLinkButton("Terms of Use", url: AppConfig.termsOfUseURL)
+                legalLinkButton("Privacy Policy", url: AppConfig.privacyPolicyURL)
+                legalLinkButton("Manage", url: AppConfig.manageSubscriptionsURL)
+            }
+            .font(.footnote.weight(.semibold))
+        }
+        .padding(16)
+        .background(cardColor)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func subscriptionDetailRow(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(detail)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private func legalLinkButton(_ title: String, url: URL) -> some View {
+        Button(title) {
+            openURL(url)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.brand)
     }
 
     private var selectedPlanPrice: String {
         switch selectedPlan {
         case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice
         case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
+        }
+    }
+
+    private var selectedPlanTitle: String {
+        switch selectedPlan {
+        case .monthly: "Monthly"
+        case .yearly: "Yearly"
         }
     }
 
@@ -360,6 +419,22 @@ struct OnboardingPaywallStep: View {
         case .monthly: "month"
         case .yearly: "year"
         }
+    }
+
+    private var billingDescription: String {
+        if showsTrialMessaging {
+            return "7-day free trial for eligible accounts, then \(selectedPlanPrice)/\(selectedPlanPeriod). Auto-renews unless canceled at least 24 hours before the current period ends."
+        }
+
+        return "Auto-renews at \(selectedPlanPrice)/\(selectedPlanPeriod) unless canceled at least 24 hours before the current period ends."
+    }
+
+    private var subscriptionFooterText: String {
+        if showsTrialMessaging {
+            return "7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Auto-renews unless canceled at least 24 hours before the current period ends."
+        }
+
+        return "Auto-renews at \(selectedPlanPrice)/\(selectedPlanPeriod) unless canceled at least 24 hours before the current period ends."
     }
 }
 
