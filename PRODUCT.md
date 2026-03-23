@@ -68,3 +68,8 @@ Note detail → Rewrite action → Choose tone or custom instructions → Previe
 | Capture | A raw brain dump (voice or text) |
 | Note | A single item, optionally assigned to a category |
 | Category | User-defined bucket (e.g., Task, Idea, Note, Reflection) |
+
+## Future
+
+### Live Markdown Editor
+Bear-style inline markdown rendering while typing. Custom `NSTextStorage` + Apple's `swift-markdown` parser (SPM), using Markdownosaur visitor pattern as reference plugged into existing `ExpandingTextView`. TextKit 1, zero third-party runtime deps.

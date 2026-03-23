@@ -138,6 +138,7 @@ System semantic colors are the default. Custom brand colors are allowed for iden
 - Use `.buttonBorderShape(.capsule)` or `.roundedRectangle` as appropriate
 - Use `.controlSize(.large)` for prominent actions
 - Toolbar actions: `.toolbar { ToolbarItem { } }`
+- **Text buttons** (plain label, no background) must always use `.frame(height: 44)` — consistent tap target regardless of context
 
 ---
 
