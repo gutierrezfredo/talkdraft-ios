@@ -22,10 +22,6 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Talkdraft needs microphone access to record voice notes.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fraunces-Variable.ttf</string>
