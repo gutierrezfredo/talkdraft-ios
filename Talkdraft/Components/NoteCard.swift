@@ -69,8 +69,8 @@ struct NoteCard: View {
             // Content preview
             if bodyState == .transcribing {
                 Text(NoteBodyState.transcribingPlaceholder)
-                    .italic()
-                    .font(.caption)
+                    .font(.caption.italic())
+                    .fontDesign(nil)
                     .foregroundStyle(Color.brand)
                     .opacity(transcribingPulse ? 0.35 : 1.0)
                     .onAppear {

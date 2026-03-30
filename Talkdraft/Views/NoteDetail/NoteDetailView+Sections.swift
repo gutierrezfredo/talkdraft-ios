@@ -382,6 +382,7 @@ extension NoteDetailView {
             } else if isTranscribing {
                 Text("Transcribing…")
                     .font(.body.italic())
+                    .fontDesign(nil)
                     .foregroundStyle(Color.brand)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
