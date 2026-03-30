@@ -49,7 +49,15 @@ struct ContentView: View {
     private var splashView: some View {
         ZStack {
             Color.darkBackground.ignoresSafeArea()
-            LunaMascotView(.moon, size: 200, zColor: .white)
+            ZStack(alignment: .topLeading) {
+                Image("talkdraft-logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 200, height: 200)
+                SplashFloatingZs()
+                    .offset(x: -10, y: -20)
+            }
+            .accessibilityHidden(true)
         }
     }
 
@@ -172,5 +180,46 @@ struct ContentView: View {
                 break
             }
         }
+    }
+}
+
+// MARK: - Splash Floating Z's
+
+private struct SplashFloatingZs: View {
+    var body: some View {
+        ZStack {
+            SplashFloatingZ(delay: 0.0, xOffset: 0)
+            SplashFloatingZ(delay: 1.2, xOffset: 10)
+            SplashFloatingZ(delay: 2.4, xOffset: -6)
+        }
+        .frame(width: 60, height: 60)
+    }
+}
+
+private struct SplashFloatingZ: View {
+    let delay: Double
+    let xOffset: CGFloat
+    @State private var visible = false
+    @State private var animate = false
+
+    var body: some View {
+        Text("z")
+            .font(.system(size: 28, weight: .semibold))
+            .foregroundStyle(.white)
+            .opacity(visible ? (animate ? 0 : 0.45) : 0)
+            .offset(x: xOffset + (animate ? 4 : 0), y: animate ? -18 : 0)
+            .scaleEffect(animate ? 0.82 : 1.0)
+            .onAppear {
+                Task {
+                    try? await Task.sleep(for: .seconds(delay))
+                    visible = true
+                    withAnimation(
+                        .easeOut(duration: 3.8)
+                        .repeatForever(autoreverses: false)
+                    ) {
+                        animate = true
+                    }
+                }
+            }
     }
 }
