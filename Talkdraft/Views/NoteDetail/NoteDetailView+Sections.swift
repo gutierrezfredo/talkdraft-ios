@@ -381,7 +381,8 @@ extension NoteDetailView {
                 transcribingIndicator
             } else if isTranscribing {
                 Text("Transcribing…")
-                    .font(.body.italic())
+                    .font(.body)
+                    .italic()
                     .foregroundStyle(Color.brand)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00A91F1D1A3C671532F1D155 /* CategoryChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0579A34CDF9A7A3AE6FF0E67 /* CategoryChip.swift */; };
+		B41F8A2E7C3D9E0541ADEF12 /* BackgroundRecordingBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B41F8A2E7C3D9E0541ADEF11 /* BackgroundRecordingBanner.swift */; };
 		00FDCCC0C8FA2D056936D436 /* while-outside.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 4E6119244F83755A2EB8A2E8 /* while-outside.mp4 */; };
 		01ACE6E562F49178483573B3 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4CC5C7738A79C5FA07BDDA /* AudioCompressor.swift */; };
 		03271191A61EB63C0DAAB255 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F0A222998090F21E6ABDC78 /* ShareSheet.swift */; };
@@ -115,6 +116,7 @@
 		0351D4ABA240C67B23BD3A87 /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
 		0433C88E9B3A67BF48C806C6 /* NoteStore+Notes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+Notes.swift"; sourceTree = "<group>"; };
 		0579A34CDF9A7A3AE6FF0E67 /* CategoryChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChip.swift; sourceTree = "<group>"; };
+		B41F8A2E7C3D9E0541ADEF11 /* BackgroundRecordingBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRecordingBanner.swift; sourceTree = "<group>"; };
 		05B975CFE5F2BBAEEA0E951A /* NoteDetailView+Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+Persistence.swift"; sourceTree = "<group>"; };
 		0B931871C848206E9D2608E1 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
 		1938B02A1C14C6500F0316DC /* NoteDetailSheetSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailSheetSupport.swift; sourceTree = "<group>"; };
@@ -373,6 +375,7 @@
 		89D4A26B99042810741A0C7F /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				B41F8A2E7C3D9E0541ADEF11 /* BackgroundRecordingBanner.swift */,
 				0579A34CDF9A7A3AE6FF0E67 /* CategoryChip.swift */,
 				CB52AA1847AFE6605C97861E /* ExpandingTextView.swift */,
 				3C5DA806653BB16783E08E38 /* ExpandingTextView+Attributes.swift */,
@@ -583,6 +586,7 @@
 				01ACE6E562F49178483573B3 /* AudioCompressor.swift in Sources */,
 				7B2B494C2C40900111EF74B5 /* AudioImportSheet.swift in Sources */,
 				33CE1A9C063E4F0348D629D6 /* AudioPlayer.swift in Sources */,
+				B41F8A2E7C3D9E0541ADEF12 /* BackgroundRecordingBanner.swift in Sources */,
 				2F49EC3070F7357DFAB5B45F /* AudioRecorder.swift in Sources */,
 				35F5DA9385067C04FD8143BF /* AuthStore.swift in Sources */,
 				88CD7C709228494258B79B40 /* CategoriesView.swift in Sources */,

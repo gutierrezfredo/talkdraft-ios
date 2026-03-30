@@ -7,11 +7,13 @@ struct RecordView: View {
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var recorder = AudioRecorder()
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showCancelConfirmation = false
     @State private var multiSpeaker = false
+    @State private var showBackgroundBanner = false
     let categoryId: UUID?
     var onNoteSaved: ((Note) -> Void)?
 
@@ -79,6 +81,16 @@ struct RecordView: View {
                 controls
                     .padding(.bottom, 48)
             }
+
+            if showBackgroundBanner {
+                VStack {
+                    BackgroundRecordingBanner()
+                        .padding(.top, 60)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.snappy, value: showBackgroundBanner)
+            }
         }
         .interactiveDismissDisabled(recorder.elapsedSeconds >= 1)
         .alert("Discard Recording?", isPresented: $showCancelConfirmation) {
@@ -105,6 +117,24 @@ struct RecordView: View {
         .onChange(of: recorder.elapsedSeconds) { _, elapsed in
             if Int(elapsed) >= maxDurationSeconds && recorder.isRecording {
                 stopAndSave()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                recorder.handleEnteredBackground()
+            case .active:
+                recorder.handleReturnedToForeground()
+                if recorder.didRecordInBackground {
+                    withAnimation(.snappy) { showBackgroundBanner = true }
+                    recorder.clearBackgroundIndicator()
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        withAnimation(.easeOut) { showBackgroundBanner = false }
+                    }
+                }
+            default:
+                break
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: recorder.isRecording)

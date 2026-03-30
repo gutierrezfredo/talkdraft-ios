@@ -34,6 +34,7 @@ struct NoteDetailView: View {
     @Environment(AuthStore.self) var authStore
     @Environment(SettingsStore.self) var settingsStore
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) var scenePhase
     @Environment(\.dismiss) var dismiss
 
     let noteId: UUID
@@ -75,6 +76,7 @@ struct NoteDetailView: View {
     @State var highlightRange: NSRange?
     @State var preserveScroll = false
     @State var autosaveTask: Task<Void, Never>?
+    @State var showBackgroundBanner = false
 
     @State var transcribingPhraseIndex = 0
     @State var transcribingIsLong = false
@@ -355,6 +357,25 @@ struct NoteDetailView: View {
                     stopAppendRecording()
                 }
             }
+            .onChange(of: scenePhase) { _, phase in
+                guard isAppendRecording else { return }
+                switch phase {
+                case .background:
+                    appendRecorder.handleEnteredBackground()
+                case .active:
+                    appendRecorder.handleReturnedToForeground()
+                    if appendRecorder.didRecordInBackground {
+                        withAnimation(.snappy) { showBackgroundBanner = true }
+                        appendRecorder.clearBackgroundIndicator()
+                        Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            withAnimation(.easeOut) { showBackgroundBanner = false }
+                        }
+                    }
+                default:
+                    break
+                }
+            }
     }
 
     var noteDetailPresentationView: some View {
@@ -495,6 +516,14 @@ struct NoteDetailView: View {
             }
 
             bottomFade
+        }
+        .overlay(alignment: .top) {
+            if showBackgroundBanner {
+                BackgroundRecordingBanner()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 8)
+                    .animation(.snappy, value: showBackgroundBanner)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !titleFocused && bodyState == .content && renamingSpeaker == nil {
