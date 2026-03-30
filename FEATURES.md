@@ -98,6 +98,14 @@
 
 ## Changelog
 
+### 2026-03-30 — Background Recording (PR #53)
+- Re-added `UIBackgroundModes: audio` to Info.plist with proper supporting code
+- `AudioRecorder` registers `beginBackgroundTask` as safety net; audio session is the primary keep-alive
+- `RecordView` and `NoteDetailView` (append recording) observe `scenePhase` to handle background transitions
+- "Recording continued in background" glass capsule banner on return to foreground, auto-dismisses after 3s
+- Paused recordings correctly excluded from background flag
+- Replaced Fraunces with Bricolage Grotesque for titles, SF Pro Rounded for body typography
+
 ### 2026-03-16 (Session 15)
 - Onboarding flow: 5-screen first-run experience between login and Home
 - Welcome screen: Luna mascot with "Say it messy. Read it clean." brand tagline
