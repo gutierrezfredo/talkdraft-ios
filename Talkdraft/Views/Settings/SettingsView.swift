@@ -368,6 +368,7 @@ struct SettingsView: View {
         }
     }
 
+
     private func openFeedbackEmail() {
         let subject = "Talkdraft Feedback (\(appVersion))".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         if let url = URL(string: "mailto:support@talkdraft.app?subject=\(subject)") {

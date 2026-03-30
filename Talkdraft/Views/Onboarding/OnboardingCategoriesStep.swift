@@ -13,6 +13,7 @@ struct OnboardingCategoriesStep: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("What do you want to capture?")
                     .font(.brandTitle)
+                    .fontDesign(nil)
 
                 Text("Pick a few to get started. You can always add more later.")
                     .font(.subheadline)

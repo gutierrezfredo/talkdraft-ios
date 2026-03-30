@@ -40,10 +40,12 @@ struct LoginView: View {
                 VStack(spacing: 0) {
                     Text("Say it messy.")
                         .font(.brandLargeTitle)
+                        .fontDesign(nil)
 
                     ZStack(alignment: .bottom) {
                         Text("Read it clean.")
                             .font(.brandLargeTitle)
+                            .fontDesign(nil)
 
                         Rectangle()
                             .fill(Color.brand)
@@ -256,6 +258,7 @@ private struct EmailSignInSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Continue with your email")
                         .font(.brandTitle)
+                        .fontDesign(nil)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
                         .padding(.top, 24)
@@ -271,6 +274,7 @@ private struct EmailSignInSheet: View {
 
                     TextField("Enter your email", text: $email)
                         .font(.brandTitle2)
+                        .fontDesign(nil)
                         .tint(Color.brand)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
@@ -361,6 +365,7 @@ private struct EmailSignInSheet: View {
             // Title
             Text("Check your email")
                 .font(.brandTitle2)
+                .fontDesign(nil)
                 .padding(.bottom, 20)
 
             // Description
