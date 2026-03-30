@@ -194,7 +194,7 @@ final class AudioRecorder: @unchecked Sendable {
     // MARK: - Background
 
     func handleEnteredBackground() {
-        guard isRecording else { return }
+        guard isRecording, !isPaused else { return }
         didRecordInBackground = true
         beginBackgroundTaskIfNeeded()
         logger.info("Recording continues in background")
