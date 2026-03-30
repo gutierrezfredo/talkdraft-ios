@@ -115,6 +115,7 @@ struct CategoriesView: View {
 
             Text("No Categories")
                 .font(.brandTitle2)
+                .fontDesign(nil)
 
             Text("Tap + to create your first category.")
                 .font(.subheadline)

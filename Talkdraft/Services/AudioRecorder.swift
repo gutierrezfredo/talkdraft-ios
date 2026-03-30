@@ -2,6 +2,7 @@ import Accelerate
 @preconcurrency import AVFoundation
 import Observation
 import os
+import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "AudioRecorder")
 
@@ -22,17 +23,20 @@ final class AudioRecorder: @unchecked Sendable {
     var isPaused = false
     var elapsedSeconds: TimeInterval = 0
     var frequencyBands: [Float] = Array(repeating: 0, count: 20)
+    var didRecordInBackground = false
     private var pipeline: AudioPipeline?
     private var timer: Timer?
     private var startTime: Date?
     private var pausedElapsed: TimeInterval = 0
     private var interruptionObserver: Any?
+    private var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
 
     private let bandCount = 20
 
     deinit {
         timer?.invalidate()
         pipeline?.stop()
+        endBackgroundTaskIfNeeded()
         if let interruptionObserver {
             NotificationCenter.default.removeObserver(interruptionObserver)
         }
@@ -66,6 +70,7 @@ final class AudioRecorder: @unchecked Sendable {
 
         observeInterruptions()
         startTimer()
+        beginBackgroundTaskIfNeeded()
     }
 
     func pauseRecording() {
@@ -108,8 +113,10 @@ final class AudioRecorder: @unchecked Sendable {
 
         isRecording = false
         isPaused = false
+        didRecordInBackground = false
         startTime = nil
         pausedElapsed = 0
+        endBackgroundTaskIfNeeded()
 
         return url
     }
@@ -125,6 +132,7 @@ final class AudioRecorder: @unchecked Sendable {
 
         isRecording = false
         isPaused = false
+        didRecordInBackground = false
 
         if let url {
             try? FileManager.default.removeItem(at: url)
@@ -134,6 +142,7 @@ final class AudioRecorder: @unchecked Sendable {
         pausedElapsed = 0
         elapsedSeconds = 0
         frequencyBands = Array(repeating: 0, count: bandCount)
+        endBackgroundTaskIfNeeded()
     }
 
     // MARK: - Audio Interruption
@@ -180,6 +189,40 @@ final class AudioRecorder: @unchecked Sendable {
             NotificationCenter.default.removeObserver(interruptionObserver)
             self.interruptionObserver = nil
         }
+    }
+
+    // MARK: - Background
+
+    func handleEnteredBackground() {
+        guard isRecording, !isPaused else { return }
+        didRecordInBackground = true
+        beginBackgroundTaskIfNeeded()
+        logger.info("Recording continues in background")
+    }
+
+    func handleReturnedToForeground() {
+        endBackgroundTaskIfNeeded()
+        if let pipeline, !pipeline.isRunning, !isPaused {
+            pauseRecording()
+            logger.info("Recording paused — engine stopped while in background")
+        }
+    }
+
+    func clearBackgroundIndicator() {
+        didRecordInBackground = false
+    }
+
+    private func beginBackgroundTaskIfNeeded() {
+        guard backgroundTaskId == .invalid else { return }
+        backgroundTaskId = UIApplication.shared.beginBackgroundTask(withName: "AudioRecording") { [weak self] in
+            self?.endBackgroundTaskIfNeeded()
+        }
+    }
+
+    private func endBackgroundTaskIfNeeded() {
+        guard backgroundTaskId != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTaskId)
+        backgroundTaskId = .invalid
     }
 
     // MARK: - Timer

@@ -28,6 +28,7 @@ struct OnboardingLanguageStep: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("What language do you speak?")
                     .font(.brandTitle)
+                    .fontDesign(nil)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("We'll use this to transcribe your recordings. You can change it later in Settings.")
