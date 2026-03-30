@@ -190,7 +190,7 @@ struct NoteEditorRules {
         if range.length == 0,
            replacementText.count == 1,
            nsText.length > 0,
-           checkboxPrefixLengthIfEmptyTaskLine(in: nsText, at: range.location) != nil,
+           autoCapitalizedPrefixLengthIfNeeded(in: nsText, at: range.location) != nil,
            replacementText == replacementText.lowercased(),
            replacementText != replacementText.uppercased() {
             let insertedText = replacementText.uppercased()
@@ -275,6 +275,11 @@ struct NoteEditorRules {
         return NSRange(location: start, length: end - start)
     }
 
+    private static func autoCapitalizedPrefixLengthIfNeeded(in text: NSString, at location: Int) -> Int? {
+        checkboxPrefixLengthIfEmptyTaskLine(in: text, at: location)
+            ?? headingPrefixLengthIfEmptyLine(in: text, at: location)
+    }
+
     private static func checkboxPrefixLengthIfEmptyTaskLine(in text: NSString, at location: Int) -> Int? {
         let lineRange = currentLineRange(in: text, at: location)
         guard lineRange.location < text.length else { return nil }
@@ -289,6 +294,19 @@ struct NoteEditorRules {
 
         let lineStart = lineRange.location
         let insertionRange = NSRange(location: lineStart + prefixLength, length: 0)
+        guard location == insertionRange.location else { return nil }
+        return prefixLength
+    }
+
+    private static func headingPrefixLengthIfEmptyLine(in text: NSString, at location: Int) -> Int? {
+        let lineRange = currentLineRange(in: text, at: location)
+        guard lineRange.location < text.length else { return nil }
+        let lineText = trimmedLine(in: text, lineRange: lineRange)
+        let headingPrefix = "# "
+        guard lineText == headingPrefix else { return nil }
+
+        let prefixLength = (headingPrefix as NSString).length
+        let insertionRange = NSRange(location: lineRange.location + prefixLength, length: 0)
         guard location == insertionRange.location else { return nil }
         return prefixLength
     }
@@ -1005,11 +1023,22 @@ enum NoteTextFormatting {
     }
 
     static func headingFont(from font: UIFont) -> UIFont {
-        UIFont.systemFont(ofSize: 21, weight: .semibold)
+        weightedFont(from: font, pointSize: 21, weight: .semibold)
     }
 
     private static func boldFont(from font: UIFont) -> UIFont {
-        UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        weightedFont(from: font, weight: .semibold)
+    }
+
+    private static func weightedFont(
+        from font: UIFont,
+        pointSize: CGFloat? = nil,
+        weight: UIFont.Weight
+    ) -> UIFont {
+        let descriptor = font.fontDescriptor.addingAttributes([
+            .traits: [UIFontDescriptor.TraitKey.weight: weight]
+        ])
+        return UIFont(descriptor: descriptor, size: pointSize ?? font.pointSize)
     }
 
     private static func displayText(forLine rawLine: String) -> String {
