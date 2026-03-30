@@ -139,6 +139,7 @@ extension HomeView {
 
                     Text(isSearching && !query.isEmpty ? "No results" : "No notes yet")
                         .font(.brandTitle2)
+                        .fontDesign(nil)
 
                     if let filteredEmptyStateMessage {
                         filteredEmptyStateMessage
@@ -158,6 +159,7 @@ extension HomeView {
                                 .foregroundStyle(Color.brand)
                         }
                         .font(.brandLargeTitle)
+                        .fontDesign(nil)
                         .multilineTextAlignment(.center)
 
                         Text("Tap the mic and start talking")
@@ -370,6 +372,7 @@ extension HomeView {
                             VStack(spacing: 4) {
                                 Text("No Categories Yet")
                                     .font(.brandTitle2)
+                                    .fontDesign(nil)
 
                                 Text("Create your first category to organize these notes.")
                                     .font(.subheadline)

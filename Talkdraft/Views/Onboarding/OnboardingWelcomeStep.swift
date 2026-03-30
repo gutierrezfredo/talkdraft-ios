@@ -22,6 +22,7 @@ struct OnboardingWelcomeStep: View {
             // Headline
             Text("Say it messy.\nRead it clean.")
                 .font(.brandLargeTitle)
+                .fontDesign(nil)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 16)
 

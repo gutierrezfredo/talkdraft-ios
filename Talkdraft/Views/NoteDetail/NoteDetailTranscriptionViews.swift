@@ -19,6 +19,7 @@ struct NoteDetailTranscribingIndicatorView: View {
             VStack(spacing: 20) {
                 ShimmerTextView("Transcribing your note…")
                     .font(.brandTitle2)
+                    .fontDesign(nil)
 
                 Text(subtitle)
                     .font(.subheadline)

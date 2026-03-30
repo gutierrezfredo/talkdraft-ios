@@ -57,7 +57,7 @@ private struct FloatingZView: View {
 
     var body: some View {
         Text("z")
-            .font(.system(size: 18, weight: .semibold, design: .rounded))
+            .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(color ?? Color.secondary)
             .opacity(visible ? (animate ? 0 : 0.45) : 0)
             .offset(x: animate ? 4 : 0, y: animate ? -18 : 0)

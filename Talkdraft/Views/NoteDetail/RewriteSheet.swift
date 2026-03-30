@@ -504,6 +504,7 @@ struct RewriteSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     TextField("e.g. Make it sound like a TED talk", text: $customInstructions, axis: .vertical)
                         .font(.brandTitle2)
+                        .fontDesign(nil)
                         .tint(Color.brand)
                         .lineLimit(3...8)
                         .focused($customFocused)

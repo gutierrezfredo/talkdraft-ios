@@ -60,8 +60,8 @@ struct NoteCard: View {
             // Title
             if let title = note.title, !title.isEmpty {
                 Text(title)
-                    .font(.brandTitle3)
-                    .fontWeight(.regular)
+                    .font(.brandCardTitle)
+                    .fontDesign(nil)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }

@@ -24,6 +24,7 @@ struct TalkdraftApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .fontDesign(.rounded)
                 .environment(authStore)
                 .environment(noteStore)
                 .environment(settingsStore)

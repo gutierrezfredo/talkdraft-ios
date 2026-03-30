@@ -24,7 +24,7 @@
 	<string>Talkdraft needs microphone access to record voice notes.</string>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Fraunces-Variable.ttf</string>
+		<string>BricolageGrotesque-Variable.ttf</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

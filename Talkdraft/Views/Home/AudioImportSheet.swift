@@ -16,6 +16,7 @@ struct AudioImportSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Import Audio")
                     .font(.brandTitle2)
+                    .fontDesign(nil)
                 Text(fileName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
