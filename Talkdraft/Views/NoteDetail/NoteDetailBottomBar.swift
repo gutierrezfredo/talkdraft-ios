@@ -170,6 +170,7 @@ struct NoteDetailRewriteSourceSheet: View {
         VStack(spacing: 18) {
             Text("Rewrite From")
                 .font(.brandTitle2)
+                .fontDesign(nil)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             rewriteOption(

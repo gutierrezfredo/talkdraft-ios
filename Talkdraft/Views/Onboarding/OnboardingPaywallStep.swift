@@ -96,6 +96,7 @@ struct OnboardingPaywallStep: View {
 
             Text("Unlock the full\nTalkdraft experience")
                 .font(.brandTitle)
+                .fontDesign(nil)
                 .multilineTextAlignment(.center)
         }
     }

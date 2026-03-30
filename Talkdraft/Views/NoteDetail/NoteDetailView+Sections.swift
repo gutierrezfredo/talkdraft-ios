@@ -434,6 +434,7 @@ extension NoteDetailView {
             if isGeneratingTitle {
                 Text(titlePhrases[titlePhraseIndex])
                     .font(.brandTitle)
+                    .fontDesign(nil)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -442,6 +443,7 @@ extension NoteDetailView {
             } else {
                 TextField("Untitled", text: titleInputBinding, axis: .vertical)
                     .font(.brandTitle)
+                    .fontDesign(nil)
                     .tint(Color.brand)
                     .multilineTextAlignment(.center)
                     .contentTransition(.opacity)
@@ -501,7 +503,7 @@ extension NoteDetailView {
             highlightRange: $highlightRange,
             preserveScroll: $preserveScroll,
             isEditable: !isAppendRecording && !isAppendTranscribing && !isRewriting,
-            font: .preferredFont(forTextStyle: .body),
+            font: .roundedBody(),
             lineSpacing: 6,
             placeholder: "Start typing...",
             speakerColors: speakerColorMap,

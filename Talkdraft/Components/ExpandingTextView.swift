@@ -12,7 +12,7 @@ struct ExpandingTextView: UIViewRepresentable {
     @Binding var highlightRange: NSRange?
     @Binding var preserveScroll: Bool
     var isEditable: Bool = true
-    var font: UIFont = .preferredFont(forTextStyle: .body)
+    var font: UIFont = .roundedBody()
     var lineSpacing: CGFloat = 6
     var placeholder: String = ""
     var speakerColors: [String: UIColor] = [:]

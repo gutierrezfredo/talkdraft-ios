@@ -146,7 +146,8 @@ struct RecordView: View {
             ForEach(Array(formattedTime.enumerated()), id: \.offset) { _, char in
                 if char == ":" {
                     Text(":")
-                        .font(.custom("Fraunces-Light", size: 88))
+                        .font(.custom("Bricolage Grotesque", size: 88).weight(.light))
+                        .fontDesign(nil)
                 } else {
                     ZStack {
                         Text("0").opacity(0) // widest reference
@@ -154,7 +155,8 @@ struct RecordView: View {
                             .transition(.blurFade)
                             .id(char)
                     }
-                    .font(.custom("Fraunces-Light", size: 88))
+                    .font(.custom("Bricolage Grotesque", size: 88).weight(.light))
+                    .fontDesign(nil)
                     .animation(.easeInOut(duration: 0.25), value: char)
                 }
             }

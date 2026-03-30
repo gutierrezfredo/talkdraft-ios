@@ -23,6 +23,7 @@ struct OnboardingNotificationsStep: View {
             // Headline
             Text("Get a reminder before your trial ends")
                 .font(.brandTitle)
+                .fontDesign(nil)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)

@@ -23,6 +23,7 @@ struct CategoryPickerSheet: View {
                             VStack(spacing: 4) {
                                 Text("No Categories Yet")
                                     .font(.brandTitle2)
+                                    .fontDesign(nil)
 
                                 Text("Create your first category to organize this note.")
                                     .font(.subheadline)
