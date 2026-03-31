@@ -6,6 +6,7 @@ struct ContentView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.scenePhase) private var scenePhase
+    @Binding var pendingDeepLink: DeepLink?
     @State private var completedOnboardingUserId: UUID?
     @State private var didFinishInitialAuthBootstrap = false
     @State private var showPostAuthTransition = false
@@ -74,7 +75,10 @@ struct ContentView: View {
                             }
                         }
                     } else {
-                        HomeView()
+                        HomeView(
+                            pendingDeepLink: $pendingDeepLink,
+                            isMandatoryPaywallPresented: showMandatoryPaywall.wrappedValue
+                        )
                             .fullScreenCover(isPresented: showMandatoryPaywall) {
                                 PaywallView(mandatory: true)
                             }
@@ -122,6 +126,7 @@ struct ContentView: View {
                 completedOnboardingUserId = nil
                 isPerformingInteractiveAuth = false
                 showPostAuthTransition = false
+                pendingDeepLink = nil
                 noteStore.resetSession()
                 settingsStore.resetSession()
                 Task { await subscriptionStore.logout() }

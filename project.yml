@@ -44,6 +44,24 @@ targets:
       - package: RevenueCat
         product: RevenueCat
       - package: GoogleSignIn
+      - target: TalkdraftWidget
+
+  TalkdraftWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TalkdraftWidget
+    settings:
+      base:
+        INFOPLIST_FILE: TalkdraftWidget/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.pleymob.talkdraft.widget
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: H83F573KQB
+        CODE_SIGN_STYLE: Automatic
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../Frameworks"
 
   TalkdraftTests:
     type: bundle.unit-test

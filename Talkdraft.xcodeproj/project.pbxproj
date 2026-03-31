@@ -3,12 +3,11 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		00A91F1D1A3C671532F1D155 /* CategoryChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0579A34CDF9A7A3AE6FF0E67 /* CategoryChip.swift */; };
-		B41F8A2E7C3D9E0541ADEF12 /* BackgroundRecordingBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B41F8A2E7C3D9E0541ADEF11 /* BackgroundRecordingBanner.swift */; };
 		00FDCCC0C8FA2D056936D436 /* while-outside.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 4E6119244F83755A2EB8A2E8 /* while-outside.mp4 */; };
 		01ACE6E562F49178483573B3 /* AudioCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4CC5C7738A79C5FA07BDDA /* AudioCompressor.swift */; };
 		03271191A61EB63C0DAAB255 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F0A222998090F21E6ABDC78 /* ShareSheet.swift */; };
@@ -22,6 +21,7 @@
 		12B9BA15D31C36C0EB884577 /* NoteDetailEditorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D73CDADACC2F39D17DBFB94 /* NoteDetailEditorSession.swift */; };
 		1968DE955B444A50C1822B71 /* RecentlyDeletedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F09DD618F3143B1DDC9705 /* RecentlyDeletedView.swift */; };
 		1E9A4642F4FF6C83B2330A1D /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C60275E0A576AD983E1B44 /* PaywallView.swift */; };
+		1FD83F36EF3D74D7E0F4B9ED /* TalkdraftWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572F585A2AE7202528E9ABA7 /* TalkdraftWidget.swift */; };
 		22EC4C7BE0CDE446F5EB49CD /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8CF6C77ACB40D2C7CB0BBC /* TranscriptionService.swift */; };
 		2553E1F75C3ACAF3C0DD6353 /* NoteDetailView+Sections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F577723DEEC18FAF0089876 /* NoteDetailView+Sections.swift */; };
 		262FF5D13C4CC3230853F641 /* RewriteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7436ED41BD4751A753747357 /* RewriteSheet.swift */; };
@@ -42,6 +42,8 @@
 		42835A7EBEACFCA3A83A8EE9 /* while-read.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = EEDBC201A8EEDBE6822CBED7 /* while-read.mp4 */; };
 		482D0349409B6E8C53C38B78 /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60AFAFE3388B31B8B0F2BDE1 /* Category.swift */; };
 		50EC6AAA79A2FAE3B8CE0EF7 /* NoteDetailView+ContentSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4411B61BE34B3B25458CAC4 /* NoteDetailView+ContentSync.swift */; };
+		520E021363B288F02F18C9C3 /* TalkdraftWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C78186CDC42D45D9D156BAB /* TalkdraftWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5533D92675EBFAEFDA53F64A /* BricolageGrotesque-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 671265F810289DD2D498AC08 /* BricolageGrotesque-Variable.ttf */; };
 		568A5495AA2A5D8AC0BFBFF4 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56D177D92B1D0A5C79907332 /* HomeView.swift */; };
 		58EFD3F6E3BDFB37774A1C09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B2589487BD023D0D68B137F /* Assets.xcassets */; };
 		5A4A8BB1F74FDE70D70E0052 /* OnboardingNotificationsStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989EC18680A2974D1523C228 /* OnboardingNotificationsStep.swift */; };
@@ -67,7 +69,6 @@
 		91984D79B52CF58EC0E5E0F4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 700D07AB41C365FB7CE2F5F4 /* SettingsStore.swift */; };
 		989DB87F5A6CA425EB6D7BF6 /* NoteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250279241DBC61EB0A1EBDC5 /* NoteDetailView.swift */; };
 		9C934EA062B745C199394C92 /* ExpandingTextView+Interactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE44E5A4D0073BB2CAC9B751 /* ExpandingTextView+Interactions.swift */; };
-		529434F831D1FF141B98D413 /* BricolageGrotesque-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FD4E0796E9020EB638443CDA /* BricolageGrotesque-Variable.ttf */; };
 		A11043698E56F2F9052C487C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CBAC8B2AA38D9032814025A /* ContentView.swift */; };
 		A38E7CB86191C6FB6D5BE161 /* NoteDetailSheetSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1938B02A1C14C6500F0316DC /* NoteDetailSheetSupport.swift */; };
 		AC172818C85D4D874DC04A76 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 432C74333A4280F6714A563C /* Note.swift */; };
@@ -90,6 +91,7 @@
 		D8D61E0303F4F35B3923B5ED /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A66D34530742F8CC32345F /* OnboardingView.swift */; };
 		DBAE4D97F7C8170E56C1AFFC /* NoteDetailBottomBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84357ED33ED0050A96EAA9AA /* NoteDetailBottomBar.swift */; };
 		DC392B65AF74654C9B399FA2 /* while-binge.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = D8227C98D1C7775FB5984BA9 /* while-binge.mp4 */; };
+		DD6DDC53D851891971FAFD85 /* BackgroundRecordingBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40746FE8FE682A645726A39 /* BackgroundRecordingBanner.swift */; };
 		DEBE6F7082A99954B5584DBD /* ExpandingTextView+Scrolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C370238C90495234645097 /* ExpandingTextView+Scrolling.swift */; };
 		E4D47CD3B7E0BBCCB3D83E7F /* OnboardingWelcomeStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB97007CC183B4173450CC8E /* OnboardingWelcomeStep.swift */; };
 		E52215C28BD1B95AA17D5550 /* OnboardingCategoriesStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0398F1BFCACED931B262C5 /* OnboardingCategoriesStep.swift */; };
@@ -109,18 +111,39 @@
 			remoteGlobalIDString = F95EE8F806B89FB0783B2B83;
 			remoteInfo = Talkdraft;
 		};
+		5F85B780766715CEBB4B7C1A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B974858C4806F8E016B92CA9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A91539B33E8E8DD9514C98F9;
+			remoteInfo = TalkdraftWidget;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A42227A997FE714F4B7E9974 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				520E021363B288F02F18C9C3 /* TalkdraftWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		033A9C4A387C05783A8B5AD4 /* HomeView+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeView+Actions.swift"; sourceTree = "<group>"; };
 		0351D4ABA240C67B23BD3A87 /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
 		0433C88E9B3A67BF48C806C6 /* NoteStore+Notes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+Notes.swift"; sourceTree = "<group>"; };
 		0579A34CDF9A7A3AE6FF0E67 /* CategoryChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryChip.swift; sourceTree = "<group>"; };
-		B41F8A2E7C3D9E0541ADEF11 /* BackgroundRecordingBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRecordingBanner.swift; sourceTree = "<group>"; };
 		05B975CFE5F2BBAEEA0E951A /* NoteDetailView+Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+Persistence.swift"; sourceTree = "<group>"; };
+		08006E0C4C1C26DAFE7BDC26 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0B931871C848206E9D2608E1 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
 		1938B02A1C14C6500F0316DC /* NoteDetailSheetSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailSheetSupport.swift; sourceTree = "<group>"; };
-		1AE3311E3F9D19F75F58D647 /* while-rest.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-rest.mp4"; sourceTree = "<group>"; };
+		1AE3311E3F9D19F75F58D647 /* while-rest.mp4 */ = {isa = PBXFileReference; path = "while-rest.mp4"; sourceTree = "<group>"; };
 		1B2589487BD023D0D68B137F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1B5F439933C207D1C7E63E33 /* NoteDetailView+TranscriptionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+TranscriptionState.swift"; sourceTree = "<group>"; };
 		1DFA2669E18D72E94C0B4F85 /* NoteStore+Transcription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+Transcription.swift"; sourceTree = "<group>"; };
@@ -128,39 +151,41 @@
 		250279241DBC61EB0A1EBDC5 /* NoteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailView.swift; sourceTree = "<group>"; };
 		275F4689EED8F5CD4ECB578F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		294504049149D48B93C487ED /* HomeView+Sections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeView+Sections.swift"; sourceTree = "<group>"; };
-		2B4F8F9533EB78A39C8B0096 /* while-hobby.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-hobby.mp4"; sourceTree = "<group>"; };
-		2EE1717F7F1800A5608B81F9 /* while-snack.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-snack.mp4"; sourceTree = "<group>"; };
-		348BCF1A7877A6D7EEE0611F /* mail-received.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "mail-received.mp4"; sourceTree = "<group>"; };
+		2B4F8F9533EB78A39C8B0096 /* while-hobby.mp4 */ = {isa = PBXFileReference; path = "while-hobby.mp4"; sourceTree = "<group>"; };
+		2EE1717F7F1800A5608B81F9 /* while-snack.mp4 */ = {isa = PBXFileReference; path = "while-snack.mp4"; sourceTree = "<group>"; };
+		348BCF1A7877A6D7EEE0611F /* mail-received.mp4 */ = {isa = PBXFileReference; path = "mail-received.mp4"; sourceTree = "<group>"; };
 		369E5284D2A8B2D577A122C5 /* ErrorLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogger.swift; sourceTree = "<group>"; };
 		3B1DFBADEF180C50145EE637 /* TalkdraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkdraftTests.swift; sourceTree = "<group>"; };
 		3C5DA806653BB16783E08E38 /* ExpandingTextView+Attributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExpandingTextView+Attributes.swift"; sourceTree = "<group>"; };
-		3F6A5110BE5701272DA23FB9 /* TalkdraftTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TalkdraftTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F6A5110BE5701272DA23FB9 /* TalkdraftTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TalkdraftTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		432C74333A4280F6714A563C /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		47287DA73C7655C27BD1B9B5 /* NoteDetailTranscriptionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteDetailTranscriptionViews.swift; sourceTree = "<group>"; };
+		4C78186CDC42D45D9D156BAB /* TalkdraftWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TalkdraftWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CBAC8B2AA38D9032814025A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		4E6119244F83755A2EB8A2E8 /* while-outside.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-outside.mp4"; sourceTree = "<group>"; };
+		4E6119244F83755A2EB8A2E8 /* while-outside.mp4 */ = {isa = PBXFileReference; path = "while-outside.mp4"; sourceTree = "<group>"; };
 		4F0A222998090F21E6ABDC78 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		4F5F316C06DEA9A8F2FBF66E /* RecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordView.swift; sourceTree = "<group>"; };
 		56D177D92B1D0A5C79907332 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		572F585A2AE7202528E9ABA7 /* TalkdraftWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkdraftWidget.swift; sourceTree = "<group>"; };
 		5B32BA5D5235CD66E06067B1 /* NoteDetailView+AppendRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+AppendRecording.swift"; sourceTree = "<group>"; };
 		5B947A3A74F4130612FD8B02 /* OnboardingLanguageStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingLanguageStep.swift; sourceTree = "<group>"; };
 		5E0398F1BFCACED931B262C5 /* OnboardingCategoriesStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCategoriesStep.swift; sourceTree = "<group>"; };
 		60AFAFE3388B31B8B0F2BDE1 /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
-		FD4E0796E9020EB638443CDA /* BricolageGrotesque-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Variable.ttf"; sourceTree = "<group>"; };
 		61A8303FE9ABA91C12C9B54C /* NoteEditorCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorCore.swift; sourceTree = "<group>"; };
 		63A1F9F0FD6DAD94250F68DB /* Talkdraft.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Talkdraft.entitlements; sourceTree = "<group>"; };
 		63FF14D5FC3F9032AD16A8EA /* NoteStore+Rewrites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+Rewrites.swift"; sourceTree = "<group>"; };
+		671265F810289DD2D498AC08 /* BricolageGrotesque-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Variable.ttf"; sourceTree = "<group>"; };
 		68318B2AD005D23ED4B13B79 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		69B8391E1240D1A2DB7D5704 /* CustomDictionaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomDictionaryView.swift; sourceTree = "<group>"; };
 		6A7D3C556B9E570F3B4FE47A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
-		6B204BF76CD901C0CAE94935 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		6BA8589752960054085DA758 /* transcribing-1.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "transcribing-1.mp4"; sourceTree = "<group>"; };
+		6B204BF76CD901C0CAE94935 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6BA8589752960054085DA758 /* transcribing-1.mp4 */ = {isa = PBXFileReference; path = "transcribing-1.mp4"; sourceTree = "<group>"; };
 		6D5E4C47C5BA609ADDA45748 /* NoteDetailView+RewriteActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+RewriteActions.swift"; sourceTree = "<group>"; };
 		700D07AB41C365FB7CE2F5F4 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		73A6FB64E6A7AA4E37417B89 /* AudioImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportSheet.swift; sourceTree = "<group>"; };
 		7436ED41BD4751A753747357 /* RewriteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteSheet.swift; sourceTree = "<group>"; };
 		782B65C30787C51E9687143E /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
-		78B62096A620FFE1EBE3755B /* while-work.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-work.mp4"; sourceTree = "<group>"; };
+		78B62096A620FFE1EBE3755B /* while-work.mp4 */ = {isa = PBXFileReference; path = "while-work.mp4"; sourceTree = "<group>"; };
 		7A4CC5C7738A79C5FA07BDDA /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCompressor.swift; sourceTree = "<group>"; };
 		7A8E79BBEEBEEEF5C8C1621F /* LoopingVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopingVideoView.swift; sourceTree = "<group>"; };
 		7E2F84881BDB810593D03A13 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -185,21 +210,22 @@
 		C45C2752E0BED51698E4C2DB /* HomeNoteQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeNoteQuery.swift; sourceTree = "<group>"; };
 		CB52AA1847AFE6605C97861E /* ExpandingTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpandingTextView.swift; sourceTree = "<group>"; };
 		D24E060500AB3B88B6789593 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
-		D5D6DCC35AFACCCFB16F13FC /* Talkdraft.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Talkdraft.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D5D6DCC35AFACCCFB16F13FC /* Talkdraft.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Talkdraft.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6F09DD618F3143B1DDC9705 /* RecentlyDeletedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyDeletedView.swift; sourceTree = "<group>"; };
-		D78EB06773152041BBDCA503 /* transcribing-2.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "transcribing-2.mp4"; sourceTree = "<group>"; };
+		D78EB06773152041BBDCA503 /* transcribing-2.mp4 */ = {isa = PBXFileReference; path = "transcribing-2.mp4"; sourceTree = "<group>"; };
 		D7C60275E0A576AD983E1B44 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
-		D8227C98D1C7775FB5984BA9 /* while-binge.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-binge.mp4"; sourceTree = "<group>"; };
+		D8227C98D1C7775FB5984BA9 /* while-binge.mp4 */ = {isa = PBXFileReference; path = "while-binge.mp4"; sourceTree = "<group>"; };
 		D965FB61B48CCFCD56FEF5CF /* NoteStore+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+Categories.swift"; sourceTree = "<group>"; };
 		DA8AE307640842D7629CE290 /* NoteDetailView+SpeakerRename.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+SpeakerRename.swift"; sourceTree = "<group>"; };
 		DD2CCD11FC8E2A95409CE8BA /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		DE44E5A4D0073BB2CAC9B751 /* ExpandingTextView+Interactions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExpandingTextView+Interactions.swift"; sourceTree = "<group>"; };
 		E018B7EE421DE1A2720D2FAF /* RewriteToolbarState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteToolbarState.swift; sourceTree = "<group>"; };
+		E40746FE8FE682A645726A39 /* BackgroundRecordingBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRecordingBanner.swift; sourceTree = "<group>"; };
 		E4FCB54E644EE108D767D526 /* OnboardingPaywallStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPaywallStep.swift; sourceTree = "<group>"; };
 		E69573FFE011A82046053F9C /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
 		E885A7EF279B817BB8E09D23 /* TranscriptSpeakerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSpeakerDetector.swift; sourceTree = "<group>"; };
 		EB5913DFEF4E2BCA3E265B4C /* NoteRewriteJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRewriteJob.swift; sourceTree = "<group>"; };
-		EEDBC201A8EEDBE6822CBED7 /* while-read.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "while-read.mp4"; sourceTree = "<group>"; };
+		EEDBC201A8EEDBE6822CBED7 /* while-read.mp4 */ = {isa = PBXFileReference; path = "while-read.mp4"; sourceTree = "<group>"; };
 		F06F7445B166C45285D90319 /* TalkdraftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkdraftApp.swift; sourceTree = "<group>"; };
 		F0937EE6C7C8D009DAD2F9FE /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		F175F2B6D8263BF06EA07FB4 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
@@ -241,11 +267,21 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
+		182D3AD6945954C0A832EAF3 /* TalkdraftWidget */ = {
+			isa = PBXGroup;
+			children = (
+				08006E0C4C1C26DAFE7BDC26 /* Info.plist */,
+				572F585A2AE7202528E9ABA7 /* TalkdraftWidget.swift */,
+			);
+			path = TalkdraftWidget;
+			sourceTree = "<group>";
+		};
 		2C6D2627BD61F9BDD84822ED = {
 			isa = PBXGroup;
 			children = (
 				3566F9C07B42F376E89DEDEE /* Talkdraft */,
 				E31E85C2F542017C1DEEDD98 /* TalkdraftTests */,
+				182D3AD6945954C0A832EAF3 /* TalkdraftWidget */,
 				3C2B970E7D7D96BE20010A71 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -269,6 +305,7 @@
 			children = (
 				D5D6DCC35AFACCCFB16F13FC /* Talkdraft.app */,
 				3F6A5110BE5701272DA23FB9 /* TalkdraftTests.xctest */,
+				4C78186CDC42D45D9D156BAB /* TalkdraftWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -297,7 +334,7 @@
 		60CC8BC70ED34EC4E6BC5CF6 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
-				FD4E0796E9020EB638443CDA /* BricolageGrotesque-Variable.ttf */,
+				671265F810289DD2D498AC08 /* BricolageGrotesque-Variable.ttf */,
 			);
 			path = Fonts;
 			sourceTree = "<group>";
@@ -375,7 +412,7 @@
 		89D4A26B99042810741A0C7F /* Components */ = {
 			isa = PBXGroup;
 			children = (
-				B41F8A2E7C3D9E0541ADEF11 /* BackgroundRecordingBanner.swift */,
+				E40746FE8FE682A645726A39 /* BackgroundRecordingBanner.swift */,
 				0579A34CDF9A7A3AE6FF0E67 /* CategoryChip.swift */,
 				CB52AA1847AFE6605C97861E /* ExpandingTextView.swift */,
 				3C5DA806653BB16783E08E38 /* ExpandingTextView+Attributes.swift */,
@@ -475,6 +512,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A91539B33E8E8DD9514C98F9 /* TalkdraftWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8332D5FB96791C703EA53920 /* Build configuration list for PBXNativeTarget "TalkdraftWidget" */;
+			buildPhases = (
+				ED0052D77736FA974B0BC262 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TalkdraftWidget;
+			packageProductDependencies = (
+			);
+			productName = TalkdraftWidget;
+			productReference = 4C78186CDC42D45D9D156BAB /* TalkdraftWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F95EE8F806B89FB0783B2B83 /* Talkdraft */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 190E6EFA8191C4269C9782C6 /* Build configuration list for PBXNativeTarget "Talkdraft" */;
@@ -482,10 +536,12 @@
 				19C9EFF9C71C458A8C1D98AD /* Sources */,
 				F317C6ADE4F48AEAC72655B6 /* Resources */,
 				DA3F06AC0356B97EEA487153 /* Frameworks */,
+				A42227A997FE714F4B7E9974 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2F89D230FADA73842ADDC46D /* PBXTargetDependency */,
 			);
 			name = Talkdraft;
 			packageProductDependencies = (
@@ -522,8 +578,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					A91539B33E8E8DD9514C98F9 = {
+						DevelopmentTeam = H83F573KQB;
+						ProvisioningStyle = Automatic;
+					};
 					F95EE8F806B89FB0783B2B83 = {
 						DevelopmentTeam = H83F573KQB;
 						ProvisioningStyle = Automatic;
@@ -545,11 +605,13 @@
 				EC198649DBF12F744E868BA3 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
 				EF2E22611F77418C4CC6F14A /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				F95EE8F806B89FB0783B2B83 /* Talkdraft */,
 				FFC9E485F3595D0CD5F0C6F7 /* TalkdraftTests */,
+				A91539B33E8E8DD9514C98F9 /* TalkdraftWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -560,7 +622,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				58EFD3F6E3BDFB37774A1C09 /* Assets.xcassets in Resources */,
-				529434F831D1FF141B98D413 /* BricolageGrotesque-Variable.ttf in Resources */,
+				5533D92675EBFAEFDA53F64A /* BricolageGrotesque-Variable.ttf in Resources */,
 				8705CAF9808B49015117174E /* PrivacyInfo.xcprivacy in Resources */,
 				7952FC78CE874662D3E53919 /* mail-received.mp4 in Resources */,
 				B82E202E72DB96B29D4199F8 /* transcribing-1.mp4 in Resources */,
@@ -586,9 +648,9 @@
 				01ACE6E562F49178483573B3 /* AudioCompressor.swift in Sources */,
 				7B2B494C2C40900111EF74B5 /* AudioImportSheet.swift in Sources */,
 				33CE1A9C063E4F0348D629D6 /* AudioPlayer.swift in Sources */,
-				B41F8A2E7C3D9E0541ADEF12 /* BackgroundRecordingBanner.swift in Sources */,
 				2F49EC3070F7357DFAB5B45F /* AudioRecorder.swift in Sources */,
 				35F5DA9385067C04FD8143BF /* AuthStore.swift in Sources */,
+				DD6DDC53D851891971FAFD85 /* BackgroundRecordingBanner.swift in Sources */,
 				88CD7C709228494258B79B40 /* CategoriesView.swift in Sources */,
 				482D0349409B6E8C53C38B78 /* Category.swift in Sources */,
 				00A91F1D1A3C671532F1D155 /* CategoryChip.swift in Sources */,
@@ -668,9 +730,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		ED0052D77736FA974B0BC262 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FD83F36EF3D74D7E0F4B9ED /* TalkdraftWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		2F89D230FADA73842ADDC46D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A91539B33E8E8DD9514C98F9 /* TalkdraftWidget */;
+			targetProxy = 5F85B780766715CEBB4B7C1A /* PBXContainerItemProxy */;
+		};
 		8181A699557E13B5D214B845 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = F95EE8F806B89FB0783B2B83 /* Talkdraft */;
@@ -702,7 +777,7 @@
 				CODE_SIGN_ENTITLEMENTS = Talkdraft/App/Talkdraft.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = Talkdraft/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -754,7 +829,6 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -775,7 +849,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -819,7 +892,6 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -833,7 +905,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -863,7 +934,7 @@
 				CODE_SIGN_ENTITLEMENTS = Talkdraft/App/Talkdraft.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = Talkdraft/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -877,6 +948,38 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		E26C0DA263F7F22F6AA73509 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H83F573KQB;
+				INFOPLIST_FILE = TalkdraftWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pleymob.talkdraft.widget;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		EB7FEA5BB8BBA6D445B1FC44 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H83F573KQB;
+				INFOPLIST_FILE = TalkdraftWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pleymob.talkdraft.widget;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -895,6 +998,15 @@
 			buildConfigurations = (
 				0223881005601917FDC5AF51 /* Debug */,
 				B160B860784F6D837543840D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8332D5FB96791C703EA53920 /* Build configuration list for PBXNativeTarget "TalkdraftWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E26C0DA263F7F22F6AA73509 /* Debug */,
+				EB7FEA5BB8BBA6D445B1FC44 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
