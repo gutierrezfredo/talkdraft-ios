@@ -98,11 +98,12 @@
 
 ## Changelog
 
-### 2026-03-31 — Home Screen Widget (PR #67)
-- WidgetKit extension: small "Quick Record" widget with mic icon + brand violet background
+### 2026-03-31 — Widgets (PRs #67, #70)
+- Home Screen widget: small "Quick Record" with mic icon + brand violet background
+- Lock Screen widgets: `accessoryCircular` (mic icon) and `accessoryRectangular` (mic + "Record")
 - Deep link `talkdraft://record` routed separately from auth callbacks
 - Deep link queued through auth/onboarding/paywall, consumed only when HomeView is visible
-- Cold-start support: `.onAppear` consumption for app-not-running → widget tap flow
+- Cold-start support for app-not-running → widget tap flow
 
 ### 2026-03-30 — Assets, Polish & Fixes (PRs #57, #60, #61)
 - New app icons (default + dark) with Luna headphones design
