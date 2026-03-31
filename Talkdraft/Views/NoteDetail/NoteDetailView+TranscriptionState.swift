@@ -56,7 +56,7 @@ extension NoteDetailView {
 
     func setupTranscribingState() {
         let duration = note.durationSeconds ?? 0
-        transcribingIsLong = duration >= 300
+        transcribingIsLong = duration >= 30
         // Derive index from note ID — deterministic per note, no runtime randomness,
         // prevents ghosting from multiple onAppear calls while still rotating across notes.
         let hash = abs(noteId.hashValue)
