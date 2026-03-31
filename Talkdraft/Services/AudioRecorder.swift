@@ -8,11 +8,14 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "Audio
 
 enum RecordingError: LocalizedError {
     case formatUnavailable
+    case incompatibleCarAudioRoute
 
     var errorDescription: String? {
         switch self {
         case .formatUnavailable:
             "Audio format unavailable"
+        case .incompatibleCarAudioRoute:
+            "Talkdraft couldn't start recording with the current car audio route. Try using the iPhone microphone or disconnecting CarPlay, then try again."
         }
     }
 }
@@ -29,7 +32,9 @@ final class AudioRecorder: @unchecked Sendable {
     private var startTime: Date?
     private var pausedElapsed: TimeInterval = 0
     private var interruptionObserver: Any?
+    private var routeChangeObserver: Any?
     private var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
+    private var startedOnCarAudioRoute = false
 
     private let bandCount = 20
 
@@ -40,6 +45,9 @@ final class AudioRecorder: @unchecked Sendable {
         if let interruptionObserver {
             NotificationCenter.default.removeObserver(interruptionObserver)
         }
+        if let routeChangeObserver {
+            NotificationCenter.default.removeObserver(routeChangeObserver)
+        }
     }
 
     private var recordingDirectory: URL {
@@ -49,28 +57,51 @@ final class AudioRecorder: @unchecked Sendable {
 
     func startRecording() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-        try session.setActive(true)
+        do {
+            try configureSessionForRecording(session)
+            try FileManager.default.createDirectory(at: recordingDirectory, withIntermediateDirectories: true)
 
-        try FileManager.default.createDirectory(at: recordingDirectory, withIntermediateDirectories: true)
+            let fileName = UUID().uuidString + ".m4a"
+            let fileURL = recordingDirectory.appendingPathComponent(fileName)
+            let usesCarAudioRoute = self.routeUsesCarAudio(session.currentRoute)
 
-        let fileName = UUID().uuidString + ".m4a"
-        let fileURL = recordingDirectory.appendingPathComponent(fileName)
+            let pipeline = AudioPipeline(
+                outputURL: fileURL,
+                bandCount: bandCount,
+                allowRecorderFallback: usesCarAudioRoute
+            )
+            try pipeline.start()
+            self.pipeline = pipeline
+            self.startedOnCarAudioRoute = usesCarAudioRoute
 
-        let pipeline = AudioPipeline(outputURL: fileURL, bandCount: bandCount)
-        try pipeline.start()
-        self.pipeline = pipeline
+            isRecording = true
+            isPaused = false
+            startTime = Date()
+            pausedElapsed = 0
+            elapsedSeconds = 0
+            frequencyBands = Array(repeating: 0, count: bandCount)
 
-        isRecording = true
-        isPaused = false
-        startTime = Date()
-        pausedElapsed = 0
-        elapsedSeconds = 0
-        frequencyBands = Array(repeating: 0, count: bandCount)
+            observeInterruptions()
+            observeRouteChanges()
+            startTimer()
+            beginBackgroundTaskIfNeeded()
+        } catch {
+            logger.error(
+                "Failed to start recording. error=\(error.localizedDescription, privacy: .public) route=\(self.describeRoute(session.currentRoute), privacy: .public) availableInputs=\(self.describeInputs(session.availableInputs), privacy: .public)"
+            )
+            pipeline?.stop()
+            pipeline = nil
+            startedOnCarAudioRoute = false
+            removeInterruptionObserver()
+            removeRouteChangeObserver()
+            try? session.setPreferredInput(nil)
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
 
-        observeInterruptions()
-        startTimer()
-        beginBackgroundTaskIfNeeded()
+            if self.routeUsesCarAudio(session.currentRoute) {
+                throw RecordingError.incompatibleCarAudioRoute
+            }
+            throw error
+        }
     }
 
     func pauseRecording() {
@@ -86,10 +117,14 @@ final class AudioRecorder: @unchecked Sendable {
         // Restart engine if it was stopped by an interruption
         if let pipeline, !pipeline.isRunning {
             do {
-                try AVAudioSession.sharedInstance().setActive(true)
+                let session = AVAudioSession.sharedInstance()
+                try refreshSessionForCurrentRoute(session)
                 try pipeline.restart()
             } catch {
-                logger.error("Failed to restart audio engine: \(error)")
+                let session = AVAudioSession.sharedInstance()
+                logger.error(
+                    "Failed to restart audio engine. error=\(error.localizedDescription, privacy: .public) route=\(self.describeRoute(session.currentRoute), privacy: .public)"
+                )
                 return
             }
         }
@@ -101,6 +136,7 @@ final class AudioRecorder: @unchecked Sendable {
 
     func stopRecording() -> URL? {
         removeInterruptionObserver()
+        removeRouteChangeObserver()
         timer?.invalidate()
         timer = nil
 
@@ -109,11 +145,13 @@ final class AudioRecorder: @unchecked Sendable {
         pipeline = nil
 
         // Deactivate audio session so it doesn't interfere with network requests
+        try? AVAudioSession.sharedInstance().setPreferredInput(nil)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         isRecording = false
         isPaused = false
         didRecordInBackground = false
+        startedOnCarAudioRoute = false
         startTime = nil
         pausedElapsed = 0
         endBackgroundTaskIfNeeded()
@@ -123,16 +161,20 @@ final class AudioRecorder: @unchecked Sendable {
 
     func cancelRecording() {
         removeInterruptionObserver()
+        removeRouteChangeObserver()
         timer?.invalidate()
         timer = nil
 
         let url = pipeline?.fileURL
         pipeline?.stop()
         pipeline = nil
+        try? AVAudioSession.sharedInstance().setPreferredInput(nil)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         isRecording = false
         isPaused = false
         didRecordInBackground = false
+        startedOnCarAudioRoute = false
 
         if let url {
             try? FileManager.default.removeItem(at: url)
@@ -191,6 +233,47 @@ final class AudioRecorder: @unchecked Sendable {
         }
     }
 
+    private func observeRouteChanges() {
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            let session = AVAudioSession.sharedInstance()
+            let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            let reason = reasonValue.flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
+            logger.info(
+                "Audio route changed. reason=\(String(describing: reason), privacy: .public) route=\(self.describeRoute(session.currentRoute), privacy: .public)"
+            )
+
+            guard self.isRecording else { return }
+            guard self.startedOnCarAudioRoute || self.routeUsesCarAudio(session.currentRoute) else { return }
+            do {
+                try self.refreshSessionForCurrentRoute(session)
+                if let pipeline = self.pipeline, self.isPaused, !pipeline.isRunning {
+                    try pipeline.restart()
+                    self.pipeline?.resume()
+                    self.isPaused = false
+                    self.startTime = Date()
+                    self.startTimer()
+                    logger.info("Recording recovered after route change")
+                }
+            } catch {
+                logger.error(
+                    "Failed to refresh recording session after route change: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+    }
+
+    private func removeRouteChangeObserver() {
+        if let routeChangeObserver {
+            NotificationCenter.default.removeObserver(routeChangeObserver)
+            self.routeChangeObserver = nil
+        }
+    }
+
     // MARK: - Background
 
     func handleEnteredBackground() {
@@ -233,6 +316,9 @@ final class AudioRecorder: @unchecked Sendable {
 
             // Detect engine stopped unexpectedly (e.g. phone call with compact UI)
             if let pipeline = self.pipeline, !pipeline.isRunning, !self.isPaused {
+                if self.recoverStoppedEngineIfPossible() {
+                    return
+                }
                 self.pauseRecording()
                 logger.info("Recording paused — audio engine stopped unexpectedly")
                 return
@@ -256,6 +342,78 @@ final class AudioRecorder: @unchecked Sendable {
 
         }
     }
+
+    private func configureSessionForRecording(_ session: AVAudioSession) throws {
+        try refreshSessionForCurrentRoute(session)
+    }
+
+    private func refreshSessionForCurrentRoute(_ session: AVAudioSession) throws {
+        let category = recordingCategory(for: session.currentRoute)
+        let options = recordingCategoryOptions(for: session.currentRoute)
+        try session.setCategory(category, mode: .default, options: options)
+        try session.setActive(true)
+        try configurePreferredInputIfNeeded(session)
+        logger.info(
+            "Configured recording session. category=\(category.rawValue, privacy: .public) options=\(String(describing: options), privacy: .public) route=\(self.describeRoute(session.currentRoute), privacy: .public)"
+        )
+    }
+
+    private func configurePreferredInputIfNeeded(_ session: AVAudioSession) throws {
+        guard routeUsesCarAudio(session.currentRoute) else {
+            try session.setPreferredInput(nil)
+            return
+        }
+
+        // On wired CarPlay, forcing a preferred input can destabilize route negotiation.
+        // Let iOS choose the active microphone, but keep logging the available inputs.
+        logger.info(
+            "Car audio route active; leaving preferred input unchanged. preferred=\(session.preferredInput?.portName ?? "nil", privacy: .public) availableInputs=\(self.describeInputs(session.availableInputs), privacy: .public)"
+        )
+    }
+
+    private func recordingCategoryOptions(for route: AVAudioSessionRouteDescription) -> AVAudioSession.CategoryOptions {
+        routeUsesCarAudio(route) ? [] : [.defaultToSpeaker]
+    }
+
+    private func recordingCategory(for route: AVAudioSessionRouteDescription) -> AVAudioSession.Category {
+        // Wired CarPlay only needs microphone capture here; using a record-only session
+        // avoids forcing iOS to negotiate a simultaneous car-audio output route.
+        routeUsesCarAudio(route) ? .record : .playAndRecord
+    }
+
+    private func recoverStoppedEngineIfPossible() -> Bool {
+        guard let pipeline, startedOnCarAudioRoute || routeUsesCarAudio(AVAudioSession.sharedInstance().currentRoute) else {
+            return false
+        }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try refreshSessionForCurrentRoute(session)
+            try pipeline.restart()
+            logger.info("Recovered stopped audio engine on car audio route")
+            return true
+        } catch {
+            let session = AVAudioSession.sharedInstance()
+            logger.error(
+                "Failed to recover stopped audio engine. error=\(error.localizedDescription, privacy: .public) route=\(self.describeRoute(session.currentRoute), privacy: .public)"
+            )
+            return false
+        }
+    }
+
+    private func routeUsesCarAudio(_ route: AVAudioSessionRouteDescription) -> Bool {
+        route.outputs.contains { $0.portType == .carAudio } || route.inputs.contains { $0.portType == .carAudio }
+    }
+
+    private func describeRoute(_ route: AVAudioSessionRouteDescription) -> String {
+        let inputs = route.inputs.map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")
+        let outputs = route.outputs.map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")
+        return "inputs=[\(inputs)] outputs=[\(outputs)]"
+    }
+
+    private func describeInputs(_ inputs: [AVAudioSessionPortDescription]?) -> String {
+        (inputs ?? []).map { "\($0.portType.rawValue):\($0.portName)" }.joined(separator: ",")
+    }
 }
 
 // MARK: - Audio Pipeline (single AVAudioEngine for recording + FFT)
@@ -265,17 +423,34 @@ private final class AudioPipeline: @unchecked Sendable {
 
     private let engineLock = NSLock()
     private var engine: AVAudioEngine?
+    private var recorder: AVAudioRecorder?
     private let processor: FFTProcessor
     private let bridge: BandBridge
     private let paused = OSAllocatedUnfairLock(initialState: false)
+    private let bandCount: Int
+    private let allowRecorderFallback: Bool
 
-    init(outputURL: URL, bandCount: Int) {
+    init(outputURL: URL, bandCount: Int, allowRecorderFallback: Bool) {
         self.fileURL = outputURL
+        self.bandCount = bandCount
+        self.allowRecorderFallback = allowRecorderFallback
         self.processor = FFTProcessor(fftSize: 1024, bandCount: bandCount)
         self.bridge = BandBridge(count: bandCount)
     }
 
     func start() throws {
+        do {
+            try startEngineBackend()
+        } catch {
+            guard allowRecorderFallback else {
+                throw error
+            }
+            logger.error("AVAudioEngine start failed, falling back to AVAudioRecorder. error=\(error.localizedDescription, privacy: .public)")
+            try startRecorderBackend()
+        }
+    }
+
+    private func startEngineBackend() throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let tapFormat = inputNode.outputFormat(forBus: 0)
@@ -287,7 +462,7 @@ private final class AudioPipeline: @unchecked Sendable {
             self.engine = engine
             engineLock.unlock()
             return
-}
+        }
 
         // Record at full quality for playback — downsampling happens at upload time
         let fileSettings: [String: Any] = [
@@ -325,12 +500,33 @@ private final class AudioPipeline: @unchecked Sendable {
         engineLock.unlock()
     }
 
+    private func startRecorderBackend() throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey: 128_000,
+        ]
+
+        let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
+        recorder.isMeteringEnabled = true
+        guard recorder.record() else {
+            throw RecordingError.formatUnavailable
+        }
+
+        self.recorder = recorder
+    }
+
     func pause() {
         paused.withLock { $0 = true }
+        recorder?.pause()
     }
 
     func resume() {
         paused.withLock { $0 = false }
+        if let recorder, !recorder.isRecording {
+            recorder.record()
+        }
     }
 
     func stop() {
@@ -340,16 +536,25 @@ private final class AudioPipeline: @unchecked Sendable {
         engineLock.unlock()
         eng?.inputNode.removeTap(onBus: 0)
         eng?.stop()
+        recorder?.stop()
+        recorder = nil
     }
 
     var isRunning: Bool {
         engineLock.lock()
         let running = engine?.isRunning ?? false
         engineLock.unlock()
-        return running
+        return running || (recorder?.isRecording ?? false)
     }
 
     func restart() throws {
+        if let recorder {
+            if !recorder.isRecording && !recorder.record() {
+                throw RecordingError.formatUnavailable
+            }
+            return
+        }
+
         engineLock.lock()
         let eng = engine
         engineLock.unlock()
@@ -358,7 +563,16 @@ private final class AudioPipeline: @unchecked Sendable {
     }
 
     func readBands() -> [Float] {
-        bridge.read()
+        if let recorder {
+            recorder.updateMeters()
+            let averagePower = recorder.averagePower(forChannel: 0)
+            let normalizedLevel = max(0, min(1, (averagePower + 60) / 60))
+            let bands = Array(repeating: normalizedLevel, count: bandCount)
+            bridge.write(bands)
+            return bands
+        }
+
+        return bridge.read()
     }
 }
 
