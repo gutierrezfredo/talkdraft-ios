@@ -13,6 +13,8 @@ struct HomeView: View {
     @Environment(NoteStore.self) var noteStore
     @Environment(SettingsStore.self) var settingsStore
     @Environment(\.colorScheme) var colorScheme
+    @Binding var pendingDeepLink: DeepLink?
+    var isMandatoryPaywallPresented: Bool
     @State var selectedCategory: UUID?
     @State var showRecordView = false
     @State var sortOrder: NoteSortOrder = .updatedAt
@@ -47,6 +49,12 @@ struct HomeView: View {
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8),
     ]
+
+    private func consumePendingRecordDeepLinkIfPossible() {
+        guard pendingDeepLink == .record, !isMandatoryPaywallPresented else { return }
+        showRecordView = true
+        pendingDeepLink = nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -266,6 +274,17 @@ struct HomeView: View {
             Button("OK") { noteStore.lastError = nil }
         } message: {
             Text(noteStore.lastError ?? "")
+        }
+        .onAppear {
+            consumePendingRecordDeepLinkIfPossible()
+        }
+        .onChange(of: pendingDeepLink) { _, link in
+            guard link == .record else { return }
+            consumePendingRecordDeepLinkIfPossible()
+        }
+        .onChange(of: isMandatoryPaywallPresented) { _, presented in
+            guard !presented else { return }
+            consumePendingRecordDeepLinkIfPossible()
         }
     }
 }
