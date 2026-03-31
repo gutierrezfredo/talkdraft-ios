@@ -98,6 +98,15 @@
 
 ## Changelog
 
+### 2026-03-30 — Assets, Polish & Fixes (PRs #57, #60, #61)
+- New app icons (default + dark) with Luna headphones design
+- Updated all 11 Luna mascot illustrations
+- Splash screen: logo with floating Z's replaces LunaMascotView moon pose
+- Fix italic "Transcribing…" text — `.fontDesign(nil)` overrides global `.rounded` (SF Pro Rounded has no italic)
+- Luna transcription screen threshold lowered from 5 min to 30 seconds
+- Fix manual heading typing: preserve font family, auto-capitalize after heading prefix (Codex)
+- Fix recording across car/device audio routes with AVAudioSession route change handling (Codex)
+
 ### 2026-03-30 — Background Recording (PR #53)
 - Re-added `UIBackgroundModes: audio` to Info.plist with proper supporting code
 - `AudioRecorder` registers `beginBackgroundTask` as safety net; audio session is the primary keep-alive
