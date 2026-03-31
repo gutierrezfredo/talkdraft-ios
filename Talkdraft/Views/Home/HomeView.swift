@@ -50,6 +50,12 @@ struct HomeView: View {
         GridItem(.flexible(), spacing: 8),
     ]
 
+    private func consumePendingRecordDeepLinkIfPossible() {
+        guard pendingDeepLink == .record, !isMandatoryPaywallPresented else { return }
+        showRecordView = true
+        pendingDeepLink = nil
+    }
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -269,15 +275,16 @@ struct HomeView: View {
         } message: {
             Text(noteStore.lastError ?? "")
         }
+        .onAppear {
+            consumePendingRecordDeepLinkIfPossible()
+        }
         .onChange(of: pendingDeepLink) { _, link in
-            guard link == .record, !isMandatoryPaywallPresented else { return }
-            showRecordView = true
-            pendingDeepLink = nil
+            guard link == .record else { return }
+            consumePendingRecordDeepLinkIfPossible()
         }
         .onChange(of: isMandatoryPaywallPresented) { _, presented in
-            guard !presented, pendingDeepLink == .record else { return }
-            showRecordView = true
-            pendingDeepLink = nil
+            guard !presented else { return }
+            consumePendingRecordDeepLinkIfPossible()
         }
     }
 }

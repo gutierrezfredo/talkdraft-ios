@@ -777,7 +777,7 @@
 				CODE_SIGN_ENTITLEMENTS = Talkdraft/App/Talkdraft.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = Talkdraft/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -934,7 +934,7 @@
 				CODE_SIGN_ENTITLEMENTS = Talkdraft/App/Talkdraft.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = Talkdraft/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -953,7 +953,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = TalkdraftWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../../Frameworks";
@@ -969,7 +969,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = H83F573KQB;
 				INFOPLIST_FILE = TalkdraftWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../../Frameworks";
