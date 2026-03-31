@@ -43,7 +43,7 @@ struct QuickRecordLockScreenView: View {
     @Environment(\.widgetFamily) var family
 
     var body: some View {
-        Link(destination: URL(string: "talkdraft://record")!) {
+        Group {
             switch family {
             case .accessoryCircular:
                 ZStack {
@@ -63,6 +63,7 @@ struct QuickRecordLockScreenView: View {
                 Image(systemName: "mic.fill")
             }
         }
+        .widgetURL(URL(string: "talkdraft://record"))
     }
 }
 

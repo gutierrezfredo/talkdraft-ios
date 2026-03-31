@@ -278,6 +278,16 @@ struct HomeView: View {
         .onAppear {
             consumePendingRecordDeepLinkIfPossible()
         }
+        .task {
+            try? await Task.sleep(for: .milliseconds(500))
+            consumePendingRecordDeepLinkIfPossible()
+        }
+        .onOpenURL { url in
+            if url.scheme == "talkdraft", url.host == "record" {
+                pendingDeepLink = .record
+                consumePendingRecordDeepLinkIfPossible()
+            }
+        }
         .onChange(of: pendingDeepLink) { _, link in
             guard link == .record else { return }
             consumePendingRecordDeepLinkIfPossible()
