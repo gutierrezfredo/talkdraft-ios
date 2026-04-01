@@ -94,7 +94,7 @@ struct RecordView: View {
         }
         .interactiveDismissDisabled(recorder.elapsedSeconds >= 1)
         .alert("Discard Recording?", isPresented: $showCancelConfirmation) {
-            Button("Discard", role: .destructive) {
+            Button("Cancel Recording", role: .destructive) {
                 recorder.cancelRecording()
                 dismiss()
             }
