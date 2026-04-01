@@ -21,20 +21,48 @@ struct QuickRecordProvider: TimelineProvider {
 }
 
 struct QuickRecordWidgetView: View {
+    private let brandViolet = Color(red: 0x7C / 255, green: 0x3A / 255, blue: 0xED / 255)
+    private let deepViolet = Color(red: 0x5B / 255, green: 0x21 / 255, blue: 0xB6 / 255)
+
     var body: some View {
         Link(destination: URL(string: "talkdraft://record")!) {
-            VStack(spacing: 12) {
+            ZStack {
+                // Radial glow behind mic
+                RadialGradient(
+                    colors: [brandViolet.opacity(0.6), .clear],
+                    center: .init(x: 0.5, y: 0.3),
+                    startRadius: 10,
+                    endRadius: 90
+                )
+
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 36, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(.white)
-                Text("Record")
-                    .font(.system(.headline, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(width: 100, height: 100)
+                    .background(Circle().fill(.black.opacity(0.2)))
+                    .offset(y: -10)
+
+                // Luna at bottom-left
+                VStack {
+                    Spacer()
+                    HStack {
+                        Image("luna-widget")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 130)
+                            .offset(x: -20, y: 18)
+                        Spacer()
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .containerBackground(for: .widget) {
-            Color(red: 0x7C / 255, green: 0x3A / 255, blue: 0xED / 255)
+            LinearGradient(
+                colors: [brandViolet, deepViolet],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
     }
 }
