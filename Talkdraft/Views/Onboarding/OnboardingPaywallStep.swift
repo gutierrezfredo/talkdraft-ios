@@ -26,9 +26,6 @@ struct OnboardingPaywallStep: View {
             VStack(spacing: 24) {
                 header
                 featureList
-                if showsTrialMessaging {
-                    trialTimeline
-                }
                 planSelection
                 subscribeButton
                 subscriptionDetails

@@ -93,6 +93,8 @@
 		DC392B65AF74654C9B399FA2 /* while-binge.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = D8227C98D1C7775FB5984BA9 /* while-binge.mp4 */; };
 		DD6DDC53D851891971FAFD85 /* BackgroundRecordingBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E40746FE8FE682A645726A39 /* BackgroundRecordingBanner.swift */; };
 		DEBE6F7082A99954B5584DBD /* ExpandingTextView+Scrolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C370238C90495234645097 /* ExpandingTextView+Scrolling.swift */; };
+		E095BC10AE83C5433A7823F1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6CF59213B813CE983E86B5B3 /* Assets.xcassets */; };
+		E154E638F5FF71D5E971E21E /* OnboardingTrialStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F3B6928ED4CA0290A60614 /* OnboardingTrialStep.swift */; };
 		E4D47CD3B7E0BBCCB3D83E7F /* OnboardingWelcomeStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB97007CC183B4173450CC8E /* OnboardingWelcomeStep.swift */; };
 		E52215C28BD1B95AA17D5550 /* OnboardingCategoriesStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0398F1BFCACED931B262C5 /* OnboardingCategoriesStep.swift */; };
 		EB85C4BC765CD30478B538E9 /* NoteDetailTranscriptionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47287DA73C7655C27BD1B9B5 /* NoteDetailTranscriptionViews.swift */; };
@@ -180,12 +182,14 @@
 		6A7D3C556B9E570F3B4FE47A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		6B204BF76CD901C0CAE94935 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6BA8589752960054085DA758 /* transcribing-1.mp4 */ = {isa = PBXFileReference; path = "transcribing-1.mp4"; sourceTree = "<group>"; };
+		6CF59213B813CE983E86B5B3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6D5E4C47C5BA609ADDA45748 /* NoteDetailView+RewriteActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+RewriteActions.swift"; sourceTree = "<group>"; };
 		700D07AB41C365FB7CE2F5F4 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		73A6FB64E6A7AA4E37417B89 /* AudioImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportSheet.swift; sourceTree = "<group>"; };
 		7436ED41BD4751A753747357 /* RewriteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewriteSheet.swift; sourceTree = "<group>"; };
 		782B65C30787C51E9687143E /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		78B62096A620FFE1EBE3755B /* while-work.mp4 */ = {isa = PBXFileReference; path = "while-work.mp4"; sourceTree = "<group>"; };
+		79F3B6928ED4CA0290A60614 /* OnboardingTrialStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingTrialStep.swift; sourceTree = "<group>"; };
 		7A4CC5C7738A79C5FA07BDDA /* AudioCompressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCompressor.swift; sourceTree = "<group>"; };
 		7A8E79BBEEBEEEF5C8C1621F /* LoopingVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopingVideoView.swift; sourceTree = "<group>"; };
 		7E2F84881BDB810593D03A13 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -270,6 +274,7 @@
 		182D3AD6945954C0A832EAF3 /* TalkdraftWidget */ = {
 			isa = PBXGroup;
 			children = (
+				6CF59213B813CE983E86B5B3 /* Assets.xcassets */,
 				08006E0C4C1C26DAFE7BDC26 /* Info.plist */,
 				572F585A2AE7202528E9ABA7 /* TalkdraftWidget.swift */,
 			);
@@ -503,6 +508,7 @@
 				5B947A3A74F4130612FD8B02 /* OnboardingLanguageStep.swift */,
 				989EC18680A2974D1523C228 /* OnboardingNotificationsStep.swift */,
 				E4FCB54E644EE108D767D526 /* OnboardingPaywallStep.swift */,
+				79F3B6928ED4CA0290A60614 /* OnboardingTrialStep.swift */,
 				99A66D34530742F8CC32345F /* OnboardingView.swift */,
 				AB97007CC183B4173450CC8E /* OnboardingWelcomeStep.swift */,
 			);
@@ -517,6 +523,7 @@
 			buildConfigurationList = 8332D5FB96791C703EA53920 /* Build configuration list for PBXNativeTarget "TalkdraftWidget" */;
 			buildPhases = (
 				ED0052D77736FA974B0BC262 /* Sources */,
+				FCD0D6963A665AB52802D8A3 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -637,6 +644,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FCD0D6963A665AB52802D8A3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E095BC10AE83C5433A7823F1 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -702,6 +717,7 @@
 				CF3D33E09D4108855FEB903C /* OnboardingLanguageStep.swift in Sources */,
 				5A4A8BB1F74FDE70D70E0052 /* OnboardingNotificationsStep.swift in Sources */,
 				83C5EEA510BAEF387692ADF9 /* OnboardingPaywallStep.swift in Sources */,
+				E154E638F5FF71D5E971E21E /* OnboardingTrialStep.swift in Sources */,
 				D8D61E0303F4F35B3923B5ED /* OnboardingView.swift in Sources */,
 				E4D47CD3B7E0BBCCB3D83E7F /* OnboardingWelcomeStep.swift in Sources */,
 				1E9A4642F4FF6C83B2330A1D /* PaywallView.swift in Sources */,

@@ -6,6 +6,7 @@ struct OnboardingView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var step: OnboardingStep = .language
@@ -48,6 +49,12 @@ struct OnboardingView: View {
                         )
                         .id(stepViewID(for: .categories))
                         .transition(stepTransition)
+                    }
+
+                    if step == .trial {
+                        OnboardingTrialStep(onContinue: advance)
+                            .id(stepViewID(for: .trial))
+                            .transition(stepTransition)
                     }
 
                     if step == .notifications {
@@ -110,8 +117,10 @@ struct OnboardingView: View {
 
     private var progressSteps: [OnboardingStep] {
         switch step {
+        case .trial:
+            [.language, .categories, .trial]
         case .notifications:
-            [.language, .categories, .paywall, .notifications]
+            [.language, .categories, .trial, .notifications]
         default:
             [.language, .categories, .paywall]
         }
@@ -161,6 +170,16 @@ struct OnboardingView: View {
     }
 
     private func advance() {
+        // Categories → trial (if eligible) or paywall
+        if step == .categories {
+            navigationDirection = .forward
+            #if DEBUG
+            step = .trial
+            #else
+            step = subscriptionStore.isTrialEligible ? .trial : .paywall
+            #endif
+            return
+        }
         guard let next = step.next else {
             finishOnboarding()
             return
@@ -215,39 +234,34 @@ struct OnboardingView: View {
 private enum OnboardingStep: Int, CaseIterable {
     case language
     case categories
+    case trial
     case paywall
     case notifications
 
     var showsBackButton: Bool {
         switch self {
-        case .language, .paywall, .notifications: false
-        case .categories: true
+        case .language, .notifications: false
+        case .categories, .trial, .paywall: true
         }
     }
 
     var previous: OnboardingStep? {
         switch self {
-        case .language:
-            nil
-        case .categories:
-            .language
-        case .paywall:
-            nil
-        case .notifications:
-            nil
+        case .language: nil
+        case .categories: .language
+        case .trial: .categories
+        case .paywall: .categories
+        case .notifications: nil
         }
     }
 
     var next: OnboardingStep? {
         switch self {
-        case .language:
-            .categories
-        case .categories:
-            .paywall
-        case .paywall:
-            nil
-        case .notifications:
-            nil
+        case .language: .categories
+        case .categories: nil // decided at runtime based on trial eligibility
+        case .trial: .paywall
+        case .paywall: nil
+        case .notifications: nil
         }
     }
 }
