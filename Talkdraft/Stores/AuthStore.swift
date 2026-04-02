@@ -202,7 +202,8 @@ final class AuthStore {
 
     // MARK: - Anonymous Sign-In
 
-    func signInAnonymously() async {
+    @discardableResult
+    func signInAnonymously() async -> Bool {
         isLoading = true
         error = nil
         defer { isLoading = false }
@@ -210,8 +211,10 @@ final class AuthStore {
         do {
             let session = try await supabase.auth.signInAnonymously()
             await handleSession(session)
+            return true
         } catch {
             self.error = error.localizedDescription
+            return false
         }
     }
 

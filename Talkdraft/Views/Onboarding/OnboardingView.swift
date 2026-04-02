@@ -11,6 +11,7 @@ struct OnboardingView: View {
     @State private var navigationDirection: NavigationDirection = .forward
     @State private var selectedCategoryIndices: Set<Int> = []
     @State private var showTrialReminderSheet = false
+    @State private var guestAuthError: String?
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -80,6 +81,22 @@ struct OnboardingView: View {
             .interactiveDismissDisabled()
             .presentationDetents([.medium])
             .presentationBackground { SheetBackground() }
+        }
+        .alert("Unable to Continue as Guest", isPresented: .init(
+            get: { guestAuthError != nil },
+            set: {
+                if !$0 {
+                    guestAuthError = nil
+                    authStore.error = nil
+                }
+            }
+        )) {
+            Button("OK") {
+                guestAuthError = nil
+                authStore.error = nil
+            }
+        } message: {
+            Text(guestAuthError ?? "")
         }
     }
 
@@ -178,7 +195,12 @@ struct OnboardingView: View {
 
     private func handleGuestContinue() {
         Task {
-            await authStore.signInAnonymously()
+            guestAuthError = nil
+            let signedIn = await authStore.signInAnonymously()
+            guard signedIn, authStore.isAuthenticated, authStore.isGuest, authStore.userId != nil else {
+                guestAuthError = authStore.error ?? "Unable to continue as guest right now. Please try again."
+                return
+            }
             createCategories()
             finishOnboarding()
         }
