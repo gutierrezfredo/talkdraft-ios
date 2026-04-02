@@ -311,6 +311,11 @@ struct OnboardingPaywallStep: View {
 
         awaitingPurchaseAfterAuth = false
         Task {
+            if subscriptionStore.isPro {
+                onRestored()
+                return
+            }
+
             guard let product = subscriptionStore.yearlyProduct else {
                 errorMessage = "Products not available. Please try again later."
                 return
