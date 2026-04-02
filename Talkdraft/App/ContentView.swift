@@ -237,6 +237,7 @@ struct ContentView: View {
                 await noteStore.refreshRewriteJobs()
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 noteStore.retryWaitingNotes(language: language, userId: authStore.userId, customDictionary: settingsStore.customDictionary)
+                noteStore.retryPendingTitleGenerations()
             }
         }
         .onChange(of: scenePhase) { _, phase in

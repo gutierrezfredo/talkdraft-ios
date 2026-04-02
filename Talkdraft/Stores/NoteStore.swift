@@ -124,9 +124,11 @@ final class NoteStore {
     var localVoiceBodyStates: [UUID: NoteBodyState]
     var pendingNoteUpserts: [UUID: Note]
     var pendingHardDeletes: [UUID: PendingHardDelete]
+    var pendingTitleGenerationIds: Set<UUID>
     let persistsLocalVoiceBodyStates: Bool
     let persistsPendingNoteUpserts: Bool
     let persistsPendingHardDeletes: Bool
+    let persistsPendingTitleGenerations: Bool
     @ObservationIgnored let noteSyncDebounceDuration: Duration
     @ObservationIgnored let noteUpsertExecutor: NoteUpsertExecutor
     @ObservationIgnored let audioDeleteExecutor: AudioDeleteExecutor
@@ -152,6 +154,8 @@ final class NoteStore {
         persistsPendingNoteUpserts: Bool = true,
         pendingHardDeletes: [UUID: PendingHardDelete]? = nil,
         persistsPendingHardDeletes: Bool = true,
+        pendingTitleGenerationIds: Set<UUID>? = nil,
+        persistsPendingTitleGenerations: Bool = true,
         noteSyncDebounceDuration: Duration = .milliseconds(700),
         noteUpsertExecutor: NoteUpsertExecutor? = nil,
         audioDeleteExecutor: AudioDeleteExecutor? = nil,
@@ -163,6 +167,7 @@ final class NoteStore {
         self.persistsLocalVoiceBodyStates = persistsLocalVoiceBodyStates
         self.persistsPendingNoteUpserts = persistsPendingNoteUpserts
         self.persistsPendingHardDeletes = persistsPendingHardDeletes
+        self.persistsPendingTitleGenerations = persistsPendingTitleGenerations
         self.noteSyncDebounceDuration = noteSyncDebounceDuration
         self.noteUpsertExecutor = noteUpsertExecutor ?? { note in
             try await supabase
@@ -225,6 +230,7 @@ final class NoteStore {
         self.localVoiceBodyStates = localVoiceBodyStates ?? [:]
         self.pendingNoteUpserts = pendingNoteUpserts ?? [:]
         self.pendingHardDeletes = pendingHardDeletes ?? [:]
+        self.pendingTitleGenerationIds = pendingTitleGenerationIds ?? []
     }
 
     // MARK: - Multi-Speaker Format
@@ -261,6 +267,7 @@ final class NoteStore {
     static let localVoiceBodyStateKey = "localVoiceBodyStates"
     static let pendingNoteUpsertsKey = "pendingNoteUpserts"
     static let pendingHardDeletesKey = "pendingHardDeletes"
+    static let pendingTitleGenerationKey = "pendingTitleGenerationIds"
 
     static func scopedKey(_ base: String, userId: UUID?) -> String {
         "\(base).\(userId?.uuidString ?? "anonymous")"
@@ -506,6 +513,7 @@ final class NoteStore {
         try? await fetchedNotes
         try? await fetchedCategories
         await refreshRewriteJobs()
+        retryPendingTitleGenerations()
     }
 
     func fetchNotes() async throws {

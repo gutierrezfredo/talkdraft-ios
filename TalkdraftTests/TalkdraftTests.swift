@@ -138,6 +138,100 @@ struct AudioWorkflowRegressionTests {
     #expect(store.bodyState(for: updated) == .content)
     #expect(store.localAudioFileURL(for: updated.id, audioUrl: updated.audioUrl) == nil)
 }
+
+@MainActor
+@Test func noteStoreRetriesTransientTitleGenerationFailures() async throws {
+    actor AttemptRecorder {
+        private(set) var count = 0
+
+        func next() -> Int {
+            count += 1
+            return count
+        }
+    }
+
+    let attempts = AttemptRecorder()
+    let note = makeNote(content: "Body", source: .voice)
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingTitleGenerations: false,
+        noteSyncDebounceDuration: .milliseconds(1),
+        noteUpsertExecutor: { _ in },
+        aiTitleExecutor: { _, _ in
+            let attempt = await attempts.next()
+            if attempt < 3 {
+                throw AIError.serverError(statusCode: 503, message: "high demand")
+            }
+            return "Recovered title"
+        }
+    )
+    store.notes = [note]
+
+    store.generateTitle(for: note.id, content: note.content, language: "en")
+
+    for _ in 0..<120 {
+        if store.notes.first?.title == "Recovered title" {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+
+    #expect(store.notes.first?.title == "Recovered title")
+    #expect(store.generatingTitleIds.isEmpty)
+    #expect(store.pendingTitleGenerationIds.isEmpty)
+}
+
+@MainActor
+@Test func noteStoreKeepsTransientTitleFailuresQueuedForRepair() async throws {
+    let note = makeNote(
+        content: "Body",
+        source: .voice,
+        durationSeconds: 120,
+        createdAt: .now.addingTimeInterval(-60),
+        updatedAt: .now.addingTimeInterval(-30)
+    )
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingTitleGenerations: false,
+        noteUpsertExecutor: { _ in },
+        aiTitleExecutor: { _, _ in
+            throw AIError.serverError(statusCode: 503, message: "high demand")
+        }
+    )
+    store.notes = [note]
+
+    store.generateTitle(for: note.id, content: note.content, language: "en")
+
+    for _ in 0..<120 {
+        if store.generatingTitleIds.isEmpty {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+
+    #expect(store.notes.first?.title == nil)
+    #expect(store.pendingTitleGenerationIds.contains(note.id))
+}
+
+@MainActor
+@Test func noteStoreClearsPendingTitleRepairWhenUserSetsTitle() {
+    let note = makeNote(content: "Body", source: .voice)
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        pendingTitleGenerationIds: [note.id],
+        persistsPendingTitleGenerations: false
+    )
+    store.notes = [note]
+
+    var updated = note
+    updated.title = "Manual title"
+    store.updateNote(updated)
+
+    #expect(!store.pendingTitleGenerationIds.contains(note.id))
+}
 }
 
 @Test func noteBodyStateRecognizesVoiceTranscriptionStates() {
