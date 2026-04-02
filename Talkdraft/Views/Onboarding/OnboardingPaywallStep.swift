@@ -5,7 +5,7 @@ import SwiftUI
 struct OnboardingPaywallStep: View {
     let onPurchaseCompleted: (_ startedTrial: Bool) -> Void
     let onRestored: () -> Void
-    let onGuestContinue: () -> Void
+    var onGuestContinue: (() -> Void)?
     var onDismiss: (() -> Void)?
 
     @Environment(AuthStore.self) private var authStore
@@ -18,6 +18,11 @@ struct OnboardingPaywallStep: View {
     @State private var errorMessage: String?
 
     private let fallbackYearlyPrice = "$59.99"
+
+    /// User is signed in with a real account (not guest, not unauthenticated)
+    private var isAuthenticatedUser: Bool {
+        authStore.isAuthenticated && !authStore.isGuest
+    }
 
     private var yearlyPrice: String {
         subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
@@ -70,14 +75,16 @@ struct OnboardingPaywallStep: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
 
-                Button(action: onGuestContinue) {
-                    Text("Continue as Guest")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
+                if let onGuestContinue {
+                    Button(action: onGuestContinue) {
+                        Text("Continue as Guest")
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .frame(height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 legalFooter
                     .padding(.bottom, 8)
@@ -220,8 +227,11 @@ struct OnboardingPaywallStep: View {
             if isProcessing {
                 ProgressView()
                     .frame(height: 56)
+            } else if isAuthenticatedUser {
+                // Already signed in — show direct subscribe button
+                subscribeButton
             } else {
-                // Continue with Apple
+                // Not signed in or guest — show auth buttons
                 SignInWithAppleButton(.continue) { request in
                     awaitingPurchaseAfterAuth = true
                     authStore.appleSignInRequest(request)
@@ -232,7 +242,6 @@ struct OnboardingPaywallStep: View {
                 .frame(height: 56)
                 .clipShape(Capsule())
 
-                // Continue with Email
                 Button {
                     awaitingPurchaseAfterAuth = true
                     showEmailForm = true
@@ -262,7 +271,37 @@ struct OnboardingPaywallStep: View {
         }
     }
 
-    // MARK: - Purchase Logic
+    // MARK: - Subscribe Button (for authenticated users)
+
+    private var subscribeButton: some View {
+        Button {
+            Task {
+                guard let product = subscriptionStore.yearlyProduct else {
+                    errorMessage = "Products not available. Please try again later."
+                    return
+                }
+                do {
+                    let startedTrial = subscriptionStore.isTrialEligible
+                    try await subscriptionStore.purchase(product)
+                    if subscriptionStore.isPro {
+                        onPurchaseCompleted(startedTrial)
+                    }
+                } catch {
+                    errorMessage = "Purchase failed: \(error.localizedDescription)"
+                }
+            }
+        } label: {
+            Text(subscriptionStore.isTrialEligible ? "Start 7-Day Free Trial" : "Subscribe Now")
+                .fontWeight(.bold)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .foregroundStyle(.white)
+                .background(Color.brand, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Purchase Logic (for auth → purchase flow)
 
     private func attemptPurchaseIfReady() {
         guard authStore.isAuthenticated,

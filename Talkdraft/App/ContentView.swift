@@ -145,7 +145,10 @@ struct ContentView: View {
                         isMandatoryPaywallPresented: showMandatoryPaywall.wrappedValue
                     )
                         .fullScreenCover(isPresented: showMandatoryPaywall) {
-                            PaywallView(mandatory: true)
+                            OnboardingPaywallStep(
+                                onPurchaseCompleted: { _ in },
+                                onRestored: {}
+                            )
                         }
                 } else if shouldShowPostAuthTransition {
                     LoginView(phase: .transitioning)

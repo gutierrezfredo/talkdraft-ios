@@ -238,7 +238,11 @@ struct HomeView: View {
             .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
         .fullScreenCover(isPresented: $showGuestPaywall) {
-            PaywallView(mandatory: false)
+            OnboardingPaywallStep(
+                onPurchaseCompleted: { _ in showGuestPaywall = false },
+                onRestored: { showGuestPaywall = false },
+                onDismiss: { showGuestPaywall = false }
+            )
         }
         .sheet(isPresented: $showWidgetDiscovery) {
             WidgetDiscoverySheet()
