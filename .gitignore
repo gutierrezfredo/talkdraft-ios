@@ -35,14 +35,17 @@ supabase/.temp/
 supabase/functions/*
 !supabase/functions/_shared/
 !supabase/functions/process-rewrite-job/
+!supabase/functions/generate-title/
 !supabase/functions/transcribe/
 !supabase/functions/transcribe-diarized/
 supabase/functions/_shared/*
 supabase/functions/process-rewrite-job/*
+supabase/functions/generate-title/*
 supabase/functions/transcribe/*
 supabase/functions/transcribe-diarized/*
 !supabase/functions/_shared/rewrite.ts
 !supabase/functions/process-rewrite-job/index.ts
+!supabase/functions/generate-title/index.ts
 !supabase/functions/transcribe/index.ts
 !supabase/functions/transcribe-diarized/index.ts
 supabase/sql/*

@@ -37,9 +37,9 @@ struct TalkdraftApp: App {
                 .onOpenURL { url in
                     if url.scheme == "talkdraft", url.host == "record" {
                         pendingDeepLink = .record
-                    } else if url.scheme == "talkdraft" {
+                    } else if url.scheme == "talkdraft", url.host == "auth", url.path == "/callback" {
                         Task { await authStore.handleURL(url) }
-                    } else {
+                    } else if url.scheme != "talkdraft" {
                         GIDSignIn.sharedInstance.handle(url)
                     }
                 }
