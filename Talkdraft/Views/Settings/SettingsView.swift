@@ -1,6 +1,7 @@
 import StoreKit
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(AuthStore.self) private var authStore
@@ -15,6 +16,8 @@ struct SettingsView: View {
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
     @State private var showAudioImporter = false
+    @State private var showTrialReminderTest = false
+    @State private var showWidgetDiscoveryTest = false
     @State private var importedNote: Note?
 
     private var backgroundColor: Color {
@@ -240,6 +243,47 @@ struct SettingsView: View {
                     )
                 }
 
+                // MARK: - Debug (only in DEBUG builds)
+                #if DEBUG
+                SettingsSection("Developer") {
+                    Button {
+                        UserDefaults.standard.removeObject(forKey: "onboarding.completed.device")
+                        if let userId = authStore.userId {
+                            UserDefaults.standard.removeObject(forKey: "onboarding.completed.\(userId.uuidString)")
+                        }
+                        Task {
+                            try? await authStore.signOut()
+                        }
+                    } label: {
+                        SettingsRow(icon: "arrow.counterclockwise", title: "Reset Onboarding (Sign Out)", showChevron: false)
+                    }
+
+                    Button {
+                        // Reset all onboarding + discovery flags without signing out
+                        UserDefaults.standard.removeObject(forKey: "onboarding.completed.device")
+                        if let userId = authStore.userId {
+                            UserDefaults.standard.removeObject(forKey: "onboarding.completed.\(userId.uuidString)")
+                        }
+                        UserDefaults.standard.removeObject(forKey: WidgetDiscoverySheet.dismissedKey)
+                        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                    } label: {
+                        SettingsRow(icon: "repeat", title: "Test Full Flow (Stay Signed In)", showChevron: false)
+                    }
+
+                    Button {
+                        showTrialReminderTest = true
+                    } label: {
+                        SettingsRow(icon: "bell.badge", title: "Test Trial Reminder Sheet", showChevron: false)
+                    }
+
+                    Button {
+                        showWidgetDiscoveryTest = true
+                    } label: {
+                        SettingsRow(icon: "square.grid.2x2", title: "Test Widget Discovery Sheet", showChevron: false)
+                    }
+                }
+                #endif
+
                 // MARK: - Delete Account
 
                 VStack(spacing: 0) {
@@ -330,6 +374,19 @@ struct SettingsView: View {
             Button("Keep Deletion", role: .cancel) {}
         } message: {
             Text("Your account is scheduled for deletion. Would you like to cancel?")
+        }
+        .sheet(isPresented: $showTrialReminderTest) {
+            TrialReminderSheet {
+                showTrialReminderTest = false
+            }
+            .presentationDetents([.medium])
+            .presentationBackground { SheetBackground() }
+        }
+        .sheet(isPresented: $showWidgetDiscoveryTest) {
+            WidgetDiscoverySheet()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground { SheetBackground() }
         }
     }
 

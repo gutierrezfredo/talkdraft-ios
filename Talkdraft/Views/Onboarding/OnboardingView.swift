@@ -5,16 +5,15 @@ struct OnboardingView: View {
 
     @Environment(AuthStore.self) private var authStore
     @Environment(NoteStore.self) private var noteStore
-    @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var step: OnboardingStep = .language
+    @State private var step: OnboardingStep = .welcome
     @State private var navigationDirection: NavigationDirection = .forward
-    @State private var selectedLanguage: String = "auto"
     @State private var selectedCategoryIndices: Set<Int> = []
+    @State private var showTrialReminderSheet = false
 
     private var backgroundColor: Color {
-        return colorScheme == .dark ? .darkBackground : .warmBackground
+        colorScheme == .dark ? .darkBackground : .warmBackground
     }
 
     var body: some View {
@@ -22,22 +21,20 @@ struct OnboardingView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                progressBar
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
-                    .padding(.bottom, 4)
+                if step != .welcome {
+                    progressBar
+                        .padding(.horizontal, 24)
+                        .padding(.top, 12)
+                        .padding(.bottom, 4)
 
-                backBar
+                    backBar
+                }
 
                 ZStack(alignment: .top) {
-                    if step == .language {
-                        OnboardingLanguageStep(
-                            selectedLanguage: $selectedLanguage,
-                            onNext: advance,
-                            onBack: goBack
-                        )
-                        .id(stepViewID(for: .language))
-                        .transition(stepTransition)
+                    if step == .welcome {
+                        OnboardingWelcomeStep(onNext: advance)
+                            .id(stepViewID(for: .welcome))
+                            .transition(stepTransition)
                     }
 
                     if step == .categories {
@@ -50,23 +47,22 @@ struct OnboardingView: View {
                         .transition(stepTransition)
                     }
 
-                    if step == .notifications {
-                        OnboardingNotificationsStep(onComplete: finishOnboarding)
-                        .id(stepViewID(for: .notifications))
-                        .transition(stepTransition)
-                    }
-
                     if step == .paywall {
                         OnboardingPaywallStep(
                             onPurchaseCompleted: { startedTrial in
+                                createCategories()
+                                #if DEBUG
+                                showTrialReminderSheet = true
+                                #else
                                 if startedTrial {
-                                    navigationDirection = .forward
-                                    step = .notifications
+                                    showTrialReminderSheet = true
                                 } else {
                                     finishOnboarding()
                                 }
+                                #endif
                             },
-                            onRestored: { finishOnboarding() }
+                            onRestored: { createCategories(); finishOnboarding() },
+                            onGuestContinue: { handleGuestContinue() }
                         )
                         .id(stepViewID(for: .paywall))
                         .transition(stepTransition)
@@ -76,12 +72,18 @@ struct OnboardingView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: step)
-        .onAppear {
-            selectedLanguage = settingsStore.language
+        .sheet(isPresented: $showTrialReminderSheet) {
+            TrialReminderSheet {
+                showTrialReminderSheet = false
+                finishOnboarding()
+            }
+            .interactiveDismissDisabled()
+            .presentationDetents([.medium])
+            .presentationBackground { SheetBackground() }
         }
     }
 
-    // MARK: - Progress Bar
+    // MARK: - Back Bar
 
     private var backBar: some View {
         HStack {
@@ -108,13 +110,10 @@ struct OnboardingView: View {
         .frame(height: 32)
     }
 
+    // MARK: - Progress Bar
+
     private var progressSteps: [OnboardingStep] {
-        switch step {
-        case .notifications:
-            [.language, .categories, .paywall, .notifications]
-        default:
-            [.language, .categories, .paywall]
-        }
+        [.categories, .paywall]
     }
 
     private var progressBar: some View {
@@ -177,35 +176,38 @@ struct OnboardingView: View {
 
     // MARK: - Completion
 
-    private func finishOnboarding() {
-        // Save language
-        settingsStore.language = selectedLanguage
-        settingsStore.saveLanguageToProfile()
-
-        // Create selected categories (idempotent)
-        if let userId = authStore.userId {
-            let existingNames = Set(noteStore.categories.map { $0.name.lowercased() })
-            for (sortIndex, catIndex) in selectedCategoryIndices.sorted().enumerated() {
-                let suggestion = CategorySuggestion.all[catIndex]
-                guard !existingNames.contains(suggestion.name.lowercased()) else { continue }
-                let category = Category(
-                    id: UUID(),
-                    userId: userId,
-                    name: suggestion.name,
-                    color: suggestion.color,
-                    icon: nil,
-                    sortOrder: noteStore.categories.count + sortIndex,
-                    createdAt: .now
-                )
-                noteStore.addCategory(category)
-            }
+    private func handleGuestContinue() {
+        Task {
+            await authStore.signInAnonymously()
+            createCategories()
+            finishOnboarding()
         }
+    }
 
-        // Mark onboarding complete
+    private func createCategories() {
+        guard let userId = authStore.userId else { return }
+        let existingNames = Set(noteStore.categories.map { $0.name.lowercased() })
+        for (sortIndex, catIndex) in selectedCategoryIndices.sorted().enumerated() {
+            let suggestion = CategorySuggestion.all[catIndex]
+            guard !existingNames.contains(suggestion.name.lowercased()) else { continue }
+            let category = Category(
+                id: UUID(),
+                userId: userId,
+                name: suggestion.name,
+                color: suggestion.color,
+                icon: nil,
+                sortOrder: noteStore.categories.count + sortIndex,
+                createdAt: .now
+            )
+            noteStore.addCategory(category)
+        }
+    }
+
+    private func finishOnboarding() {
+        UserDefaults.standard.set(true, forKey: "onboarding.completed.device")
         if let userId = authStore.userId {
             UserDefaults.standard.set(true, forKey: "onboarding.completed.\(userId.uuidString)")
         }
-
         onComplete()
     }
 }
@@ -213,41 +215,30 @@ struct OnboardingView: View {
 // MARK: - Step Enum
 
 private enum OnboardingStep: Int, CaseIterable {
-    case language
+    case welcome
     case categories
     case paywall
-    case notifications
 
     var showsBackButton: Bool {
         switch self {
-        case .language, .paywall, .notifications: false
+        case .welcome, .paywall: false
         case .categories: true
         }
     }
 
     var previous: OnboardingStep? {
         switch self {
-        case .language:
-            nil
-        case .categories:
-            .language
-        case .paywall:
-            nil
-        case .notifications:
-            nil
+        case .welcome: nil
+        case .categories: .welcome
+        case .paywall: .categories
         }
     }
 
     var next: OnboardingStep? {
         switch self {
-        case .language:
-            .categories
-        case .categories:
-            .paywall
-        case .paywall:
-            nil
-        case .notifications:
-            nil
+        case .welcome: .categories
+        case .categories: .paywall
+        case .paywall: nil
         }
     }
 }

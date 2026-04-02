@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.scenePhase) private var scenePhase
     @Binding var pendingDeepLink: DeepLink?
+    @AppStorage("onboarding.completed.device") private var deviceOnboardingCompleted = false
     @State private var completedOnboardingUserId: UUID?
     @State private var didFinishInitialAuthBootstrap = false
     @State private var showPostAuthTransition = false
@@ -15,20 +16,28 @@ struct ContentView: View {
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
             get: {
-                authStore.isAuthenticated
+                #if DEBUG
+                return false
+                #else
+                return authStore.isAuthenticated
                     && isPostAuthBootstrapReady
-                    && !shouldShowOnboarding
                     && !subscriptionStore.isPro
+                #endif
             },
             set: { _ in }
         )
     }
 
+    /// Device-level onboarding check (works before and after auth).
     private var shouldShowOnboarding: Bool {
-        guard let userId = authStore.userId else { return false }
-        if UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") { return false }
-        if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty { return false }
-        return completedOnboardingUserId != userId
+        if deviceOnboardingCompleted { return false }
+        // Legacy: user-specific flag for existing users
+        if let userId = authStore.userId,
+           UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") {
+            deviceOnboardingCompleted = true
+            return false
+        }
+        return completedOnboardingUserId == nil
     }
 
     private var colorScheme: ColorScheme? {
@@ -66,23 +75,22 @@ struct ContentView: View {
         Group {
             if authStore.isLoading && !didFinishInitialAuthBootstrap {
                 splashView
+            } else if shouldShowOnboarding {
+                // Onboarding shown regardless of auth state (auth happens inside paywall)
+                OnboardingView {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        completedOnboardingUserId = authStore.userId
+                    }
+                }
             } else if authStore.isAuthenticated {
                 if isPostAuthBootstrapReady {
-                    if shouldShowOnboarding {
-                        OnboardingView {
-                            withAnimation(.easeInOut(duration: 0.4)) {
-                                completedOnboardingUserId = authStore.userId
-                            }
+                    HomeView(
+                        pendingDeepLink: $pendingDeepLink,
+                        isMandatoryPaywallPresented: showMandatoryPaywall.wrappedValue
+                    )
+                        .fullScreenCover(isPresented: showMandatoryPaywall) {
+                            PaywallView(mandatory: true)
                         }
-                    } else {
-                        HomeView(
-                            pendingDeepLink: $pendingDeepLink,
-                            isMandatoryPaywallPresented: showMandatoryPaywall.wrappedValue
-                        )
-                            .fullScreenCover(isPresented: showMandatoryPaywall) {
-                                PaywallView(mandatory: true)
-                            }
-                    }
                 } else if shouldShowPostAuthTransition {
                     LoginView(phase: .transitioning)
                 } else {

@@ -1,41 +1,40 @@
 import SwiftUI
 import UserNotifications
 
-struct OnboardingNotificationsStep: View {
+struct TrialReminderSheet: View {
     let onComplete: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            // Luna mascot in brand circle
+        VStack(spacing: 24) {
+            // Bell icon
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
-                    .frame(width: 220, height: 220)
-
-                LunaMascotView(.email, size: 180)
+                    .fill(Color.orange.opacity(colorScheme == .dark ? 0.25 : 0.12))
+                    .frame(width: 72, height: 72)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.brand.opacity(0.10), lineWidth: 1.5)
+                    )
+                    .shadow(color: Color.brand.opacity(0.08), radius: 8, x: 0, y: 2)
+                Text("🔔")
+                    .font(.largeTitle)
             }
-            .padding(.bottom, 32)
 
-            // Headline
-            Text("Get a reminder before your trial ends")
-                .font(.brandTitle)
-                .fontDesign(nil)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
+            // Text
+            VStack(spacing: 8) {
+                Text("Trial Reminder Active")
+                    .font(.brandTitle)
+                    .fontDesign(nil)
 
-            // Body
-            Text("Enable notifications and we'll let you know before you're charged.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            Spacer()
+                Text("To keep our promise, we'll remind you 24h before your trial ends. Enable notifications to stay in control.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+            }
+            .padding(.bottom, 8)
 
             // CTAs
             VStack(spacing: 8) {
@@ -67,7 +66,7 @@ struct OnboardingNotificationsStep: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 8)
+            .padding(.bottom, 20)
         }
     }
 
@@ -82,13 +81,13 @@ struct OnboardingNotificationsStep: View {
 
     private func scheduleTrialReminder() {
         let content = UNMutableNotificationContent()
-        content.title = "Your Talkdraft trial ends in 2 days"
-        content.body = "Cancel before then if you don't want your subscription to continue."
+        content.title = "Talkdraft Trial Reminder"
+        content.body = "Your 7-day trial ends tomorrow. Keep capturing, or manage your subscription in Settings."
         content.sound = .default
 
-        // Fire 5 days from now (2 days before 7-day trial ends)
+        // Fire 6 days (144 hours) from now
         let trigger = UNTimeIntervalNotificationTrigger(
-            timeInterval: 5 * 24 * 60 * 60,
+            timeInterval: 6 * 24 * 60 * 60,
             repeats: false
         )
 
