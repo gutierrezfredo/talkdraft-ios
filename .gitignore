@@ -29,6 +29,7 @@ Package.resolved
 .env
 .playwright-mcp/
 supabase/*
+!supabase/config.toml
 !supabase/functions/
 !supabase/sql/
 supabase/.temp/
