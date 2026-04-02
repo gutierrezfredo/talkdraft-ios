@@ -17,13 +17,13 @@ The paywall appears:
 
 - **Feature list** — compact list of Pro benefits
 - **Trial timeline** — explains when access starts, reminder timing, and when billing begins
-- **Pricing options** — monthly ($7.99/mo) and yearly ($59.99/yr) selection
+- **Pricing presentation** — yearly plan with trial timeline and monthly-equivalent framing
 - **Subscribe button** — initiates StoreKit 2 purchase flow
 - **Restore purchases** — for users who previously subscribed
 
 ## Purchase Flow
 
-1. User selects monthly or yearly plan
+1. User starts the yearly trial or subscription flow from the paywall
 2. StoreKit 2 presents the system purchase dialog (Face ID / Touch ID confirmation)
 3. On success: entitlement status is refreshed through RevenueCat
 4. Pro entitlement activates immediately
