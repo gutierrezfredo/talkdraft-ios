@@ -22,7 +22,6 @@
 		12B9BA15D31C36C0EB884577 /* NoteDetailEditorSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D73CDADACC2F39D17DBFB94 /* NoteDetailEditorSession.swift */; };
 		1912AEA1CFC183A481FBB167 /* TrialReminderSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF732BE60FDAC447812B192F /* TrialReminderSheet.swift */; };
 		1968DE955B444A50C1822B71 /* RecentlyDeletedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F09DD618F3143B1DDC9705 /* RecentlyDeletedView.swift */; };
-		1E9A4642F4FF6C83B2330A1D /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C60275E0A576AD983E1B44 /* PaywallView.swift */; };
 		1FD83F36EF3D74D7E0F4B9ED /* TalkdraftWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572F585A2AE7202528E9ABA7 /* TalkdraftWidget.swift */; };
 		22EC4C7BE0CDE446F5EB49CD /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8CF6C77ACB40D2C7CB0BBC /* TranscriptionService.swift */; };
 		2553E1F75C3ACAF3C0DD6353 /* NoteDetailView+Sections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F577723DEEC18FAF0089876 /* NoteDetailView+Sections.swift */; };
@@ -214,7 +213,6 @@
 		D5D6DCC35AFACCCFB16F13FC /* Talkdraft.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Talkdraft.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D6F09DD618F3143B1DDC9705 /* RecentlyDeletedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyDeletedView.swift; sourceTree = "<group>"; };
 		D78EB06773152041BBDCA503 /* transcribing-2.mp4 */ = {isa = PBXFileReference; path = "transcribing-2.mp4"; sourceTree = "<group>"; };
-		D7C60275E0A576AD983E1B44 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		D8227C98D1C7775FB5984BA9 /* while-binge.mp4 */ = {isa = PBXFileReference; path = "while-binge.mp4"; sourceTree = "<group>"; };
 		D965FB61B48CCFCD56FEF5CF /* NoteStore+Categories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteStore+Categories.swift"; sourceTree = "<group>"; };
 		DA8AE307640842D7629CE290 /* NoteDetailView+SpeakerRename.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NoteDetailView+SpeakerRename.swift"; sourceTree = "<group>"; };
@@ -324,14 +322,6 @@
 				8A8CF6C77ACB40D2C7CB0BBC /* TranscriptionService.swift */,
 			);
 			path = Services;
-			sourceTree = "<group>";
-		};
-		54260F48E621A1FCD9095F16 /* Paywall */ = {
-			isa = PBXGroup;
-			children = (
-				D7C60275E0A576AD983E1B44 /* PaywallView.swift */,
-			);
-			path = Paywall;
 			sourceTree = "<group>";
 		};
 		60CC8BC70ED34EC4E6BC5CF6 /* Fonts */ = {
@@ -456,7 +446,6 @@
 				B428D5F8AD757026EC672D4C /* Home */,
 				697F5E8E2EAA0B442CFBF451 /* NoteDetail */,
 				F87442748BF3503AFCF6083B /* Onboarding */,
-				54260F48E621A1FCD9095F16 /* Paywall */,
 				D048BFCFF153D6FDB12FE2BB /* Record */,
 				7609E53C06D50C9C6F114EF2 /* Settings */,
 			);
@@ -714,7 +703,6 @@
 				83C5EEA510BAEF387692ADF9 /* OnboardingPaywallStep.swift in Sources */,
 				D8D61E0303F4F35B3923B5ED /* OnboardingView.swift in Sources */,
 				E4D47CD3B7E0BBCCB3D83E7F /* OnboardingWelcomeStep.swift in Sources */,
-				1E9A4642F4FF6C83B2330A1D /* PaywallView.swift in Sources */,
 				F27A7E074D93E06C9D45907F /* Profile.swift in Sources */,
 				1968DE955B444A50C1822B71 /* RecentlyDeletedView.swift in Sources */,
 				C444D2C78AFB5652A5B96976 /* RecordView.swift in Sources */,

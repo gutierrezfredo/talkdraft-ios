@@ -343,7 +343,11 @@ struct SettingsView: View {
             handleAudioImport(result)
         }
         .fullScreenCover(isPresented: $showGuestPaywall) {
-            PaywallView(mandatory: false)
+            OnboardingPaywallStep(
+                onPurchaseCompleted: { _ in showGuestPaywall = false },
+                onRestored: { showGuestPaywall = false },
+                onDismiss: { showGuestPaywall = false }
+            )
         }
         .alert("Sign Out?", isPresented: $showSignOutConfirmation) {
             Button("Sign Out", role: .destructive) {
