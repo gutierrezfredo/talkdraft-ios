@@ -228,8 +228,9 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showRecordView, onDismiss: {
             if let note = pendingNote {
-                selectedNote = note
-                pendingNote = nil
+                if !isMandatoryPaywallPresented {
+                    selectedNote = note
+                }
             }
         }) {
             RecordView(categoryId: selectedCategory) { savedNote in
@@ -313,7 +314,14 @@ struct HomeView: View {
         }
         .onChange(of: isMandatoryPaywallPresented) { _, presented in
             guard !presented else { return }
+            if selectedNote == nil, let note = pendingNote {
+                selectedNote = note
+            }
             consumePendingRecordDeepLinkIfPossible()
+        }
+        .onChange(of: selectedNote) { _, note in
+            guard note?.id == pendingNote?.id else { return }
+            pendingNote = nil
         }
         .onChange(of: noteStore.generatingTitleIds) { oldIds, newIds in
             // A title just finished generating — check if it's the first note's "aha" moment
