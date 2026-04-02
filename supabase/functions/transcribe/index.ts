@@ -4,6 +4,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const GROQ_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ??
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmdHd2dWR1enp5bXF4ZHZrd3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NTA3MTAsImV4cCI6MjA4NzIyNjcxMH0.LyFLwFsWTmpa55lFpTi0Pbk-FAuJDvJ5W5vlHCjb1sA";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
@@ -36,31 +38,43 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const jwt = authHeader.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length).trim()
-      : "";
-
-    if (!jwt) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
-    }
-
-    const { data: authData, error: authError } = await admin.auth.getUser(jwt);
-    if (authError || !authData.user) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
-    }
-
-    const userId = authData.user.id;
-
     const url = new URL(req.url);
     const queryLang = url.searchParams.get("language");
+    const queryUserId = url.searchParams.get("user_id");
 
     const formData = await req.formData();
     const file = formData.get("file");
     const formLang = formData.get("language");
+    const formUserId = formData.get("user_id");
 
     if (!file || !(file instanceof File)) {
       return jsonResponse({ error: "file is required" }, 400);
+    }
+
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const jwt = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : "";
+    const apiKey = (req.headers.get("apikey") ?? "").trim();
+    const isLegacyAnonRequest =
+      jwt === SUPABASE_ANON_KEY || apiKey === SUPABASE_ANON_KEY;
+
+    let userId = (formUserId as string) || queryUserId || null;
+
+    if (!isLegacyAnonRequest) {
+      if (!jwt) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
+      const { data: authData, error: authError } = await admin.auth.getUser(jwt);
+      if (authError || !authData.user) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
+      // Newer app builds authenticate with a real user session JWT, so storage
+      // ownership must come from the verified auth context rather than a client-
+      // supplied form field.
+      userId = authData.user.id;
     }
 
     const language = (formLang as string) || queryLang || null;

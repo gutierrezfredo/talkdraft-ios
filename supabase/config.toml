@@ -1,0 +1,11 @@
+[functions.transcribe]
+verify_jwt = false
+
+[functions.transcribe-diarized]
+verify_jwt = false
+
+[functions.generate-title]
+verify_jwt = false
+
+[functions.process-rewrite-job]
+verify_jwt = false
