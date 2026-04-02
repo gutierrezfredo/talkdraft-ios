@@ -8,6 +8,27 @@ import UIKit
     #expect(true)
 }
 
+@Test func transcriptionPromptUsesPreferredLanguageAsHintNotForcedOutput() {
+    let prompt = TranscriptionService.transcriptionPrompt(
+        preferredLanguage: "es",
+        customDictionary: ["Surest", "Done"]
+    )
+
+    #expect(prompt?.contains("usually records in Spanish") == true)
+    #expect(prompt?.contains("language actually spoken") == true)
+    #expect(prompt?.contains("Do not translate") == true)
+    #expect(prompt?.contains("Surest, Done") == true)
+}
+
+@Test func transcriptionPromptWithoutPreferredLanguageStillForbidsTranslation() {
+    let prompt = TranscriptionService.transcriptionPrompt(
+        preferredLanguage: nil,
+        customDictionary: []
+    )
+
+    #expect(prompt == "Transcribe the spoken words verbatim in the language actually spoken. Do not translate.")
+}
+
 @Suite(.serialized)
 struct AudioWorkflowRegressionTests {
 @Test func audioCompressorWrites16kMonoOutput() async throws {

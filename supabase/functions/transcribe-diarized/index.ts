@@ -73,8 +73,6 @@ Deno.serve(async (req) => {
       userId = authData.user.id;
     }
 
-    const language = formData.get("language") as string | null;
-
     const fileBuffer = await file.arrayBuffer();
     const fileBlob = new Blob([fileBuffer], { type: file.type || "audio/m4a" });
 
@@ -85,8 +83,9 @@ Deno.serve(async (req) => {
       : fileBuffer;
 
     // Deepgram diarized transcription
-    // Pass language if set, otherwise enable auto-detection (nova-2 defaults to English)
-    const langParam = language ? `language=${language}` : "detect_language=true";
+    // Always use auto-detection so a saved user preference does not force the
+    // transcript into the wrong language when the spoken audio differs.
+    const langParam = "detect_language=true";
     const deepgramUrl =
       `https://api.deepgram.com/v1/listen?model=nova-2&diarize=true&punctuate=true&${langParam}`;
 

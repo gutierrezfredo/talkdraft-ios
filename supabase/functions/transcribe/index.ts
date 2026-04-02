@@ -7,6 +7,20 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ??
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmdHd2dWR1enp5bXF4ZHZrd3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NTA3MTAsImV4cCI6MjA4NzIyNjcxMH0.LyFLwFsWTmpa55lFpTi0Pbk-FAuJDvJ5W5vlHCjb1sA";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const LANGUAGE_NAMES: Record<string, string> = {
+  ar: "Arabic",
+  de: "German",
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  hi: "Hindi",
+  it: "Italian",
+  ja: "Japanese",
+  ko: "Korean",
+  pt: "Portuguese",
+  ru: "Russian",
+  zh: "Chinese",
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -77,8 +91,8 @@ Deno.serve(async (req) => {
       userId = authData.user.id;
     }
 
-    const language = (formLang as string) || queryLang || null;
-    const prompt = formData.get("prompt") as string | null;
+    const preferredLanguage = (formLang as string) || queryLang || null;
+    const clientPrompt = formData.get("prompt") as string | null;
 
     // Optional separate file for Whisper — allows sending compressed audio for
     // transcription while storing the original full-quality file.
@@ -103,11 +117,15 @@ Deno.serve(async (req) => {
     groqForm.append("model", "whisper-large-v3");
     groqForm.append("response_format", "verbose_json");
     groqForm.append("temperature", "0");
-    if (language) {
-      groqForm.append("language", language);
-    }
-    if (prompt) {
-      groqForm.append("prompt", prompt);
+    const promptParts = [
+      preferredLanguage && LANGUAGE_NAMES[preferredLanguage]
+        ? `The speaker usually records in ${LANGUAGE_NAMES[preferredLanguage]}. Use that only as a recognition hint.`
+        : null,
+      "Transcribe the spoken words verbatim in the language actually spoken. Do not translate.",
+      clientPrompt,
+    ].filter(Boolean);
+    if (promptParts.length > 0) {
+      groqForm.append("prompt", promptParts.join(" "));
     }
 
     const transcriptionPromise = fetch(GROQ_API_URL, {

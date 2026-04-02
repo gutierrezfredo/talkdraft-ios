@@ -18,20 +18,21 @@ final class TranscriptionService: Sendable {
     private let diarizedFunctionURL = AppConfig.supabaseUrl
         .appendingPathComponent("functions/v1/transcribe-diarized")
 
-    /// Locale-based prompt hints to bias Whisper's language detection
-    private static let localePrompts: [String: String] = [
-        "en": "This is a voice note.",
-        "es": "Esta es una nota de voz.",
-        "fr": "Ceci est une note vocale.",
-        "pt": "Esta é uma nota de voz.",
-        "de": "Dies ist eine Sprachnotiz.",
-        "it": "Questa è una nota vocale.",
-        "ja": "これは音声メモです。",
-        "ko": "이것은 음성 메모입니다.",
-        "zh": "这是一条语音备忘录。",
-        "ar": "هذه ملاحظة صوتية.",
-        "ru": "Это голосовая заметка.",
-        "hi": "यह एक वॉइस नोट है।",
+    /// Soft language hints to improve recognition without forcing the model to
+    /// emit text in the user's preferred language when the spoken audio differs.
+    private static let preferredLanguageNames: [String: String] = [
+        "ar": "Arabic",
+        "de": "German",
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "hi": "Hindi",
+        "it": "Italian",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "pt": "Portuguese",
+        "ru": "Russian",
+        "zh": "Chinese",
     ]
 
     func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = [], whisperData: Data? = nil, whisperFileName: String? = nil, multiSpeaker: Bool = false) async throws -> TranscriptionResult {
@@ -60,19 +61,8 @@ final class TranscriptionService: Sendable {
             body.appendMultipart("\r\n")
         }
 
-        // Language part
-        if let language {
-            body.appendMultipart("--\(boundary)\r\n")
-            body.appendMultipart("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
-            body.appendMultipart("\(language)\r\n")
-        }
-
-        // Prompt — custom dictionary words + locale hint (only when language is explicitly set)
-        let localeHint = language.flatMap { Self.localePrompts[$0] }
-        let dictionaryHint = customDictionary.isEmpty ? nil : customDictionary.joined(separator: ", ") + "."
-        let promptParts = [dictionaryHint, localeHint].compactMap { $0 }
-        if !promptParts.isEmpty {
-            let prompt = promptParts.joined(separator: " ")
+        // Prompt — preferred language is treated as a recognition hint only.
+        if let prompt = Self.transcriptionPrompt(preferredLanguage: language, customDictionary: customDictionary) {
             body.appendMultipart("--\(boundary)\r\n")
             body.appendMultipart("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
             body.appendMultipart("\(prompt)\r\n")
@@ -144,6 +134,25 @@ final class TranscriptionService: Sendable {
         case "caf": "audio/x-caf"
         default: "audio/\(ext)"
         }
+    }
+
+    static func transcriptionPrompt(preferredLanguage: String?, customDictionary: [String]) -> String? {
+        let dictionaryHint = customDictionary.isEmpty
+            ? nil
+            : "Prefer these spellings if they are spoken: \(customDictionary.joined(separator: ", "))."
+
+        let languageHint = preferredLanguage
+            .flatMap { preferredLanguageNames[$0] ?? Locale.current.localizedString(forLanguageCode: $0) }
+            .map { "The speaker usually records in \($0). Use that only as a recognition hint." }
+
+        let promptParts = [
+            languageHint,
+            "Transcribe the spoken words verbatim in the language actually spoken. Do not translate.",
+            dictionaryHint,
+        ].compactMap { $0 }
+
+        guard !promptParts.isEmpty else { return nil }
+        return promptParts.joined(separator: " ")
     }
 }
 
