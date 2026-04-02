@@ -68,6 +68,10 @@ struct ContentView: View {
         }
     }
 
+    private var effectiveSplashColorScheme: ColorScheme {
+        colorScheme ?? splashColorScheme
+    }
+
     private var isPostAuthBootstrapReady: Bool {
         subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded
     }
@@ -81,7 +85,7 @@ struct ContentView: View {
     private var splashView: some View {
         ZStack {
             Group {
-                if splashColorScheme == .dark {
+                if effectiveSplashColorScheme == .dark {
                     Color.darkBackground
                 } else {
                     LinearGradient(
@@ -93,7 +97,7 @@ struct ContentView: View {
             }
             .ignoresSafeArea()
 
-            if splashColorScheme == .dark {
+            if effectiveSplashColorScheme == .dark {
                 Circle()
                     .fill(
                         RadialGradient(
@@ -114,7 +118,7 @@ struct ContentView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 200, height: 200)
-                SplashFloatingZs()
+                SplashFloatingZs(colorScheme: effectiveSplashColorScheme)
                     .offset(x: -10, y: -20)
             }
             .accessibilityHidden(true)
@@ -256,11 +260,13 @@ struct ContentView: View {
 // MARK: - Splash Floating Z's
 
 private struct SplashFloatingZs: View {
+    let colorScheme: ColorScheme
+
     var body: some View {
         ZStack {
-            SplashFloatingZ(delay: 0.0, xOffset: 0)
-            SplashFloatingZ(delay: 1.2, xOffset: 10)
-            SplashFloatingZ(delay: 2.4, xOffset: -6)
+            SplashFloatingZ(delay: 0.0, xOffset: 0, colorScheme: colorScheme)
+            SplashFloatingZ(delay: 1.2, xOffset: 10, colorScheme: colorScheme)
+            SplashFloatingZ(delay: 2.4, xOffset: -6, colorScheme: colorScheme)
         }
         .frame(width: 60, height: 60)
     }
@@ -269,7 +275,7 @@ private struct SplashFloatingZs: View {
 private struct SplashFloatingZ: View {
     let delay: Double
     let xOffset: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
+    let colorScheme: ColorScheme
     @State private var visible = false
     @State private var animate = false
 
