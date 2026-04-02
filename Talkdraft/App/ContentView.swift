@@ -18,6 +18,7 @@ struct ContentView: View {
         Binding(
             get: {
                 return authStore.isAuthenticated
+                    && !authStore.isGuest
                     && isPostAuthBootstrapReady
                     && !subscriptionStore.isPro
             },

@@ -172,7 +172,7 @@ struct LoginView: View {
     }
 
     private var legalText: some View {
-        Text("By signing in, you agree to our [Terms of Use](https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html) and [Privacy Policy](https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html).")
+        Text("By signing in, you agree to our [Terms of Use](\(AppConfig.termsOfUseURL.absoluteString)) and [Privacy Policy](\(AppConfig.privacyPolicyURL.absoluteString)).")
             .font(.caption)
             .foregroundStyle(.tertiary)
             .tint(.secondary)
