@@ -42,7 +42,7 @@ struct OnboardingWelcomeStep: View {
                     .fontDesign(nil)
                     .multilineTextAlignment(.center)
 
-                Text("Capture voice notes and quick thoughts,\nthen let Talkdraft organize them for you.")
+                Text("Turn your messy voice notes into\nperfectly organized text.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
