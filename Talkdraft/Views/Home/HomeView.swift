@@ -52,10 +52,8 @@ struct HomeView: View {
         GridItem(.flexible(), spacing: 8),
     ]
 
-    private static let guestNoteLimit = 5
-
     private var isGuestAtLimit: Bool {
-        authStore.isGuest && noteStore.notes.count >= Self.guestNoteLimit
+        authStore.isGuest && noteStore.notes.count >= AuthStore.guestNoteLimit
     }
 
     func attemptRecord() {
@@ -318,8 +316,8 @@ struct HomeView: View {
             guard !WidgetDiscoverySheet.wasDismissed,
                   !showWidgetDiscovery,
                   !showRecordView,
-                  noteStore.notes.count >= 1,
-                  let firstNote = noteStore.notes.last, // most recently added
+                  noteStore.notes.count == 1,
+                  let firstNote = noteStore.notes.first,
                   firstNote.title != nil,
                   !newIds.contains(firstNote.id),
                   oldIds.contains(firstNote.id)

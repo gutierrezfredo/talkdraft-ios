@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var didFinishInitialAuthBootstrap = false
     @State private var showPostAuthTransition = false
     @State private var isPerformingInteractiveAuth = false
+    @State private var startedPreAuthOnboarding = false
 
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
@@ -34,10 +35,29 @@ struct ContentView: View {
         // Legacy: user-specific flag for existing users
         if let userId = authStore.userId,
            UserDefaults.standard.bool(forKey: "onboarding.completed.\(userId.uuidString)") {
-            deviceOnboardingCompleted = true
+            markOnboardingComplete(for: userId)
             return false
         }
+
+        // Returning authenticated users need their notes/categories loaded before we
+        // can tell whether onboarding should be skipped. Keep the pre-auth flow alive
+        // for users who are already inside onboarding.
+        if authStore.isAuthenticated, !startedPreAuthOnboarding {
+            guard noteStore.hasInitiallyLoaded else { return false }
+            if !noteStore.notes.isEmpty || !noteStore.categories.isEmpty {
+                markOnboardingComplete(for: authStore.userId)
+                return false
+            }
+        }
+
         return completedOnboardingUserId == nil
+    }
+
+    private func markOnboardingComplete(for userId: UUID?) {
+        deviceOnboardingCompleted = true
+        if let userId {
+            UserDefaults.standard.set(true, forKey: "onboarding.completed.\(userId.uuidString)")
+        }
     }
 
     private var colorScheme: ColorScheme? {
@@ -80,6 +100,12 @@ struct ContentView: View {
                 OnboardingView {
                     withAnimation(.easeInOut(duration: 0.4)) {
                         completedOnboardingUserId = authStore.userId
+                        startedPreAuthOnboarding = false
+                    }
+                }
+                .onAppear {
+                    if !authStore.isAuthenticated {
+                        startedPreAuthOnboarding = true
                     }
                 }
             } else if authStore.isAuthenticated {
@@ -134,6 +160,7 @@ struct ContentView: View {
                 completedOnboardingUserId = nil
                 isPerformingInteractiveAuth = false
                 showPostAuthTransition = false
+                startedPreAuthOnboarding = false
                 pendingDeepLink = nil
                 noteStore.resetSession()
                 settingsStore.resetSession()

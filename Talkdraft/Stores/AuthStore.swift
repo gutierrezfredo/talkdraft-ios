@@ -7,6 +7,8 @@ import Supabase
 
 @MainActor @Observable
 final class AuthStore {
+    static let guestNoteLimit = 5
+
     var isAuthenticated = false
     var isLoading = false
     var isSendingMagicLink = false

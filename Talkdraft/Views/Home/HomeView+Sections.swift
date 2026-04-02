@@ -221,6 +221,7 @@ extension HomeView {
                 }
                 .onLongPressGesture {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    guard !presentGuestPaywallIfNeeded() else { return }
                     showAudioImporter = true
                 }
                 .matchedTransitionSource(id: "record", in: namespace)

@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var showCancelDeletion = false
     @State private var isDeletionLoading = false
     @State private var showAudioImporter = false
+    @State private var showGuestPaywall = false
     @State private var showTrialReminderTest = false
     @State private var showWidgetDiscoveryTest = false
     @State private var importedNote: Note?
@@ -26,6 +27,10 @@ struct SettingsView: View {
 
     private var cardColor: Color {
         colorScheme == .dark ? .darkSurface : .white
+    }
+
+    private var isGuestAtLimit: Bool {
+        authStore.isGuest && noteStore.notes.count >= AuthStore.guestNoteLimit
     }
 
     var body: some View {
@@ -128,7 +133,11 @@ struct SettingsView: View {
 
                 SettingsSection("Tools") {
                     Button {
-                        showAudioImporter = true
+                        if isGuestAtLimit {
+                            showGuestPaywall = true
+                        } else {
+                            showAudioImporter = true
+                        }
                     } label: {
                         SettingsRow(
                             icon: "waveform.badge.plus",
@@ -333,6 +342,9 @@ struct SettingsView: View {
         ) { result in
             handleAudioImport(result)
         }
+        .fullScreenCover(isPresented: $showGuestPaywall) {
+            PaywallView(mandatory: false)
+        }
         .alert("Sign Out?", isPresented: $showSignOutConfirmation) {
             Button("Sign Out", role: .destructive) {
                 Task { @MainActor in
@@ -400,6 +412,10 @@ struct SettingsView: View {
 
     private func handleAudioImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let sourceURL = urls.first else { return }
+        guard !isGuestAtLimit else {
+            showGuestPaywall = true
+            return
+        }
 
         Task { @MainActor in
             do {
