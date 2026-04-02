@@ -47,10 +47,19 @@ extension NoteStore {
         UserDefaults.standard.set(data, forKey: key)
     }
 
-    static func loadPendingHardDeletes(for userId: UUID?) -> Set<UUID> {
+    static func loadPendingHardDeletes(for userId: UUID?) -> [UUID: PendingHardDelete] {
         let key = scopedKey(Self.pendingHardDeletesKey, userId: userId)
-        let raw = (UserDefaults.standard.array(forKey: key) as? [String]) ?? []
-        return Set(raw.compactMap(UUID.init(uuidString:)))
+
+        if let data = UserDefaults.standard.data(forKey: key),
+           let pendingDeletes = try? JSONDecoder().decode([PendingHardDelete].self, from: data) {
+            return Dictionary(uniqueKeysWithValues: pendingDeletes.map { ($0.noteId, $0) })
+        }
+
+        let legacyIds = (UserDefaults.standard.array(forKey: key) as? [String]) ?? []
+        return Dictionary(uniqueKeysWithValues: legacyIds.compactMap { rawId in
+            guard let noteId = UUID(uuidString: rawId) else { return nil }
+            return (noteId, PendingHardDelete(noteId: noteId, remoteAudioPath: nil))
+        })
     }
 
     func persistPendingHardDeletes() {
@@ -60,8 +69,9 @@ extension NoteStore {
             UserDefaults.standard.removeObject(forKey: key)
             return
         }
-        let raw = pendingHardDeletes.map(\.uuidString).sorted()
-        UserDefaults.standard.set(raw, forKey: key)
+        let pendingDeletes = pendingHardDeletes.values.sorted { $0.noteId.uuidString < $1.noteId.uuidString }
+        guard let data = try? JSONEncoder().encode(pendingDeletes) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 
     func setLocalVoiceBodyState(_ state: NoteBodyState?, for noteId: UUID) {
@@ -130,7 +140,7 @@ extension NoteStore {
         rewriteJobPollingToken = nil
         localVoiceBodyStates = [:]
         pendingNoteUpserts = [:]
-        pendingHardDeletes = []
+        pendingHardDeletes = [:]
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         currentSessionUserId = nil
@@ -138,18 +148,18 @@ extension NoteStore {
 
     var pendingDeletedNotesById: [UUID: Note] {
         Dictionary(uniqueKeysWithValues: pendingNoteUpserts.values.compactMap { note in
-            guard note.deletedAt != nil, !pendingHardDeletes.contains(note.id) else { return nil }
+            guard note.deletedAt != nil, pendingHardDeletes[note.id] == nil else { return nil }
             return (note.id, note)
         })
     }
 
     func mergedPendingNotes(with remoteNotes: [Note]) -> [Note] {
         let pendingDeletedIds = Set(pendingDeletedNotesById.keys)
-        let hiddenIds = pendingDeletedIds.union(pendingHardDeletes)
+        let hiddenIds = pendingDeletedIds.union(pendingHardDeletes.keys)
         var merged = Dictionary(uniqueKeysWithValues: remoteNotes
             .filter { !hiddenIds.contains($0.id) }
             .map { ($0.id, normalizeLocalVoiceNote($0)) })
-        for note in pendingNoteUpserts.values where note.deletedAt == nil && !pendingHardDeletes.contains(note.id) {
+        for note in pendingNoteUpserts.values where note.deletedAt == nil && pendingHardDeletes[note.id] == nil {
             merged[note.id] = normalizeLocalVoiceNote(note)
         }
         return merged.values.sorted { lhs, rhs in
@@ -174,14 +184,14 @@ extension NoteStore {
         persistPendingNoteUpserts()
     }
 
-    func queuePendingHardDelete(_ id: UUID) {
-        pendingHardDeletes.insert(id)
+    func queuePendingHardDelete(_ pendingDelete: PendingHardDelete) {
+        pendingHardDeletes[pendingDelete.noteId] = pendingDelete
         persistPendingHardDeletes()
     }
 
     func clearPendingHardDelete(id: UUID) {
-        guard pendingHardDeletes.contains(id) else { return }
-        pendingHardDeletes.remove(id)
+        guard pendingHardDeletes[id] != nil else { return }
+        pendingHardDeletes.removeValue(forKey: id)
         persistPendingHardDeletes()
     }
 
@@ -244,25 +254,25 @@ extension NoteStore {
     }
 
     func flushPendingHardDeletes() async {
-        for id in pendingHardDeletes.sorted(by: { $0.uuidString < $1.uuidString }) {
+        for id in pendingHardDeletes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
             await flushPendingHardDelete(id: id)
         }
     }
 
     func retryPendingHardDeletes() {
-        for id in pendingHardDeletes.sorted(by: { $0.uuidString < $1.uuidString }) {
+        for id in pendingHardDeletes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
             schedulePendingHardDelete(id: id)
         }
     }
 
     func syncPendingHardDelete(id: UUID) async {
-        guard pendingHardDeletes.contains(id) else {
+        guard let pendingDelete = pendingHardDeletes[id] else {
             pendingHardDeleteTasks[id] = nil
             return
         }
 
         do {
-            try await hardDeleteExecutor(id)
+            try await hardDeleteExecutor(pendingDelete)
             pendingHardDeleteTasks[id] = nil
             clearPendingHardDelete(id: id)
         } catch {

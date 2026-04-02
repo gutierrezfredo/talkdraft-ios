@@ -7,10 +7,16 @@ import UIKit
 
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 typealias NoteUpsertExecutor = @MainActor (Note) async throws -> Void
-typealias NoteHardDeleteExecutor = @MainActor (UUID) async throws -> Void
+typealias AudioDeleteExecutor = @MainActor (String) async throws -> Void
+typealias NoteHardDeleteExecutor = @MainActor (PendingHardDelete) async throws -> Void
 typealias TranscriptionConnectivityProbe = @MainActor () async throws -> Void
 typealias TranscriptionUploadExecutor = @MainActor (TranscriptionUploadRequest) async throws -> TranscriptionResult
 typealias AITitleExecutor = @MainActor (String, String?) async throws -> String
+
+struct PendingHardDelete: Codable, Sendable {
+    let noteId: UUID
+    let remoteAudioPath: String?
+}
 
 struct TranscriptionUploadRequest: Sendable {
     let audioData: Data
@@ -117,12 +123,13 @@ final class NoteStore {
     var rewriteErrorsByNoteId: [UUID: String] = [:]
     var localVoiceBodyStates: [UUID: NoteBodyState]
     var pendingNoteUpserts: [UUID: Note]
-    var pendingHardDeletes: Set<UUID>
+    var pendingHardDeletes: [UUID: PendingHardDelete]
     let persistsLocalVoiceBodyStates: Bool
     let persistsPendingNoteUpserts: Bool
     let persistsPendingHardDeletes: Bool
     @ObservationIgnored let noteSyncDebounceDuration: Duration
     @ObservationIgnored let noteUpsertExecutor: NoteUpsertExecutor
+    @ObservationIgnored let audioDeleteExecutor: AudioDeleteExecutor
     @ObservationIgnored let hardDeleteExecutor: NoteHardDeleteExecutor
     @ObservationIgnored let transcriptionConnectivityProbe: TranscriptionConnectivityProbe
     @ObservationIgnored let transcriptionUploadExecutor: TranscriptionUploadExecutor
@@ -143,10 +150,11 @@ final class NoteStore {
         persistsLocalVoiceBodyStates: Bool = true,
         pendingNoteUpserts: [UUID: Note]? = nil,
         persistsPendingNoteUpserts: Bool = true,
-        pendingHardDeletes: Set<UUID>? = nil,
+        pendingHardDeletes: [UUID: PendingHardDelete]? = nil,
         persistsPendingHardDeletes: Bool = true,
         noteSyncDebounceDuration: Duration = .milliseconds(700),
         noteUpsertExecutor: NoteUpsertExecutor? = nil,
+        audioDeleteExecutor: AudioDeleteExecutor? = nil,
         hardDeleteExecutor: NoteHardDeleteExecutor? = nil,
         transcriptionConnectivityProbe: TranscriptionConnectivityProbe? = nil,
         transcriptionUploadExecutor: TranscriptionUploadExecutor? = nil,
@@ -162,11 +170,29 @@ final class NoteStore {
                 .upsert(NoteSyncPayload(from: note))
                 .execute()
         }
-        self.hardDeleteExecutor = hardDeleteExecutor ?? { id in
+        let resolvedAudioDeleteExecutor = audioDeleteExecutor ?? { audioPath in
+            do {
+                try await supabase.storage
+                    .from("audio")
+                    .remove(paths: [audioPath])
+            } catch let error as StorageError {
+                if let statusCode = error.statusCode.flatMap(Int.init),
+                   [400, 404].contains(statusCode) {
+                    logger.notice("Remote audio already missing at \(audioPath, privacy: .public)")
+                    return
+                }
+                throw error
+            }
+        }
+        self.audioDeleteExecutor = resolvedAudioDeleteExecutor
+        self.hardDeleteExecutor = hardDeleteExecutor ?? { pendingDelete in
+            if let remoteAudioPath = pendingDelete.remoteAudioPath {
+                try await resolvedAudioDeleteExecutor(remoteAudioPath)
+            }
             try await supabase
                 .from("notes")
                 .delete()
-                .eq("id", value: id)
+                .eq("id", value: pendingDelete.noteId)
                 .execute()
         }
         self.transcriptionConnectivityProbe = transcriptionConnectivityProbe ?? {
@@ -198,7 +224,7 @@ final class NoteStore {
         }
         self.localVoiceBodyStates = localVoiceBodyStates ?? [:]
         self.pendingNoteUpserts = pendingNoteUpserts ?? [:]
-        self.pendingHardDeletes = pendingHardDeletes ?? []
+        self.pendingHardDeletes = pendingHardDeletes ?? [:]
     }
 
     // MARK: - Multi-Speaker Format
@@ -304,6 +330,43 @@ final class NoteStore {
             return nil
         }
         return audioUrl
+    }
+
+    nonisolated static func remoteAudioPath(for audioUrl: String?) -> String? {
+        guard let remoteAudioURL = remoteAudioURL(for: audioUrl) else { return nil }
+
+        if let url = URL(string: remoteAudioURL), url.scheme != nil {
+            let supportedPrefixes = [
+                "/storage/v1/object/public/audio/",
+                "/storage/v1/object/sign/audio/",
+                "/storage/v1/object/authenticated/audio/",
+                "/storage/v1/object/audio/"
+            ]
+
+            for prefix in supportedPrefixes {
+                guard let range = url.path.range(of: prefix) else { continue }
+                let rawPath = String(url.path[range.upperBound...])
+                guard !rawPath.isEmpty else { return nil }
+                return rawPath.removingPercentEncoding ?? rawPath
+            }
+
+            return nil
+        }
+
+        let rawPath = remoteAudioURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return rawPath.isEmpty ? nil : rawPath
+    }
+
+    func deleteRemoteAudioIfNeeded(for audioUrl: String?, noteId: UUID, reason: String) async {
+        guard let remoteAudioPath = Self.remoteAudioPath(for: audioUrl) else { return }
+
+        do {
+            try await audioDeleteExecutor(remoteAudioPath)
+        } catch {
+            logger.error(
+                "Failed to delete remote audio for note \(noteId) during \(reason, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     func activeRewrite(for note: Note) -> NoteRewrite? {
@@ -465,7 +528,7 @@ final class NoteStore {
             .execute()
             .value
         var mergedDeleted = Dictionary(uniqueKeysWithValues: deleted.map { ($0.id, $0) })
-        for id in pendingHardDeletes {
+        for id in pendingHardDeletes.keys {
             mergedDeleted.removeValue(forKey: id)
         }
         for note in pendingDeletedNotesById.values {

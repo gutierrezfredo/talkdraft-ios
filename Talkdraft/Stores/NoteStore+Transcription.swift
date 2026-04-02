@@ -81,6 +81,7 @@ extension NoteStore {
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
                     logger.warning("transcribeNote: received empty transcription for \(id)")
+                    await deleteRemoteAudioIfNeeded(for: result.audioUrl, noteId: id, reason: "empty_transcription")
                     setNoteBodyState(id: id, state: .transcriptionFailed)
                     ErrorLogger.shared.log(
                         type: "transcription_empty",
@@ -94,6 +95,7 @@ extension NoteStore {
                 // Update note with transcription
                 guard var note = notes.first(where: { $0.id == id }) else {
                     logger.error("transcribeNote: note \(id) not found in local store after transcription")
+                    await deleteRemoteAudioIfNeeded(for: result.audioUrl, noteId: id, reason: "missing_note_after_transcription")
                     return
                 }
                 let (formattedContent, initialSpeakerNames) = Self.formatMultiSpeakerTranscript(transcribedText)

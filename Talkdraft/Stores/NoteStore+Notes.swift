@@ -138,6 +138,7 @@ extension NoteStore {
 
     func permanentlyDeleteNote(id: UUID) {
         let deletedNote = deletedNotes.first(where: { $0.id == id })
+        let remoteAudioPath = Self.remoteAudioPath(for: deletedNote?.audioUrl)
         deletedNotes.removeAll { $0.id == id }
         cancelPendingNoteSyncTask(id: id)
         pendingNoteUpserts.removeValue(forKey: id)
@@ -150,7 +151,7 @@ extension NoteStore {
         } else {
             unregisterLocalAudio(for: id)
         }
-        queuePendingHardDelete(id)
+        queuePendingHardDelete(PendingHardDelete(noteId: id, remoteAudioPath: remoteAudioPath))
         schedulePendingHardDelete(id: id)
     }
 
