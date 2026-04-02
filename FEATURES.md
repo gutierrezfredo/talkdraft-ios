@@ -18,7 +18,7 @@
 |------|----------|--------|
 | HomeView | `Views/Home/HomeView.swift` | Built — category chips, notes grid, search, bulk select, sort options |
 | LoginView | `Views/Auth/LoginView.swift` | Built — merged welcome/auth screen with Apple sign-in, email magic link, and guest entry |
-| PaywallView | `Views/Paywall/PaywallView.swift` | Built — StoreKit intro offer trial, feature list, monthly/yearly selection, purchase, restore |
+| PaywallView | `Views/Onboarding/OnboardingPaywallStep.swift` | Built — unified paywall: trust timeline, adaptive auth (Apple/Email/Guest or direct subscribe), yearly plan only |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
@@ -103,6 +103,18 @@
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-04-02 — Unified Paywall + Security Hardening (PRs #89, #91)
+- Unified paywall: deleted `PaywallView.swift`, single `OnboardingPaywallStep` used everywhere (onboarding, mandatory, guest limit)
+- Paywall adapts by auth state: auth buttons for unauthenticated/guest, direct subscribe for authenticated non-Pro
+- Already-Pro users short-circuit out of paywall immediately (Codex fix)
+- Security: edge function calls switched from anon key to user session token (AIService, TranscriptionService)
+- Security: removed `#if DEBUG` mandatory paywall bypass
+- Security: tightened deep link validation to `talkdraft://auth/callback` only
+- Security: defense-in-depth `user_id` filters on all Supabase queries
+- Guest auth fix: `signInAnonymously()` returns Bool, onboarding checks before completing
+- Scrollable onboarding categories for smaller screens (Codex fix)
+- Audio storage cleanup: hard deletes now remove audio files from Supabase Storage (PR #82)
 
 ### 2026-04-01 — Polish: Splash, Categories, Widget (PR #78)
 - Splash screen: adaptive background — brand violet gradient (#8B5CF6 → #6D28D9) in light mode, dark with violet radial glow in dark mode
