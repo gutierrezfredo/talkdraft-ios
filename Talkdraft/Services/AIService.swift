@@ -4,10 +4,11 @@ enum AIService {
 
     static func generateTitle(for content: String, language: String? = nil) async throws -> String {
         let url = AppConfig.supabaseUrl.appendingPathComponent("functions/v1/generate-title")
+        let accessToken = try await supabase.auth.session.accessToken
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
         var body: [String: Any] = ["text": content]
         if let language { body["language"] = language }

@@ -78,7 +78,9 @@ final class TranscriptionService: Sendable {
             body.appendMultipart("\(prompt)\r\n")
         }
 
-        // User ID part (for storage upload on the server side)
+        // Transitional compatibility: older deployed edge functions still read
+        // user_id for storage paths. Newer deployments derive ownership from the
+        // caller JWT and ignore this field.
         if let userId {
             body.appendMultipart("--\(boundary)\r\n")
             body.appendMultipart("Content-Disposition: form-data; name=\"user_id\"\r\n\r\n")
@@ -90,10 +92,11 @@ final class TranscriptionService: Sendable {
         logger.info("Request body size: \(String(format: "%.1f", Double(body.count) / 1_048_576.0))MB")
 
         let targetURL = multiSpeaker ? diarizedFunctionURL : edgeFunctionURL
+        let accessToken = try await supabase.auth.session.accessToken
         var request = URLRequest(url: targetURL)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(AppConfig.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 300 // 5 minutes — large files on slow connections
 
         // Write body to a temp file so iOS can stream it rather than buffer the

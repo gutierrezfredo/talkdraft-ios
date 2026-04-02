@@ -509,9 +509,17 @@ final class NoteStore {
     }
 
     func fetchNotes() async throws {
+        guard let userId = currentSessionUserId else {
+            pruneLocalVoiceBodyStates(validNoteIds: [])
+            notes = mergedPendingNotes(with: [])
+            deletedNotes = []
+            return
+        }
+
         let fetched: [Note] = try await supabase
             .from("notes")
             .select()
+            .eq("user_id", value: userId)
             .is("deleted_at", value: nil)
             .order("created_at", ascending: false)
             .execute()
@@ -523,6 +531,7 @@ final class NoteStore {
         let deleted: [Note] = try await supabase
             .from("notes")
             .select()
+            .eq("user_id", value: userId)
             .not("deleted_at", operator: .is, value: Bool?.none)
             .order("deleted_at", ascending: false)
             .execute()
@@ -554,9 +563,15 @@ final class NoteStore {
     }
 
     func fetchCategories() async throws {
+        guard let userId = currentSessionUserId else {
+            categories = []
+            return
+        }
+
         let fetched: [Category] = try await supabase
             .from("categories")
             .select()
+            .eq("user_id", value: userId)
             .order("sort_order", ascending: true)
             .execute()
             .value

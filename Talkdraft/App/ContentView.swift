@@ -17,13 +17,9 @@ struct ContentView: View {
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
             get: {
-                #if DEBUG
-                return false
-                #else
                 return authStore.isAuthenticated
                     && isPostAuthBootstrapReady
                     && !subscriptionStore.isPro
-                #endif
             },
             set: { _ in }
         )

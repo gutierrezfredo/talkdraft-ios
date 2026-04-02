@@ -7,69 +7,94 @@ struct OnboardingCategoriesStep: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    private var backgroundColor: Color {
+        colorScheme == .dark ? .darkBackground : .warmBackground
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            VStack(alignment: .leading, spacing: 12) {
-                Text("What do you want to capture?")
-                    .font(.brandTitle)
-                    .fontDesign(nil)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("What do you want to capture?")
+                            .font(.brandTitle)
+                            .fontDesign(nil)
 
-                Text("Pick a few to get started. You can always add more later.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 8)
-
-            Spacer()
-
-            // Category chips — matching app's CategoryChip style
-            FlowLayout(spacing: 10) {
-                ForEach(Array(CategorySuggestion.all.enumerated()), id: \.offset) { index, suggestion in
-                    let isSelected = selectedIndices.contains(index)
-                    let chipColor = Color.categoryColor(hex: suggestion.color)
-
-                    Button {
-                        withAnimation(.snappy) {
-                            if isSelected {
-                                selectedIndices.remove(index)
-                            } else {
-                                selectedIndices.insert(index)
-                            }
-                        }
-                    } label: {
-                        Text(suggestion.name)
-                            .font(.body)
-                            .fontWeight(.medium)
-                            .foregroundStyle(chipColor)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 14)
-                            .background(
-                                Capsule()
-                                    .fill(colorScheme == .dark ? Color.darkSurface : .white)
-                            )
-                            .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(isSelected ? chipColor : .clear, lineWidth: 2)
-                            )
+                        Text("Pick a few to get started. You can always add more later.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+                    .padding(.bottom, 24)
+
+                    // Category chips — matching app's CategoryChip style
+                    FlowLayout(spacing: 10) {
+                        ForEach(Array(CategorySuggestion.all.enumerated()), id: \.offset) { index, suggestion in
+                            let isSelected = selectedIndices.contains(index)
+                            let chipColor = Color.categoryColor(hex: suggestion.color)
+
+                            Button {
+                                withAnimation(.snappy) {
+                                    if isSelected {
+                                        selectedIndices.remove(index)
+                                    } else {
+                                        selectedIndices.insert(index)
+                                    }
+                                }
+                            } label: {
+                                Text(suggestion.name)
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(chipColor)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        Capsule()
+                                            .fill(colorScheme == .dark ? Color.darkSurface : .white)
+                                    )
+                                    .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
+                                    .overlay(
+                                        Capsule()
+                                            .strokeBorder(isSelected ? chipColor : .clear, lineWidth: 2)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                    Text("Choose as many as you want.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 28)
                 }
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .topLeading)
             }
-            .padding(.horizontal, 24)
+            .scrollBounceBehavior(.basedOnSize)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                continueBar
+            }
+        }
+        .sensoryFeedback(.selection, trigger: selectedIndices.count)
+    }
 
-            Text("Choose as many as you want.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.top, 40)
+    private var continueBar: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    .clear,
+                    backgroundColor.opacity(0.88),
+                    backgroundColor,
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 24)
 
-            Spacer()
-
-            // CTAs
             Button {
                 onNext()
             } label: {
@@ -82,11 +107,9 @@ struct OnboardingCategoriesStep: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
-
-            Spacer()
-                .frame(height: 8)
+            .padding(.bottom, 8)
+            .background(backgroundColor)
         }
-        .sensoryFeedback(.selection, trigger: selectedIndices.count)
     }
 }
 

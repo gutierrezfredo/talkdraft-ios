@@ -179,7 +179,7 @@ extension NoteStore {
     }
 
     func refreshRewriteJobs() async {
-        guard currentSessionUserId != nil, !isRefreshingRewriteJobs else { return }
+        guard let userId = currentSessionUserId, !isRefreshingRewriteJobs else { return }
         isRefreshingRewriteJobs = true
         defer { isRefreshingRewriteJobs = false }
 
@@ -187,6 +187,7 @@ extension NoteStore {
             let fetched: [NoteRewriteJob] = try await supabase
                 .from("note_rewrite_jobs")
                 .select()
+                .eq("user_id", value: userId)
                 .order("created_at", ascending: false)
                 .limit(200)
                 .execute()
@@ -235,11 +236,17 @@ extension NoteStore {
     }
 
     func fetchRewrites(for noteId: UUID) async {
+        guard let userId = currentSessionUserId else {
+            rewritesCache[noteId] = []
+            return
+        }
+
         do {
             let fetched: [NoteRewrite] = try await supabase
                 .from("note_rewrites")
                 .select()
                 .eq("note_id", value: noteId)
+                .eq("user_id", value: userId)
                 .order("created_at", ascending: true)
                 .execute()
                 .value
@@ -250,22 +257,28 @@ extension NoteStore {
     }
 
     func saveRewrite(_ rewrite: NoteRewrite) async {
-        var current = rewritesCache[rewrite.noteId] ?? []
-        current.append(rewrite)
-        rewritesCache[rewrite.noteId] = current
+        guard let userId = currentSessionUserId ?? rewrite.userId else { return }
+
+        var scopedRewrite = rewrite
+        scopedRewrite.userId = userId
+
+        var current = rewritesCache[scopedRewrite.noteId] ?? []
+        current.append(scopedRewrite)
+        rewritesCache[scopedRewrite.noteId] = current
 
         do {
             try await supabase
                 .from("note_rewrites")
-                .insert(rewrite)
+                .insert(scopedRewrite)
                 .execute()
         } catch {
             logger.error("saveRewrite failed: \(error)")
-            rewritesCache[rewrite.noteId]?.removeAll { $0.id == rewrite.id }
+            rewritesCache[scopedRewrite.noteId]?.removeAll { $0.id == scopedRewrite.id }
         }
     }
 
     func updateRewrite(_ rewrite: NoteRewrite) {
+        guard let userId = currentSessionUserId else { return }
         guard let idx = rewritesCache[rewrite.noteId]?.firstIndex(where: { $0.id == rewrite.id }) else { return }
         rewritesCache[rewrite.noteId]?[idx] = rewrite
         Task {
@@ -274,6 +287,7 @@ extension NoteStore {
                     .from("note_rewrites")
                     .update(["content": rewrite.content])
                     .eq("id", value: rewrite.id.uuidString)
+                    .eq("user_id", value: userId)
                     .execute()
             } catch {
                 logger.error("updateRewrite failed: \(error)")
@@ -282,6 +296,7 @@ extension NoteStore {
     }
 
     func renameSpeakerInRewrites(noteId: UUID, oldName: String, newName: String) {
+        guard let userId = currentSessionUserId else { return }
         guard var rewrites = rewritesCache[noteId] else { return }
         var changed: [NoteRewrite] = []
         for i in rewrites.indices {
@@ -303,6 +318,7 @@ extension NoteStore {
                         .from("note_rewrites")
                         .update(["content": rewrite.content])
                         .eq("id", value: rewrite.id.uuidString)
+                        .eq("user_id", value: userId)
                         .execute()
                 } catch {
                     logger.error("renameSpeakerInRewrites failed: \(error)")
@@ -312,6 +328,7 @@ extension NoteStore {
     }
 
     func deleteRewrite(_ rewrite: NoteRewrite) {
+        guard let userId = currentSessionUserId else { return }
         rewritesCache[rewrite.noteId]?.removeAll { $0.id == rewrite.id }
 
         Task {
@@ -320,6 +337,7 @@ extension NoteStore {
                     .from("note_rewrites")
                     .delete()
                     .eq("id", value: rewrite.id.uuidString)
+                    .eq("user_id", value: userId)
                     .execute()
             } catch {
                 logger.error("deleteRewrite failed: \(error)")
@@ -331,6 +349,7 @@ extension NoteStore {
     }
 
     func deleteRewrites(for noteId: UUID) {
+        guard let userId = currentSessionUserId else { return }
         rewritesCache[noteId] = nil
 
         Task {
@@ -339,6 +358,7 @@ extension NoteStore {
                     .from("note_rewrites")
                     .delete()
                     .eq("note_id", value: noteId.uuidString)
+                    .eq("user_id", value: userId)
                     .execute()
             } catch {
             logger.error("deleteRewrites failed: \(error)")
