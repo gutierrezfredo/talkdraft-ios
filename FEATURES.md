@@ -24,7 +24,9 @@
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |
 | RecentlyDeletedView | `Views/Settings/RecentlyDeletedView.swift` | Built — browse, restore, permanently delete soft-deleted notes |
 | CategoriesView | `Views/Categories/` | Built — CRUD with color picker, category form sheet |
-| OnboardingView | `Views/Onboarding/` | Built — post-auth flow: Language, Categories, Paywall, Notifications |
+| OnboardingView | `Views/Onboarding/` | Built — pre-auth flow: Welcome → Categories → Paywall (with Apple/Email/Guest auth) |
+| TrialReminderSheet | `Views/Onboarding/TrialReminderSheet.swift` | Built — post-purchase notification permission prompt, schedules Day 6 local reminder |
+| WidgetDiscoverySheet | `Views/Home/WidgetDiscoverySheet.swift` | Built — triggered after first AI title, widget setup guide with luna-widget-promo hero |
 
 ### Components
 
@@ -48,7 +50,7 @@
 
 | Store | Location | Description |
 |-------|----------|-------------|
-| AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple sign-in, email magic link, guest/anonymous sign-in, account deletion |
+| AuthStore | `Stores/AuthStore.swift` | Supabase Auth — Apple sign-in, email magic link, guest/anonymous sign-in, isGuest flag, account deletion |
 | NoteStore | `Stores/NoteStore.swift` | Notes + categories CRUD, transcription, AI title gen, soft delete with 30-day auto-purge, restore |
 | SettingsStore | `Stores/SettingsStore.swift` | Language + theme + custom dictionary preferences |
 | SubscriptionStore | `Stores/SubscriptionStore.swift` | StoreKit2 purchases, RevenueCat entitlements, intro offer trial eligibility, entitlement gate for mandatory paywall |
@@ -93,10 +95,29 @@
 - [x] Mandatory paywall gate after sign-in (subscription-only, no free tier)
 - [x] Account deletion flow (30-day grace period, schedule/cancel via edge functions)
 - [x] Feedback & support in Settings (sentiment gate → App Store review, pre-filled support email)
-- [x] Onboarding flow (Welcome/Auth → Language → Categories → Paywall → Trial notifications)
+- [x] Onboarding flow (Welcome → Categories → Paywall with integrated auth)
+- [x] Trial reminder notification (Day 6 local notification, permission prompt post-purchase)
+- [x] Widget discovery (post-first-note prompt with setup guide, one-and-done)
+- [x] Guest mode (anonymous auth, 5-note hard cap, paywall gate on all note creation paths)
+- [x] Unified sheet backgrounds (SheetBackground across all sheets)
 - [ ] Phone/SMS sign-in (deferred — not needed for iOS)
 
 ## Changelog
+
+### 2026-04-01 — Onboarding Redesign + Post-Onboarding Discovery (PR #76)
+- Redesigned onboarding from 5 steps to 3: Welcome → Categories → Paywall
+- Removed Language and Notifications steps (language defaults to auto-detect, notifications handled post-purchase)
+- Paywall now integrates authentication: Apple Sign In, Email magic link, Continue as Guest — all in one screen
+- Trust timeline with emoji nodes (🎁 today, 🔔 day 6, 🪄 day 7) and concave arch Luna header
+- TrialReminderSheet: post-purchase bottom sheet requesting notification permission, schedules Day 6 local reminder (144 hours)
+- WidgetDiscoverySheet: triggered 1.5s after first note's AI title generates, luna-widget-promo hero with 3-step setup guide, one-and-done persistence
+- Guest mode: anonymous Supabase auth via `AuthStore.isGuest`, 5-note hard cap enforced on record, text notes, audio imports (all paths)
+- Device-level onboarding flag (`@AppStorage`) replaces user-specific flag for pre-auth onboarding support
+- Unified all sheet backgrounds with `SheetBackground()` (ultraThinMaterial + app color overlay)
+- Replaced solid Luna mascot circles with radial gradient glow on login, email sign-in, and transcription views
+- Onboarding categories: added "Brain Dumps", "Daily Reflections", "Content Ideas"; removed skip button
+- DEBUG developer tools: Test Full Flow (stay signed in), Test Trial Reminder, Test Widget Discovery
+- Codex review fixes: onboarding migration guard for returning authenticated users, guest cap on text notes + audio imports + Settings import tool, widget trigger `== 1` precision fix
 
 ### 2026-03-30 — Assets, Polish & Fixes (PRs #57, #60, #61)
 - New app icons (default + dark) with Luna headphones design
