@@ -109,5 +109,9 @@ struct CategorySuggestion {
         CategorySuggestion(name: "Travel", color: "#0EA5E9"),
         CategorySuggestion(name: "Brain Dumps", color: "#A855F7"),
         CategorySuggestion(name: "Daily Reflections", color: "#06B6D4"),
+        CategorySuggestion(name: "Shopping Lists", color: "#84CC16"),
+        CategorySuggestion(name: "Quick Notes", color: "#F43F5E"),
+        CategorySuggestion(name: "Projects", color: "#0891B2"),
+        CategorySuggestion(name: "To-Do's", color: "#D946EF"),
     ]
 }

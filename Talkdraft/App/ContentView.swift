@@ -76,9 +76,39 @@ struct ContentView: View {
         authStore.isAuthenticated && (showPostAuthTransition || isPerformingInteractiveAuth) && !isPostAuthBootstrapReady
     }
 
+    @Environment(\.colorScheme) private var splashColorScheme
+
     private var splashView: some View {
         ZStack {
-            Color.darkBackground.ignoresSafeArea()
+            Group {
+                if splashColorScheme == .dark {
+                    Color.darkBackground
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: "#8B5CF6"), Color(hex: "#6D28D9")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+            .ignoresSafeArea()
+
+            if splashColorScheme == .dark {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.brand.opacity(0.15),
+                                .clear,
+                            ],
+                            center: .center,
+                            startRadius: 40,
+                            endRadius: 180
+                        )
+                    )
+                    .frame(width: 360, height: 360)
+            }
+
             ZStack(alignment: .topLeading) {
                 Image("talkdraft-logo")
                     .resizable()
@@ -239,13 +269,14 @@ private struct SplashFloatingZs: View {
 private struct SplashFloatingZ: View {
     let delay: Double
     let xOffset: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
     @State private var visible = false
     @State private var animate = false
 
     var body: some View {
         Text("z")
             .font(.system(size: 28, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(colorScheme == .dark ? Color.secondary : Color.white)
             .opacity(visible ? (animate ? 0 : 0.45) : 0)
             .offset(x: xOffset + (animate ? 4 : 0), y: animate ? -18 : 0)
             .scaleEffect(animate ? 0.82 : 1.0)
