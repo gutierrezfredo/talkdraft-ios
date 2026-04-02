@@ -42,10 +42,10 @@ This architecture was chosen because RevenueCat's SDK couldn't reliably resolve 
 
 ### Products
 
-| ID | Price | Period |
-|----|-------|--------|
-| `talkdraft_monthly` | $7.99 | Monthly |
-| `talkdraft_yearly` | $59.99 | Yearly |
+| ID | Period | Notes |
+|----|--------|-------|
+| `talkdraft_monthly` | Monthly | Exists in App Store Connect, but the current paywall does not surface a monthly selection UI. |
+| `talkdraft_yearly` | Yearly | Current paywall purchase path. Displayed as the primary offer in the app. |
 
 ### Entitlement
 
