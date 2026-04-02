@@ -239,6 +239,86 @@ struct AudioWorkflowRegressionTests {
     #expect(store.displayContent(for: note) == NoteBodyState.transcribingPlaceholder)
 }
 
+@Test func noteStoreExtractsRemoteAudioPathFromSupabaseStorageURLs() {
+    #expect(
+        NoteStore.remoteAudioPath(
+            for: "https://tftwvuduzzymqxdvkwwd.supabase.co/storage/v1/object/public/audio/user-123/My%20File.m4a"
+        ) == "user-123/My File.m4a"
+    )
+    #expect(
+        NoteStore.remoteAudioPath(
+            for: "https://tftwvuduzzymqxdvkwwd.supabase.co/storage/v1/object/sign/audio/folder/clip.m4a?token=abc"
+        ) == "folder/clip.m4a"
+    )
+    #expect(NoteStore.remoteAudioPath(for: "folder/raw.m4a") == "folder/raw.m4a")
+    #expect(NoteStore.remoteAudioPath(for: "file:///tmp/audio.m4a") == nil)
+}
+
+@MainActor
+@Test func noteStoreFlushesPendingHardDeleteWithStoredRemoteAudioPath() async {
+    let noteId = UUID()
+    let pendingDelete = PendingHardDelete(noteId: noteId, remoteAudioPath: "folder/audio.m4a")
+    var executedDeletes: [PendingHardDelete] = []
+
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        pendingHardDeletes: [noteId: pendingDelete],
+        persistsPendingHardDeletes: false,
+        noteUpsertExecutor: { _ in },
+        hardDeleteExecutor: { pendingDelete in
+            executedDeletes.append(pendingDelete)
+        }
+    )
+
+    await store.flushPendingHardDelete(id: noteId)
+
+    #expect(executedDeletes.count == 1)
+    #expect(executedDeletes.first?.noteId == noteId)
+    #expect(executedDeletes.first?.remoteAudioPath == "folder/audio.m4a")
+    #expect(store.pendingHardDeletes[noteId] == nil)
+}
+
+@MainActor
+@Test func transcribeNoteDeletesUploadedAudioWhenNoteIsMissingAfterSuccess() async throws {
+    let sourceURL = try makeSineWaveFile(duration: 0.4)
+    defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+    var deletedPaths: [String] = []
+    let store = NoteStore(
+        persistsLocalVoiceBodyStates: false,
+        persistsPendingNoteUpserts: false,
+        persistsPendingHardDeletes: false,
+        noteUpsertExecutor: { _ in },
+        audioDeleteExecutor: { path in
+            deletedPaths.append(path)
+        },
+        transcriptionConnectivityProbe: {},
+        transcriptionUploadExecutor: { _ in
+            TranscriptionResult(
+                text: "Recovered transcript",
+                language: "en",
+                audioUrl: "https://tftwvuduzzymqxdvkwwd.supabase.co/storage/v1/object/public/audio/orphans/missing-note.m4a",
+                durationSeconds: 2
+            )
+        },
+        aiTitleExecutor: { _, _ in
+            "Unused title"
+        }
+    )
+
+    store.transcribeNote(id: UUID(), audioFileURL: sourceURL, language: "en", userId: nil)
+
+    for _ in 0..<40 {
+        if deletedPaths == ["orphans/missing-note.m4a"] {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(25))
+    }
+
+    #expect(deletedPaths == ["orphans/missing-note.m4a"])
+}
+
 @MainActor
 @Test func noteStoreSetNoteContentClearsTransientVoiceOverrideWhenRealContentArrives() {
     let note = makeNote(content: "", source: .voice)
@@ -781,10 +861,10 @@ actor NoteUpsertRecorder {
 }
 
 actor HardDeleteRecorder {
-    private(set) var deletedNoteIds: [UUID] = []
+    private(set) var deletedItems: [PendingHardDelete] = []
 
-    func record(_ noteId: UUID) {
-        deletedNoteIds.append(noteId)
+    func record(_ pendingDelete: PendingHardDelete) {
+        deletedItems.append(pendingDelete)
     }
 }
 
@@ -984,7 +1064,11 @@ struct NoteStoreDebounceTests {
 
 @MainActor
 @Test func noteStorePermanentlyDeleteQueuesHardDeleteAndClearsPendingUpsert() {
-    let note = makeNote(content: "Trash me")
+    let note = makeNote(
+        content: "Trash me",
+        source: .voice,
+        audioUrl: "https://tftwvuduzzymqxdvkwwd.supabase.co/storage/v1/object/public/audio/folder/trash-me.m4a"
+    )
     let store = NoteStore(persistsLocalVoiceBodyStates: false, persistsPendingNoteUpserts: false, persistsPendingHardDeletes: false)
     store.deletedNotes = [note]
     store.pendingNoteUpserts = [note.id: note]
@@ -993,7 +1077,8 @@ struct NoteStoreDebounceTests {
 
     #expect(store.deletedNotes.isEmpty)
     #expect(store.pendingNoteUpserts[note.id] == nil)
-    #expect(store.pendingHardDeletes == [note.id])
+    #expect(store.pendingHardDeletes[note.id]?.noteId == note.id)
+    #expect(store.pendingHardDeletes[note.id]?.remoteAudioPath == "folder/trash-me.m4a")
 }
 
 @MainActor
@@ -1003,17 +1088,18 @@ struct NoteStoreDebounceTests {
     let store = NoteStore(
         persistsLocalVoiceBodyStates: false,
         persistsPendingNoteUpserts: false,
-        pendingHardDeletes: [noteId],
+        pendingHardDeletes: [noteId: PendingHardDelete(noteId: noteId, remoteAudioPath: "folder/audio.m4a")],
         persistsPendingHardDeletes: false,
-        hardDeleteExecutor: { id in
-            await recorder.record(id)
+        hardDeleteExecutor: { pendingDelete in
+            await recorder.record(pendingDelete)
         }
     )
 
     await store.flushPendingHardDeletes()
 
     #expect(store.pendingHardDeletes.isEmpty)
-    #expect(await recorder.deletedNoteIds == [noteId])
+    #expect(await recorder.deletedItems.map(\.noteId) == [noteId])
+    #expect(await recorder.deletedItems.first?.remoteAudioPath == "folder/audio.m4a")
 }
 
 @MainActor
@@ -1042,7 +1128,7 @@ struct NoteStoreDebounceTests {
     )
     reloaded.beginSession(userId: userId)
 
-    #expect(reloaded.pendingHardDeletes == [note.id])
+    #expect(reloaded.pendingHardDeletes[note.id]?.noteId == note.id)
 
     reloaded.resetSession()
 }
