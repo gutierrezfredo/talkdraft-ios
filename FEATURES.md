@@ -104,6 +104,15 @@
 
 ## Changelog
 
+### 2026-04-01 — Polish: Splash, Categories, Widget (PR #78)
+- Splash screen: adaptive background — brand violet gradient (#8B5CF6 → #6D28D9) in light mode, dark with violet radial glow in dark mode
+- Splash respects user's Appearance setting (light/dark/system) via resolved color scheme (Codex fix)
+- Z's adaptive: white on violet (light), secondary on dark (dark)
+- Onboarding categories: added Shopping Lists, Quick Notes, Projects, To-Do's (16 total)
+- Updated 4 Luna mascot assets from R2 source (box, moon, notes, paywall)
+- Removed Lock Screen widget (circular + rectangular) — only Home Screen widget ships
+- Home Screen widget: Luna overflow adjusted to 20pt
+
 ### 2026-04-01 — Onboarding Redesign + Post-Onboarding Discovery (PR #76)
 - Redesigned onboarding from 5 steps to 3: Welcome → Categories → Paywall
 - Removed Language and Notifications steps (language defaults to auto-detect, notifications handled post-purchase)
