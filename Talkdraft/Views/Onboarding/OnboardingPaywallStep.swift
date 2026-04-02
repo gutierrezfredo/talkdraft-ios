@@ -291,7 +291,7 @@ struct OnboardingPaywallStep: View {
                 }
             }
         } label: {
-            Text(subscriptionStore.isTrialEligible ? "Start 7-Day Free Trial" : "Subscribe Now")
+            Text(subscriptionStore.isTrialEligible ? "Try Free for 7 Days" : "Continue")
                 .fontWeight(.bold)
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)

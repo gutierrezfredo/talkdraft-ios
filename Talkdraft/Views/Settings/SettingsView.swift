@@ -223,9 +223,7 @@ struct SettingsView: View {
 
                 SettingsSection("Legal") {
                     Button {
-                        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/legal/privacy.html") {
-                            UIApplication.shared.open(url)
-                        }
+                        UIApplication.shared.open(AppConfig.privacyPolicyURL)
                     } label: {
                         SettingsRow(icon: "hand.raised", title: "Privacy Policy", showChevron: false, trailingIcon: "arrow.up.right")
                     }
@@ -234,9 +232,7 @@ struct SettingsView: View {
                     SettingsDivider()
 
                     Button {
-                        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/legal/terms.html") {
-                            UIApplication.shared.open(url)
-                        }
+                        UIApplication.shared.open(AppConfig.termsOfUseURL)
                     } label: {
                         SettingsRow(icon: "doc.text", title: "Terms of Service", showChevron: false, trailingIcon: "arrow.up.right")
                     }
@@ -440,9 +436,7 @@ struct SettingsView: View {
     }
 
     private func openSupportPage() {
-        if let url = URL(string: "https://gutierrezfredo.github.io/talkdraft-ios/legal/support.html") {
-            UIApplication.shared.open(url)
-        }
+        UIApplication.shared.open(AppConfig.supportURL)
     }
 
 
