@@ -1,6 +1,14 @@
 import SwiftUI
 
 extension HomeView {
+    func presentGuestPaywallIfNeeded() -> Bool {
+        guard authStore.isGuest, noteStore.notes.count >= AuthStore.guestNoteLimit else {
+            return false
+        }
+        showGuestPaywall = true
+        return true
+    }
+
     func beginSearch() {
         selectionSearchTransitionTask?.cancel()
         showsSelectionSearchTransition = false
@@ -75,6 +83,7 @@ extension HomeView {
     func confirmAudioImport(multiSpeaker: Bool) {
         guard let sourceURL = pendingImportURL else { return }
         pendingImportURL = nil
+        guard !presentGuestPaywallIfNeeded() else { return }
 
         Task { @MainActor in
             do {
@@ -96,6 +105,8 @@ extension HomeView {
     }
 
     func createTextNote() {
+        guard !presentGuestPaywallIfNeeded() else { return }
+
         let note = Note(
             id: UUID(),
             userId: authStore.userId,

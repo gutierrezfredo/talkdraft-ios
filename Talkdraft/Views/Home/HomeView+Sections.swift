@@ -84,9 +84,11 @@ extension HomeView {
             .onDisappear {
                 addCategoryFromBulk = false
             }
+            .presentationBackground { SheetBackground() }
         }
         .sheet(item: $editingCategory) { category in
             CategoryFormSheet(mode: .edit(category))
+                .presentationBackground { SheetBackground() }
         }
         .alert("Delete Category?", isPresented: .init(
             get: { categoryToDelete != nil },
@@ -215,10 +217,11 @@ extension HomeView {
                 .background(Circle().fill(Color.brand))
                 .glassEffect(.regular.interactive(), in: .circle)
                 .onTapGesture {
-                    showRecordView = true
+                    attemptRecord()
                 }
                 .onLongPressGesture {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    guard !presentGuestPaywallIfNeeded() else { return }
                     showAudioImporter = true
                 }
                 .matchedTransitionSource(id: "record", in: namespace)

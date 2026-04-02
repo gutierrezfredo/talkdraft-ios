@@ -138,6 +138,7 @@ struct CategoryPickerSheet: View {
             CategoryFormSheet(mode: .add) { newCategory in
                 assignCategory(newCategory.id)
             }
+            .presentationBackground { SheetBackground() }
         }
         .onAppear {
             selectedCategoryId = note.categoryId

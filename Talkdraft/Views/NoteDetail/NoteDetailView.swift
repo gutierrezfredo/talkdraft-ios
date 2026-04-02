@@ -409,6 +409,7 @@ struct NoteDetailView: View {
             .sheet(isPresented: $showCategoryPicker) {
                 CategoryPickerSheet(note: note)
                     .presentationDetents([.medium, .large])
+                    .presentationBackground { SheetBackground() }
             }
             .sheet(isPresented: $showRewriteSourceDialog) {
                 NoteDetailRewriteSourceSheet(
@@ -475,6 +476,7 @@ struct NoteDetailView: View {
                 if let audioShareItem {
                     ShareSheet(items: [audioShareItem])
                         .presentationDetents([.medium])
+                        .presentationBackground { SheetBackground() }
                 }
             }
             .sheet(isPresented: .init(
@@ -484,6 +486,7 @@ struct NoteDetailView: View {
                 if let textShareItem {
                     ShareSheet(items: [textShareItem])
                         .presentationDetents([.medium])
+                        .presentationBackground { SheetBackground() }
                 }
             }
     }

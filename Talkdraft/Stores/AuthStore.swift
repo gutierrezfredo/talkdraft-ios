@@ -7,9 +7,12 @@ import Supabase
 
 @MainActor @Observable
 final class AuthStore {
+    static let guestNoteLimit = 5
+
     var isAuthenticated = false
     var isLoading = false
     var isSendingMagicLink = false
+    var isGuest = false
     var userId: UUID?
     var user: Profile?
     var error: String?
@@ -217,6 +220,7 @@ final class AuthStore {
         await noteStore?.flushPendingHardDeletes()
         try await supabase.auth.signOut()
         isAuthenticated = false
+        isGuest = false
         userId = nil
         user = nil
         settingsStore?.resetSession()
@@ -247,6 +251,7 @@ final class AuthStore {
 
     private func handleSession(_ session: Session) async {
         userId = session.user.id
+        isGuest = session.user.isAnonymous
         isAuthenticated = true
         await fetchProfile(userId: session.user.id)
     }

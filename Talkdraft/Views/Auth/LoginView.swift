@@ -82,8 +82,18 @@ struct LoginView: View {
     private var onboardingHero: some View {
         ZStack {
             Circle()
-                .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
-                .frame(width: 220, height: 220)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.brand.opacity(colorScheme == .dark ? 0.18 : 0.10),
+                            .clear,
+                        ],
+                        center: .center,
+                        startRadius: 40,
+                        endRadius: 140
+                    )
+                )
+                .frame(width: 280, height: 280)
 
             LunaMascotView(.notes, size: 180)
         }
@@ -148,7 +158,7 @@ struct LoginView: View {
                 Button {
                     Task { await authStore.signInAnonymously() }
                 } label: {
-                    Text("Skip login")
+                    Text("Continue as Guest")
                         .font(.subheadline)
                         .foregroundStyle(colorScheme == .dark ? Color.secondary : Color.primary.opacity(0.62))
                         .frame(maxWidth: .infinity)
@@ -191,7 +201,7 @@ struct LoginView: View {
 
 // MARK: - Email Sign-In Sheet
 
-private struct EmailSignInSheet: View {
+struct EmailSignInSheet: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
@@ -354,8 +364,18 @@ private struct EmailSignInSheet: View {
             // Luna mascot
             ZStack {
                 Circle()
-                    .fill(Color.brand.opacity(colorScheme == .dark ? 0.20 : 0.12))
-                    .frame(width: 220, height: 220)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.brand.opacity(colorScheme == .dark ? 0.18 : 0.10),
+                                .clear,
+                            ],
+                            center: .center,
+                            startRadius: 40,
+                            endRadius: 140
+                        )
+                    )
+                    .frame(width: 280, height: 280)
 
                 LunaMascotView(.email, size: 180)
             }

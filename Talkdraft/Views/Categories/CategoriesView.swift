@@ -84,9 +84,11 @@ struct CategoriesView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             CategoryFormSheet(mode: .add)
+                .presentationBackground { SheetBackground() }
         }
         .sheet(item: $editingCategory) { category in
             CategoryFormSheet(mode: .edit(category))
+                .presentationBackground { SheetBackground() }
         }
         .alert("Delete Category?", isPresented: .init(
             get: { categoryToDelete != nil },

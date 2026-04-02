@@ -28,6 +28,8 @@ struct HomeView: View {
     @State var showDeleteConfirmation = false
     @State var showCategoryPicker = false
 
+    @State var showGuestPaywall = false
+    @State var showWidgetDiscovery = false
     @State var showAudioImporter = false
     @State var pendingImportURL: URL?
     @State var showAddCategory = false
@@ -50,9 +52,21 @@ struct HomeView: View {
         GridItem(.flexible(), spacing: 8),
     ]
 
+    private var isGuestAtLimit: Bool {
+        authStore.isGuest && noteStore.notes.count >= AuthStore.guestNoteLimit
+    }
+
+    func attemptRecord() {
+        if isGuestAtLimit {
+            showGuestPaywall = true
+        } else {
+            showRecordView = true
+        }
+    }
+
     private func consumePendingRecordDeepLinkIfPossible() {
         guard pendingDeepLink == .record, !isMandatoryPaywallPresented else { return }
-        showRecordView = true
+        attemptRecord()
         pendingDeepLink = nil
     }
 
@@ -223,6 +237,15 @@ struct HomeView: View {
             }
             .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
+        .fullScreenCover(isPresented: $showGuestPaywall) {
+            PaywallView(mandatory: false)
+        }
+        .sheet(isPresented: $showWidgetDiscovery) {
+            WidgetDiscoverySheet()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground { SheetBackground() }
+        }
         .fileImporter(
             isPresented: $showAudioImporter,
             allowedContentTypes: [.audio],
@@ -238,6 +261,7 @@ struct HomeView: View {
                 confirmAudioImport(multiSpeaker: multiSpeaker)
             }
             .presentationDetents([.height(220)])
+            .presentationBackground { SheetBackground() }
         }
         .alert("Delete \(selectedIds.count) Note\(selectedIds.count == 1 ? "" : "s")?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -252,6 +276,7 @@ struct HomeView: View {
         .sheet(isPresented: $showCategoryPicker) {
             bulkCategoryPicker
                 .presentationDetents([.medium, .large])
+                .presentationBackground { SheetBackground() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
@@ -285,6 +310,23 @@ struct HomeView: View {
         .onChange(of: isMandatoryPaywallPresented) { _, presented in
             guard !presented else { return }
             consumePendingRecordDeepLinkIfPossible()
+        }
+        .onChange(of: noteStore.generatingTitleIds) { oldIds, newIds in
+            // A title just finished generating — check if it's the first note's "aha" moment
+            guard !WidgetDiscoverySheet.wasDismissed,
+                  !showWidgetDiscovery,
+                  !showRecordView,
+                  noteStore.notes.count == 1,
+                  let firstNote = noteStore.notes.first,
+                  firstNote.title != nil,
+                  !newIds.contains(firstNote.id),
+                  oldIds.contains(firstNote.id)
+            else { return }
+            // Small delay so the user sees their note card update first
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                showWidgetDiscovery = true
+            }
         }
     }
 }

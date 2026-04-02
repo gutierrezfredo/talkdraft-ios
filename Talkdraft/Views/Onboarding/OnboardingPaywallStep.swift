@@ -1,64 +1,100 @@
+import AuthenticationServices
 import StoreKit
 import SwiftUI
 
 struct OnboardingPaywallStep: View {
     let onPurchaseCompleted: (_ startedTrial: Bool) -> Void
     let onRestored: () -> Void
+    let onGuestContinue: () -> Void
+    var onDismiss: (() -> Void)?
 
+    @Environment(AuthStore.self) private var authStore
     @Environment(SubscriptionStore.self) private var subscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
-    @State private var selectedPlan: PlanOption = .yearly
+
+    @State private var showEmailForm = false
+    @State private var awaitingPurchaseAfterAuth = false
     @State private var errorMessage: String?
-    private let fallbackMonthlyPrice = "$7.99"
+
     private let fallbackYearlyPrice = "$59.99"
 
-    private var cardColor: Color {
-        colorScheme == .dark ? .darkSurface : .white
+    private var yearlyPrice: String {
+        subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
     }
 
-    private var showsTrialMessaging: Bool {
-        subscriptionStore.isTrialEligible
+    private var monthlyEquivalent: String {
+        if let price = subscriptionStore.yearlyProduct?.price {
+            let monthly = NSDecimalNumber(decimal: price).doubleValue / 12
+            let floored = floor(monthly * 100) / 100
+            return String(format: "$%.2f", floored)
+        }
+        return "$4.99"
+    }
+
+    private var isProcessing: Bool {
+        subscriptionStore.isLoading
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                header
-                featureList
-                if showsTrialMessaging {
-                    trialTimeline
-                }
-                planSelection
-                subscribeButton
-                subscriptionDetails
-
-                Button {
-                    Task {
-                        do {
-                            try await subscriptionStore.restorePurchases()
-                            if subscriptionStore.isPro {
-                                onRestored()
-                            } else {
-                                errorMessage = "No active subscription found."
-                            }
-                        } catch {
-                            errorMessage = "Restore failed: \(error.localizedDescription)"
-                        }
+        VStack(spacing: 0) {
+            // Top bar (only when dismiss is available)
+            if let onDismiss {
+                HStack {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
                     }
-                } label: {
-                    Text("Restore Purchases")
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+            }
+
+            ScrollView {
+                VStack(spacing: 32) {
+                    header
+                    trustTimeline
+                        .padding(.horizontal, 8)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+            }
+
+            // Action Stack + footer
+            VStack(spacing: 12) {
+                actionStack
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+
+                Button(action: onGuestContinue) {
+                    Text("Continue as Guest")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(.primary)
                         .frame(height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 4)
-                .padding(.bottom, 20)
+
+                legalFooter
+                    .padding(.bottom, 8)
             }
-            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity)
+            .background(headerBackground.ignoresSafeArea())
+        }
+        .fullScreenCover(isPresented: $showEmailForm, onDismiss: {
+            if !authStore.isAuthenticated {
+                awaitingPurchaseAfterAuth = false
+            }
+        }) {
+            EmailSignInSheet()
+        }
+        .task(id: "\(authStore.isAuthenticated)-\(subscriptionStore.entitlementChecked)-\(subscriptionStore.hasProducts)") {
+            guard awaitingPurchaseAfterAuth else { return }
+            attemptPurchaseIfReady()
         }
         .alert("Error", isPresented: .init(
             get: { errorMessage != nil },
@@ -81,369 +117,218 @@ struct OnboardingPaywallStep: View {
 
     private var header: some View {
         VStack(spacing: 4) {
-            ZStack(alignment: .top) {
-                LunaMascotView(.paywall, size: 125)
-                    .zIndex(1)
-            }
-            .padding(.top, 20)
-            .background(alignment: .bottom) {
-                ConcaveArchShape()
-                    .fill(headerBackground)
-                    .frame(height: 2000)
-                    .padding(.horizontal, -300)
-                    .offset(y: 1615)
-            }
+            LunaMascotView(.paywall, size: 128)
+                .zIndex(1)
+                .padding(.top, 4)
+                .padding(.bottom, -16)
 
-            Text("Unlock the full\nTalkdraft experience")
+            Text("Unlock Talkdraft Pro")
                 .font(.brandTitle)
                 .fontDesign(nil)
                 .multilineTextAlignment(.center)
-        }
-    }
 
-    // MARK: - Feature List
-
-    private var featureList: some View {
-        VStack(spacing: 0) {
-            featureRow("Unlimited notes and categories", systemImage: "note.text")
-            Divider().padding(.leading, 52)
-            featureRow("AI rewrites for summaries, action items, and more", systemImage: "wand.and.stars")
-            Divider().padding(.leading, 52)
-            featureRow("Multi-speaker transcription", systemImage: "person.2.fill")
-        }
-        .background(cardColor)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-    }
-
-    private func featureRow(_ title: String, systemImage: String) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.brand.opacity(0.15))
-                    .frame(width: 36, height: 36)
-                Image(systemName: systemImage)
-                    .font(.callout)
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color.brand)
+                Text("Unlimited AI transcription")
             }
-            .frame(width: 36)
-
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
-
-            Spacer()
+            .font(.subheadline)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.brand.opacity(colorScheme == .dark ? 0.15 : 0.08), in: Capsule())
+            .padding(.top, 4)
+            .padding(.bottom, 2)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .background(alignment: .bottom) {
+            ConcaveArchShape()
+                .fill(headerBackground)
+                .frame(height: 2000)
+                .padding(.horizontal, -300)
+                .offset(y: 1480)
+        }
     }
 
-    // MARK: - Trial Timeline
+    // MARK: - Trust Timeline
 
-    private var trialTimeline: some View {
+    private var trustTimeline: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("How your free trial works")
-                .font(.headline)
-                .padding(.bottom, 16)
-
-            timelineRow(
-                icon: "gift.fill",
-                title: "Today",
-                subtitle: "Full access starts",
+            timelineNode(
+                emoji: "🎁",
+                title: "Today — Free Trial Starts",
+                subtitle: "Nothing will be charged today.",
                 isLast: false
             )
-            timelineRow(
-                icon: "bell.fill",
-                title: "Before renewal",
-                subtitle: "Cancel anytime in Apple ID Settings",
+            timelineNode(
+                emoji: "🔔",
+                title: "Day 6 — Trial Reminder",
+                subtitle: "We'll notify you 24h before",
                 isLast: false
             )
-            timelineRow(
-                icon: "creditcard.fill",
-                title: "After 7 days",
-                subtitle: "Your subscription begins unless canceled",
+            timelineNode(
+                emoji: "🪄",
+                title: "Day 7 — Subscription Begins",
+                subtitle: "\(yearlyPrice)/yr · Cancel anytime",
                 isLast: true
             )
         }
-        .padding(16)
     }
 
-    private func timelineRow(icon: String, title: String, subtitle: String, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+    private func timelineNode(
+        emoji: String,
+        title: String,
+        subtitle: String,
+        isLast: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 16) {
             VStack(spacing: 0) {
                 ZStack {
                     Circle()
-                        .fill(Color.brand.opacity(0.15))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: icon)
-                        .font(.callout)
-                        .foregroundStyle(Color.brand)
+                        .fill(Color.brand.opacity(colorScheme == .dark ? 0.25 : 0.12))
+                        .frame(width: 48, height: 48)
+                    Text(emoji)
+                        .font(.title3)
                 }
 
                 if !isLast {
                     Rectangle()
-                        .fill(Color.brand.opacity(0.2))
+                        .fill(Color.brand.opacity(0.18))
                         .frame(width: 2)
                         .frame(maxHeight: .infinity)
                 }
             }
-            .frame(width: 36)
+            .frame(width: 48)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.subheadline)
+                    .font(.body)
                     .fontWeight(.semibold)
                 Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.55))
             }
-            .padding(.bottom, isLast ? 0 : 20)
+            .padding(.top, 4)
+            .padding(.bottom, isLast ? 0 : 24)
 
             Spacer()
         }
     }
 
-    // MARK: - Plan Selection
+    // MARK: - Action Stack
 
-    private var planSelection: some View {
+    private var actionStack: some View {
         VStack(spacing: 12) {
-            planCard(
-                option: .yearly,
-                title: "Yearly",
-                price: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice,
-                detail: "per year",
-                badge: yearlyBadgeText
-            )
-
-            planCard(
-                option: .monthly,
-                title: "Monthly",
-                price: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice,
-                detail: "per month",
-                badge: nil
-            )
-        }
-    }
-
-    private func planCard(option: PlanOption, title: String, price: String, detail: String, badge: String?) -> some View {
-        Button {
-            withAnimation(.snappy) { selectedPlan = option }
-        } label: {
-            HStack(spacing: 14) {
-                Circle()
-                    .strokeBorder(selectedPlan == option ? Color.brand : .secondary.opacity(0.3), lineWidth: 2)
-                    .frame(width: 24, height: 24)
-                    .overlay {
-                        if selectedPlan == option {
-                            Circle()
-                                .fill(Color.brand)
-                                .frame(width: 14, height: 14)
-                        }
-                    }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text(title)
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-
-                        if let badge {
-                            Text(badge)
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.brand)
-                                .clipShape(Capsule())
-                        }
-                    }
-
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            if isProcessing {
+                ProgressView()
+                    .frame(height: 56)
+            } else {
+                // Continue with Apple
+                SignInWithAppleButton(.continue) { request in
+                    awaitingPurchaseAfterAuth = true
+                    authStore.appleSignInRequest(request)
+                } onCompletion: { result in
+                    Task { await authStore.handleAppleSignIn(result) }
                 }
-
-                Spacer()
-
-                Text(price)
-                    .font(.body)
-                    .fontWeight(.bold)
-                    .foregroundStyle(selectedPlan == option ? Color.brand : .primary)
-            }
-            .padding(16)
-            .background(cardColor)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(selectedPlan == option ? Color.brand : .clear, lineWidth: 2)
-            )
-        }
-        .buttonStyle(.plain)
-        .sensoryFeedback(.selection, trigger: selectedPlan)
-    }
-
-    // MARK: - Subscribe Button
-
-    private var subscribeButton: some View {
-        VStack(spacing: 8) {
-            Button {
-                Task {
-                    let startedTrial = showsTrialMessaging
-                    let product: StoreKit.Product? = switch selectedPlan {
-                    case .monthly: subscriptionStore.monthlyProduct
-                    case .yearly: subscriptionStore.yearlyProduct
-                    }
-                    guard let product else {
-                        errorMessage = "Products not available. Please try again later."
-                        return
-                    }
-                    do {
-                        try await subscriptionStore.purchase(product)
-                        if subscriptionStore.isPro {
-                            onPurchaseCompleted(startedTrial)
-                        }
-                    } catch {
-                        errorMessage = "Purchase failed: \(error.localizedDescription)"
-                    }
-                }
-            } label: {
-                Group {
-                    if subscriptionStore.isLoading {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Text(showsTrialMessaging ? "Start Free Trial" : "Subscribe Now")
-                            .fontWeight(.bold)
-                    }
-                }
-                .frame(maxWidth: .infinity)
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 56)
-                .foregroundStyle(.white)
-                .background(Color.brand, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(subscriptionStore.isLoading)
+                .clipShape(Capsule())
 
-            Text(subscriptionFooterText)
+                // Continue with Email
+                Button {
+                    awaitingPurchaseAfterAuth = true
+                    showEmailForm = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "envelope.fill")
+                            .font(.body)
+                        Text("Continue with Email")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        Capsule()
+                            .fill(colorScheme == .dark ? Color.darkSurface : .white)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text("Start your 7-day free trial. Then \(yearlyPrice)/year (\(monthlyEquivalent)/mo).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
     }
 
-    private var subscriptionDetails: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Subscription details")
-                .font(.headline)
+    // MARK: - Purchase Logic
 
-            VStack(alignment: .leading, spacing: 8) {
-                subscriptionDetailRow(
-                    title: "Plan",
-                    detail: "Talkdraft Pro \(selectedPlanTitle) • \(selectedPlanPrice)/\(selectedPlanPeriod)"
-                )
-                subscriptionDetailRow(
-                    title: "Billing",
-                    detail: billingDescription
-                )
-                subscriptionDetailRow(
-                    title: "Cancellation",
-                    detail: "Manage or cancel anytime in Apple ID Settings."
-                )
-            }
+    private func attemptPurchaseIfReady() {
+        guard authStore.isAuthenticated,
+              subscriptionStore.hasProducts,
+              subscriptionStore.entitlementChecked
+        else { return }
 
-            HStack(spacing: 12) {
-                legalLinkButton("Terms of Use", url: AppConfig.termsOfUseURL)
-                legalLinkButton("Privacy Policy", url: AppConfig.privacyPolicyURL)
-                legalLinkButton("Manage", url: AppConfig.manageSubscriptionsURL)
+        awaitingPurchaseAfterAuth = false
+        Task {
+            guard let product = subscriptionStore.yearlyProduct else {
+                errorMessage = "Products not available. Please try again later."
+                return
             }
-            .font(.footnote.weight(.semibold))
+            do {
+                let startedTrial = subscriptionStore.isTrialEligible
+                try await subscriptionStore.purchase(product)
+                if subscriptionStore.isPro {
+                    onPurchaseCompleted(startedTrial)
+                }
+            } catch {
+                errorMessage = "Purchase failed: \(error.localizedDescription)"
+            }
         }
-        .padding(16)
-        .background(cardColor)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    private func subscriptionDetailRow(title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    // MARK: - Legal Footer
+
+    private var legalFooter: some View {
+        HStack(spacing: 0) {
+            legalButton("Restore Purchase") {
+                Task {
+                    do {
+                        try await subscriptionStore.restorePurchases()
+                        if subscriptionStore.isPro {
+                            onRestored()
+                        } else {
+                            errorMessage = "No active subscription found."
+                        }
+                    } catch {
+                        errorMessage = "Restore failed: \(error.localizedDescription)"
+                    }
+                }
+            }
+
+            Text("·")
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 8)
+
+            legalButton("Terms") { openURL(AppConfig.termsOfUseURL) }
+
+            Text("·")
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 8)
+
+            legalButton("Privacy") { openURL(AppConfig.privacyPolicyURL) }
+        }
+        .font(.caption)
+    }
+
+    private func legalButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Text(title)
-                .font(.caption)
                 .foregroundStyle(.secondary)
-
-            Text(detail)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-        }
-    }
-
-    private func legalLinkButton(_ title: String, url: URL) -> some View {
-        Button(title) {
-            openURL(url)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Color.brand)
     }
-
-    private var selectedPlanPrice: String {
-        switch selectedPlan {
-        case .monthly: subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice
-        case .yearly: subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
-        }
-    }
-
-    private var selectedPlanTitle: String {
-        switch selectedPlan {
-        case .monthly: "Monthly"
-        case .yearly: "Yearly"
-        }
-    }
-
-    private var yearlyBadgeText: String? {
-        guard let monthlyPrice = subscriptionStore.monthlyProduct?.price,
-              let yearlyPrice = subscriptionStore.yearlyProduct?.price
-        else {
-            return "Save 37%"
-        }
-
-        let monthly = NSDecimalNumber(decimal: monthlyPrice).doubleValue
-        let yearly = NSDecimalNumber(decimal: yearlyPrice).doubleValue
-        let annualizedMonthly = monthly * 12
-        guard annualizedMonthly > yearly, annualizedMonthly > 0 else { return nil }
-
-        let savings = Int(round((1 - yearly / annualizedMonthly) * 100))
-        return savings > 0 ? "Save \(savings)%" : nil
-    }
-
-    private var selectedPlanPeriod: String {
-        switch selectedPlan {
-        case .monthly: "month"
-        case .yearly: "year"
-        }
-    }
-
-    private var billingDescription: String {
-        if showsTrialMessaging {
-            return "7-day free trial for eligible accounts, then \(selectedPlanPrice)/\(selectedPlanPeriod). Auto-renews unless canceled at least 24 hours before the current period ends."
-        }
-
-        return "Auto-renews at \(selectedPlanPrice)/\(selectedPlanPeriod) unless canceled at least 24 hours before the current period ends."
-    }
-
-    private var subscriptionFooterText: String {
-        if showsTrialMessaging {
-            return "7-day free trial, then \(selectedPlanPrice)/\(selectedPlanPeriod). Auto-renews unless canceled at least 24 hours before the current period ends."
-        }
-
-        return "Auto-renews at \(selectedPlanPrice)/\(selectedPlanPeriod) unless canceled at least 24 hours before the current period ends."
-    }
-}
-
-// MARK: - Plan Option
-
-private enum PlanOption {
-    case monthly
-    case yearly
 }
 
 private struct ConcaveArchShape: Shape {

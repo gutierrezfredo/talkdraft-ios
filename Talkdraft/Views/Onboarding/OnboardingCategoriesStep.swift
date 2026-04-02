@@ -83,20 +83,8 @@ struct OnboardingCategoriesStep: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
 
-            Button {
-                selectedIndices.removeAll()
-                onNext()
-            } label: {
-                Text("Skip")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-            .padding(.bottom, 8)
+            Spacer()
+                .frame(height: 8)
         }
         .sensoryFeedback(.selection, trigger: selectedIndices.count)
     }
@@ -116,8 +104,10 @@ struct CategorySuggestion {
         CategorySuggestion(name: "Goals", color: "#14B8A6"),
         CategorySuggestion(name: "Work", color: "#3B82F6"),
         CategorySuggestion(name: "Personal", color: "#EC4899"),
-        CategorySuggestion(name: "Content", color: "#8B5CF6"),
+        CategorySuggestion(name: "Content Ideas", color: "#8B5CF6"),
         CategorySuggestion(name: "Reminders", color: "#F97316"),
         CategorySuggestion(name: "Travel", color: "#0EA5E9"),
+        CategorySuggestion(name: "Brain Dumps", color: "#A855F7"),
+        CategorySuggestion(name: "Daily Reflections", color: "#06B6D4"),
     ]
 }
