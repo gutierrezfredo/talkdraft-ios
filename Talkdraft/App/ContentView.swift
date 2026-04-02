@@ -68,6 +68,10 @@ struct ContentView: View {
         }
     }
 
+    private var effectiveSplashColorScheme: ColorScheme {
+        colorScheme ?? splashColorScheme
+    }
+
     private var isPostAuthBootstrapReady: Bool {
         subscriptionStore.entitlementChecked && noteStore.hasInitiallyLoaded
     }
@@ -76,15 +80,45 @@ struct ContentView: View {
         authStore.isAuthenticated && (showPostAuthTransition || isPerformingInteractiveAuth) && !isPostAuthBootstrapReady
     }
 
+    @Environment(\.colorScheme) private var splashColorScheme
+
     private var splashView: some View {
         ZStack {
-            Color.darkBackground.ignoresSafeArea()
+            Group {
+                if effectiveSplashColorScheme == .dark {
+                    Color.darkBackground
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: "#8B5CF6"), Color(hex: "#6D28D9")],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            }
+            .ignoresSafeArea()
+
+            if effectiveSplashColorScheme == .dark {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.brand.opacity(0.15),
+                                .clear,
+                            ],
+                            center: .center,
+                            startRadius: 40,
+                            endRadius: 180
+                        )
+                    )
+                    .frame(width: 360, height: 360)
+            }
+
             ZStack(alignment: .topLeading) {
                 Image("talkdraft-logo")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 200, height: 200)
-                SplashFloatingZs()
+                SplashFloatingZs(colorScheme: effectiveSplashColorScheme)
                     .offset(x: -10, y: -20)
             }
             .accessibilityHidden(true)
@@ -226,11 +260,13 @@ struct ContentView: View {
 // MARK: - Splash Floating Z's
 
 private struct SplashFloatingZs: View {
+    let colorScheme: ColorScheme
+
     var body: some View {
         ZStack {
-            SplashFloatingZ(delay: 0.0, xOffset: 0)
-            SplashFloatingZ(delay: 1.2, xOffset: 10)
-            SplashFloatingZ(delay: 2.4, xOffset: -6)
+            SplashFloatingZ(delay: 0.0, xOffset: 0, colorScheme: colorScheme)
+            SplashFloatingZ(delay: 1.2, xOffset: 10, colorScheme: colorScheme)
+            SplashFloatingZ(delay: 2.4, xOffset: -6, colorScheme: colorScheme)
         }
         .frame(width: 60, height: 60)
     }
@@ -239,13 +275,14 @@ private struct SplashFloatingZs: View {
 private struct SplashFloatingZ: View {
     let delay: Double
     let xOffset: CGFloat
+    let colorScheme: ColorScheme
     @State private var visible = false
     @State private var animate = false
 
     var body: some View {
         Text("z")
             .font(.system(size: 28, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(colorScheme == .dark ? Color.secondary : Color.white)
             .opacity(visible ? (animate ? 0 : 0.45) : 0)
             .offset(x: xOffset + (animate ? 4 : 0), y: animate ? -18 : 0)
             .scaleEffect(animate ? 0.82 : 1.0)

@@ -50,7 +50,7 @@ struct QuickRecordWidgetView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 130)
-                            .offset(x: -20, y: 18)
+                            .offset(x: -20, y: 20)
                         Spacer()
                     }
                 }
@@ -67,38 +67,10 @@ struct QuickRecordWidgetView: View {
     }
 }
 
-struct QuickRecordLockScreenView: View {
-    @Environment(\.widgetFamily) var family
-
-    var body: some View {
-        Link(destination: URL(string: "talkdraft://record")!) {
-            switch family {
-            case .accessoryCircular:
-                ZStack {
-                    AccessoryWidgetBackground()
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 22, weight: .medium))
-                }
-            case .accessoryRectangular:
-                HStack(spacing: 8) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 16, weight: .medium))
-                    Text("Record")
-                        .font(.system(.headline, design: .rounded))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            default:
-                Image(systemName: "mic.fill")
-            }
-        }
-    }
-}
-
 @main
 struct TalkdraftWidgetBundle: WidgetBundle {
     var body: some Widget {
         QuickRecordHomeWidget()
-        QuickRecordLockScreenWidget()
     }
 }
 
@@ -115,15 +87,3 @@ struct QuickRecordHomeWidget: Widget {
     }
 }
 
-struct QuickRecordLockScreenWidget: Widget {
-    let kind = "QuickRecordLockScreen"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: QuickRecordProvider()) { _ in
-            QuickRecordLockScreenView()
-        }
-        .configurationDisplayName("Quick Record")
-        .description("Tap to start recording a voice note.")
-        .supportedFamilies([.accessoryCircular, .accessoryRectangular])
-    }
-}
