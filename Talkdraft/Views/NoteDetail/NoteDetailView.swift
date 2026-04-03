@@ -120,12 +120,11 @@ struct NoteDetailView: View {
     ]
 
     let whilePhrases: [(pose: LunaPose, subtitle: String)] = [
-        (.binge, "This one might take a bit — maybe catch up on your favorite show? Your note will be waiting when you're back"),
-        (.hobby, "This one might take a bit — maybe pick up a new hobby? Your note will be waiting when you're back"),
-        (.moon, "This one might take a bit — maybe take a quick nap? Your note will be here when you wake up"),
-        (.read, "This one might take a bit — maybe read a page of your favorite book? Your note will be here when you're done"),
-        (.snack, "This one might take a bit — maybe grab your favorite snack? Your note will be right here when you're back"),
-        (.work, "This one might take a bit — maybe tackle something on your list? Your note will be waiting when you're back"),
+        (.binge, "Luna's catching up on her favorite show - sounds like a good idea. Your note will be waiting for you."),
+        (.snack, "Luna's grabbing a snack - not a bad idea. Your note will be waiting for you."),
+        (.read, "Luna's reading a good book - perfect time for one. Your note will be waiting for you."),
+        (.hobby, "Luna's working on a side project - great time for one. Your note will be waiting for you."),
+        (.work, "Luna's staying busy - not a bad plan. Your note will be waiting for you."),
     ]
     @State var titlePhraseIndex = 0
     @State var titleTypewriterTask: Task<Void, Never>?
