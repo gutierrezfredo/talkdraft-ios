@@ -225,6 +225,10 @@ extension HomeView {
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+            .onLongPressGesture(minimumDuration: 0, maximumDistance: 30, pressing: { isPressing in
+                guard isPressing else { return }
+                AudioRecorder.prewarmRecordingSession()
+            }, perform: {})
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.45)
                     .onEnded { _ in

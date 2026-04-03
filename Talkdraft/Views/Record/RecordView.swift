@@ -271,18 +271,14 @@ struct RecordView: View {
     }
 
     private func scheduleRecordingStart() {
-        cancelPendingStart()
-        startTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            startRecording()
-        }
+        cancelPendingStart(discardPreparedSession: false)
+        startTask = makeRecordingStartTask()
     }
 
-    private func cancelPendingStart() {
+    private func cancelPendingStart(discardPreparedSession: Bool = true) {
         startTask?.cancel()
         startTask = nil
-        if !recorder.isRecording {
+        if discardPreparedSession, !recorder.isRecording {
             Task { @MainActor in
                 AudioRecorder.discardPreparedRecordingSession()
             }
@@ -290,11 +286,18 @@ struct RecordView: View {
     }
 
     private func startRecording() {
-        startTask = nil
-        Task { @MainActor in
+        cancelPendingStart(discardPreparedSession: false)
+        startTask = makeRecordingStartTask()
+    }
+
+    private func makeRecordingStartTask() -> Task<Void, Never> {
+        Task(priority: .userInitiated) { @MainActor in
+            defer { startTask = nil }
+            guard !Task.isCancelled else { return }
             do {
                 try await recorder.startRecording()
             } catch {
+                guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 showError = true
             }

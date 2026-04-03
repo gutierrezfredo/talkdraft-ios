@@ -83,6 +83,10 @@ struct NoteDetailNormalBottomBar: View {
                 .buttonStyle(.plain)
                 .disabled(isAppendTranscribing)
                 .opacity(isAppendTranscribing ? 0.5 : 1)
+                .onLongPressGesture(minimumDuration: 0, maximumDistance: 30, pressing: { isPressing in
+                    guard isPressing else { return }
+                    AudioRecorder.prewarmRecordingSession()
+                }, perform: {})
 
                 Button(action: onDismissKeyboard) {
                     Image(systemName: "keyboard.chevron.compact.down")
