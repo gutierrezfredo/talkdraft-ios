@@ -219,6 +219,9 @@ struct HomeView: View {
         if isGuestAtLimit {
             showGuestPaywall = true
         } else {
+            Task { @MainActor in
+                AudioRecorder.prewarmRecordingSession()
+            }
             showRecordView = true
         }
     }

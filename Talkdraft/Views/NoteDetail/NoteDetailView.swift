@@ -68,6 +68,7 @@ struct NoteDetailView: View {
     @State var appendRecorder = AudioRecorder()
     @State var isAppendRecording = false
     @State var isAppendTranscribing = false
+    @State var appendRecordingStartTask: Task<Void, Never>?
     @State var appendPlaceholder: NoteAppendPlaceholderState?
     @State var cursorPosition: Int = 0
     @State var lastKnownCursorPosition: Int = 0
@@ -335,6 +336,7 @@ struct NoteDetailView: View {
             .onDisappear {
                 typewriterTask?.cancel()
                 titleTypewriterTask?.cancel()
+                appendRecordingStartTask?.cancel()
             }
             .onChange(of: editedTitle) {
                 scheduleAutosave()

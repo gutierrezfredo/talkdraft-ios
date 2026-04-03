@@ -345,10 +345,10 @@ struct AudioWorkflowRegressionTests {
 }
 
 @MainActor
-@Test func audioRecorderSupportsPauseResumeAndCancel() throws {
+@Test func audioRecorderSupportsPauseResumeAndCancel() async throws {
     let recorder = AudioRecorder()
 
-    try recorder.startRecording()
+    try await recorder.startRecording()
     #expect(recorder.isRecording)
     #expect(!recorder.isPaused)
 
