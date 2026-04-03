@@ -153,7 +153,7 @@ extension NoteDetailView {
     func cancelPendingAppendRecordingStart(discardPreparedSession: Bool = true) {
         appendRecordingStartTask?.cancel()
         appendRecordingStartTask = nil
-        if discardPreparedSession, !appendRecorder.isRecording {
+        if discardPreparedSession, !appendRecorder.isRecording, !appendRecorder.isStarting {
             Task { @MainActor in
                 AudioRecorder.discardPreparedRecordingSession()
             }

@@ -27,6 +27,7 @@ enum RecordingError: LocalizedError {
 @Observable
 final class AudioRecorder: @unchecked Sendable {
     var isRecording = false
+    var isStarting = false
     var isPaused = false
     var elapsedSeconds: TimeInterval = 0
     var frequencyBands: [Float] = Array(repeating: 0, count: 20)
@@ -100,8 +101,11 @@ final class AudioRecorder: @unchecked Sendable {
 
     @MainActor
     func startRecording() async throws {
+        guard !isRecording, !isStarting else { return }
+
         let startTimestamp = Date()
         let session = AVAudioSession.sharedInstance()
+        isStarting = true
         do {
             let preparedSession = try await Self.consumePreparedRecordingSession()
             let usesCarAudioRoute = Self.routeUsesCarAudio(session.currentRoute)
@@ -123,6 +127,7 @@ final class AudioRecorder: @unchecked Sendable {
             self.startedOnCarAudioRoute = usesCarAudioRoute
 
             isRecording = true
+            isStarting = false
             isPaused = false
             startTime = Date()
             pausedElapsed = 0
@@ -146,6 +151,7 @@ final class AudioRecorder: @unchecked Sendable {
             pipeline?.stop()
             pipeline = nil
             startedOnCarAudioRoute = false
+            isStarting = false
             startupRecoveryDeadline = nil
             startupInterruptionActive = false
             lastAutomaticRecoveryAttemptAt = nil
@@ -206,6 +212,7 @@ final class AudioRecorder: @unchecked Sendable {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         isRecording = false
+        isStarting = false
         isPaused = false
         didRecordInBackground = false
         startedOnCarAudioRoute = false
@@ -214,6 +221,8 @@ final class AudioRecorder: @unchecked Sendable {
         lastAutomaticRecoveryAttemptAt = nil
         startTime = nil
         pausedElapsed = 0
+        elapsedSeconds = 0
+        frequencyBands = Array(repeating: 0, count: bandCount)
         endBackgroundTaskIfNeeded()
 
         return url
@@ -232,6 +241,7 @@ final class AudioRecorder: @unchecked Sendable {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         isRecording = false
+        isStarting = false
         isPaused = false
         didRecordInBackground = false
         startedOnCarAudioRoute = false

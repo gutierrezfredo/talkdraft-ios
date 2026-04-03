@@ -152,10 +152,13 @@ struct HomeView: View {
     @Environment(NoteStore.self) var noteStore
     @Environment(SettingsStore.self) var settingsStore
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) var scenePhase
     @Binding var pendingDeepLink: DeepLink?
     var isMandatoryPaywallPresented: Bool
     @State var selectedCategory: UUID?
     @State var showRecordView = false
+    @State var homeRecorder = AudioRecorder()
+    @State var homeRecordingStartTask: Task<Void, Never>?
     @State var sortOrder: NoteSortOrder = .updatedAt
     @State var isSearching = false
     @State var query = ""
@@ -221,8 +224,32 @@ struct HomeView: View {
             showGuestPaywall = true
         } else {
             AudioRecorder.prewarmRecordingSession()
+            startHomeRecordingIfNeeded()
             showRecordView = true
         }
+    }
+
+    @MainActor
+    private func startHomeRecordingIfNeeded() {
+        guard !homeRecorder.isRecording, !homeRecorder.isStarting else { return }
+
+        homeRecordingStartTask?.cancel()
+        homeRecordingStartTask = Task(priority: .userInitiated) { @MainActor in
+            defer { homeRecordingStartTask = nil }
+            do {
+                try await homeRecorder.startRecording()
+            } catch {
+                guard !Task.isCancelled else { return }
+            }
+        }
+    }
+
+    @MainActor
+    private func resetHomeRecorderIfIdle() {
+        guard !showRecordView, !homeRecorder.isRecording, !homeRecorder.isStarting else { return }
+        homeRecordingStartTask?.cancel()
+        homeRecordingStartTask = nil
+        homeRecorder = AudioRecorder()
     }
 
     private func consumePendingRecordDeepLinkIfPossible() {
@@ -393,6 +420,12 @@ struct HomeView: View {
             }
         }
         .fullScreenCover(isPresented: $showRecordView, onDismiss: {
+            if homeRecorder.isStarting {
+                homeRecordingStartTask?.cancel()
+                homeRecordingStartTask = nil
+                homeRecorder.cancelRecording()
+            }
+            resetHomeRecorderIfIdle()
             applySavedNoteHandoff(
                 SavedNoteHandoffLogic.resume(
                     pendingNote: pendingNote,
@@ -401,7 +434,7 @@ struct HomeView: View {
                 )
             )
         }) {
-            RecordView(categoryId: selectedCategory) { savedNote in
+            RecordView(recorder: homeRecorder, categoryId: selectedCategory) { savedNote in
                 applySavedNoteHandoff(
                     SavedNoteHandoffLogic.begin(
                         with: savedNote,
@@ -479,8 +512,13 @@ struct HomeView: View {
             Text(noteStore.lastError ?? "")
         }
         .onAppear {
+            resetHomeRecorderIfIdle()
             syncWidgetDiscoveryProgress()
             consumePendingRecordDeepLinkIfPossible()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            resetHomeRecorderIfIdle()
         }
         .onChange(of: noteStore.notes) { _, _ in
             syncWidgetDiscoveryProgress()
