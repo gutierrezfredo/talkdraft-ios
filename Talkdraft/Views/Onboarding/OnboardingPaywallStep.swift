@@ -41,6 +41,20 @@ struct OnboardingPaywallStep: View {
         subscriptionStore.isLoading
     }
 
+    private var shouldShowGuestContinueButton: Bool {
+        Self.shouldShowGuestContinueButton(
+            isAuthenticated: authStore.isAuthenticated,
+            hasGuestContinueAction: onGuestContinue != nil
+        )
+    }
+
+    static func shouldShowGuestContinueButton(
+        isAuthenticated: Bool,
+        hasGuestContinueAction: Bool
+    ) -> Bool {
+        hasGuestContinueAction && !isAuthenticated
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Top bar (only when dismiss is available)
@@ -75,7 +89,7 @@ struct OnboardingPaywallStep: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
 
-                if let onGuestContinue {
+                if shouldShowGuestContinueButton, let onGuestContinue {
                     Button(action: onGuestContinue) {
                         Text("Continue as Guest")
                             .font(.subheadline)

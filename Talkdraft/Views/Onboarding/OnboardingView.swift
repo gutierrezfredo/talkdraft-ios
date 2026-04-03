@@ -10,8 +10,22 @@ struct OnboardingView: View {
     @State private var step: OnboardingStep = .welcome
     @State private var navigationDirection: NavigationDirection = .forward
     @State private var selectedCategoryIndices: Set<Int> = []
-    @State private var showTrialReminderSheet = false
     @State private var guestAuthError: String?
+
+    static func shouldShowTrialReminderAfterPurchase(
+        startedTrial: Bool,
+        showsReminderForDebugPurchases: Bool
+    ) -> Bool {
+        startedTrial || showsReminderForDebugPurchases
+    }
+
+    private static var showsReminderForDebugPurchases: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
 
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
@@ -22,7 +36,7 @@ struct OnboardingView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                if step != .welcome {
+                if step.showsProgressChrome {
                     progressBar
                         .padding(.horizontal, 24)
                         .padding(.top, 12)
@@ -52,20 +66,20 @@ struct OnboardingView: View {
                         OnboardingPaywallStep(
                             onPurchaseCompleted: { startedTrial in
                                 createCategories()
-                                #if DEBUG
-                                showTrialReminderSheet = true
-                                #else
-                                if startedTrial {
-                                    showTrialReminderSheet = true
-                                } else {
-                                    finishOnboarding()
-                                }
-                                #endif
+                                handlePurchaseCompletion(startedTrial: startedTrial)
                             },
                             onRestored: { createCategories(); finishOnboarding() },
-                            onGuestContinue: { handleGuestContinue() }
+                            onGuestContinue: authStore.isAuthenticated ? nil : { handleGuestContinue() }
                         )
                         .id(stepViewID(for: .paywall))
+                        .transition(stepTransition)
+                    }
+
+                    if step == .trialReminder {
+                        OnboardingTrialReminderStep {
+                            finishOnboarding()
+                        }
+                        .id(stepViewID(for: .trialReminder))
                         .transition(stepTransition)
                     }
                 }
@@ -73,15 +87,6 @@ struct OnboardingView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: step)
-        .sheet(isPresented: $showTrialReminderSheet) {
-            TrialReminderSheet {
-                showTrialReminderSheet = false
-                finishOnboarding()
-            }
-            .interactiveDismissDisabled()
-            .presentationDetents([.medium])
-            .presentationBackground { SheetBackground() }
-        }
         .alert("Unable to Continue as Guest", isPresented: .init(
             get: { guestAuthError != nil },
             set: {
@@ -194,6 +199,14 @@ struct OnboardingView: View {
     // MARK: - Completion
 
     private func handleGuestContinue() {
+        if authStore.isGuest {
+            createCategories()
+            finishOnboarding()
+            return
+        }
+
+        guard !authStore.isAuthenticated else { return }
+
         Task {
             guestAuthError = nil
             let signedIn = await authStore.signInAnonymously()
@@ -225,7 +238,20 @@ struct OnboardingView: View {
         }
     }
 
+    private func handlePurchaseCompletion(startedTrial: Bool) {
+        if Self.shouldShowTrialReminderAfterPurchase(
+            startedTrial: startedTrial,
+            showsReminderForDebugPurchases: Self.showsReminderForDebugPurchases
+        ) {
+            navigationDirection = .forward
+            step = .trialReminder
+        } else {
+            finishOnboarding()
+        }
+    }
+
     private func finishOnboarding() {
+        UserDefaults.standard.set(false, forKey: "debug.forceOnboardingFlow")
         UserDefaults.standard.set(true, forKey: "onboarding.completed.device")
         if let userId = authStore.userId {
             UserDefaults.standard.set(true, forKey: "onboarding.completed.\(userId.uuidString)")
@@ -240,10 +266,20 @@ private enum OnboardingStep: Int, CaseIterable {
     case welcome
     case categories
     case paywall
+    case trialReminder
+
+    var showsProgressChrome: Bool {
+        switch self {
+        case .welcome, .trialReminder:
+            false
+        case .categories, .paywall:
+            true
+        }
+    }
 
     var showsBackButton: Bool {
         switch self {
-        case .welcome, .paywall: false
+        case .welcome, .paywall, .trialReminder: false
         case .categories: true
         }
     }
@@ -253,6 +289,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .welcome: nil
         case .categories: .welcome
         case .paywall: .categories
+        case .trialReminder: nil
         }
     }
 
@@ -260,7 +297,7 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: .categories
         case .categories: .paywall
-        case .paywall: nil
+        case .paywall, .trialReminder: nil
         }
     }
 }

@@ -107,5 +107,6 @@ struct WidgetDiscoverySheet: View {
 
     private func markDismissed() {
         UserDefaults.standard.set(true, forKey: Self.dismissedKey)
+        WidgetDiscoveryLogic.clearPendingPresentation()
     }
 }

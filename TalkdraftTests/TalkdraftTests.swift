@@ -8,25 +8,293 @@ import UIKit
     #expect(true)
 }
 
-@Test func transcriptionPromptUsesPreferredLanguageAsHintNotForcedOutput() {
-    let prompt = TranscriptionService.transcriptionPrompt(
-        preferredLanguage: "es",
-        customDictionary: ["Surest", "Done"]
-    )
+@Test func transcriptionPromptUsesCustomDictionaryOnly() {
+    let prompt = TranscriptionService.transcriptionPrompt(customDictionary: ["Surest", "Done"])
 
-    #expect(prompt?.contains("usually records in Spanish") == true)
-    #expect(prompt?.contains("language actually spoken") == true)
-    #expect(prompt?.contains("Do not translate") == true)
-    #expect(prompt?.contains("Surest, Done") == true)
+    #expect(prompt == "Surest, Done")
 }
 
-@Test func transcriptionPromptWithoutPreferredLanguageStillForbidsTranslation() {
-    let prompt = TranscriptionService.transcriptionPrompt(
-        preferredLanguage: nil,
-        customDictionary: []
+@Test func transcriptionPromptWithoutCustomDictionaryIsNil() {
+    let prompt = TranscriptionService.transcriptionPrompt(customDictionary: [])
+
+    #expect(prompt == nil)
+}
+
+@Test func mandatoryPaywallSkipsGuests() {
+    let shouldPresent = ContentView.shouldPresentMandatoryPaywall(
+        isAuthenticated: true,
+        isGuest: true,
+        isPostAuthBootstrapReady: true,
+        isPro: false
     )
 
-    #expect(prompt == "Transcribe the spoken words verbatim in the language actually spoken. Do not translate.")
+    #expect(shouldPresent == false)
+}
+
+@Test func mandatoryPaywallShowsForSignedInNonProUsers() {
+    let shouldPresent = ContentView.shouldPresentMandatoryPaywall(
+        isAuthenticated: true,
+        isGuest: false,
+        isPostAuthBootstrapReady: true,
+        isPro: false
+    )
+
+    #expect(shouldPresent == true)
+}
+
+@Test func onboardingPaywallShowsGuestContinueOnlyBeforeSignIn() {
+    let shouldShowBeforeSignIn = OnboardingPaywallStep.shouldShowGuestContinueButton(
+        isAuthenticated: false,
+        hasGuestContinueAction: true
+    )
+    let shouldShowAfterSignIn = OnboardingPaywallStep.shouldShowGuestContinueButton(
+        isAuthenticated: true,
+        hasGuestContinueAction: true
+    )
+
+    #expect(shouldShowBeforeSignIn == true)
+    #expect(shouldShowAfterSignIn == false)
+}
+
+@Test func emailSignInSheetStaysOpenForGuests() {
+    let shouldAutoDismiss = EmailSignInSheet.shouldAutoDismiss(
+        isAuthenticated: true,
+        isGuest: true
+    )
+
+    #expect(shouldAutoDismiss == false)
+}
+
+@Test func emailSignInSheetAutoDismissesForAuthenticatedNonGuests() {
+    let shouldAutoDismiss = EmailSignInSheet.shouldAutoDismiss(
+        isAuthenticated: true,
+        isGuest: false
+    )
+
+    #expect(shouldAutoDismiss == true)
+}
+
+@Test func onboardingTrialReminderShowsForStartedTrial() {
+    let shouldShow = OnboardingView.shouldShowTrialReminderAfterPurchase(
+        startedTrial: true,
+        showsReminderForDebugPurchases: false
+    )
+
+    #expect(shouldShow == true)
+}
+
+@Test func onboardingTrialReminderCanBeForcedForDebugPurchases() {
+    let shouldShow = OnboardingView.shouldShowTrialReminderAfterPurchase(
+        startedTrial: false,
+        showsReminderForDebugPurchases: true
+    )
+
+    #expect(shouldShow == true)
+}
+
+@Test func trialReminderPermissionStateTreatsAuthorizedStatusAsEnabled() {
+    let state = TrialReminderPermissionState.from(.authorized)
+
+    #expect(state == .enabled)
+}
+
+@Test func trialReminderPermissionStateTreatsProvisionalStatusAsEnabled() {
+    let state = TrialReminderPermissionState.from(.provisional)
+
+    #expect(state == .enabled)
+}
+
+@Test func trialReminderPermissionStateTreatsUndecidedStatusAsNeedingPermission() {
+    let state = TrialReminderPermissionState.from(.notDetermined)
+
+    #expect(state == .needsPermission)
+}
+
+@Test func trialReminderPermissionStateTreatsDeniedStatusAsBlocked() {
+    let state = TrialReminderPermissionState.from(.denied)
+
+    #expect(state == .blocked)
+}
+
+@Test func savedNoteHandoffPreselectsNoteAndUnlocksAfterRecordDismiss() {
+    let note = makeNote(content: "", source: .voice)
+    let started = SavedNoteHandoffLogic.begin(with: note, isMandatoryPaywallPresented: false)
+    let resumed = SavedNoteHandoffLogic.resume(
+        pendingNote: started.pendingNote,
+        selectedNote: started.selectedNote,
+        isMandatoryPaywallPresented: false
+    )
+
+    #expect(started.pendingNote == note)
+    #expect(started.selectedNote == note)
+    #expect(started.isInteractionLocked == true)
+    #expect(resumed.pendingNote == nil)
+    #expect(resumed.selectedNote == note)
+    #expect(resumed.isInteractionLocked == false)
+}
+
+@Test func savedNoteHandoffWaitsUntilMandatoryPaywallClears() {
+    let note = makeNote(content: "", source: .voice)
+    let started = SavedNoteHandoffLogic.begin(with: note, isMandatoryPaywallPresented: true)
+    let whilePaywallPresented = SavedNoteHandoffLogic.resume(
+        pendingNote: started.pendingNote,
+        selectedNote: started.selectedNote,
+        isMandatoryPaywallPresented: true
+    )
+    let afterPaywallDismisses = SavedNoteHandoffLogic.resume(
+        pendingNote: whilePaywallPresented.pendingNote,
+        selectedNote: whilePaywallPresented.selectedNote,
+        isMandatoryPaywallPresented: false
+    )
+
+    #expect(started.pendingNote == note)
+    #expect(started.selectedNote == nil)
+    #expect(started.isInteractionLocked == true)
+    #expect(whilePaywallPresented.pendingNote == note)
+    #expect(whilePaywallPresented.selectedNote == nil)
+    #expect(whilePaywallPresented.isInteractionLocked == true)
+    #expect(afterPaywallDismisses.pendingNote == nil)
+    #expect(afterPaywallDismisses.selectedNote == note)
+    #expect(afterPaywallDismisses.isInteractionLocked == false)
+}
+
+@Test func widgetDiscoveryWaitsForSecondSuccessfulVoiceTranscription() {
+    let firstVoice = makeNote(content: "First transcript", source: .voice)
+    let secondVoice = makeNote(content: "Second transcript", source: .voice)
+    let initial = WidgetDiscoveryProgressState(
+        trackedSuccessfulVoiceNoteIDs: [],
+        isInitialized: false,
+        isPendingPresentation: false
+    )
+
+    let afterFirst = WidgetDiscoveryLogic.syncedState(
+        notes: [firstVoice],
+        deletedNotes: [],
+        persistedState: initial
+    )
+    let afterSecond = WidgetDiscoveryLogic.syncedState(
+        notes: [secondVoice, firstVoice],
+        deletedNotes: [],
+        persistedState: afterFirst
+    )
+    let shouldPresentAfterSecond = WidgetDiscoveryLogic.shouldPresent(
+        isDismissed: false,
+        isPresented: false,
+        isRecording: false,
+        completedTitleNoteID: secondVoice.id,
+        notes: [secondVoice, firstVoice],
+        persistedState: afterSecond
+    )
+
+    #expect(afterFirst.trackedSuccessfulVoiceNoteIDs == [firstVoice.id])
+    #expect(afterFirst.isPendingPresentation == false)
+    #expect(afterSecond.trackedSuccessfulVoiceNoteIDs == [firstVoice.id, secondVoice.id])
+    #expect(afterSecond.isPendingPresentation == true)
+    #expect(shouldPresentAfterSecond == true)
+}
+
+@Test func widgetDiscoveryIgnoresTextNotesWhenCountingTranscriptions() {
+    let textNote = makeNote(content: "Typed note", source: .text)
+    let voiceNote = makeNote(content: "Transcribed audio", source: .voice)
+    let initial = WidgetDiscoveryProgressState(
+        trackedSuccessfulVoiceNoteIDs: [],
+        isInitialized: false,
+        isPendingPresentation: false
+    )
+
+    let updated = WidgetDiscoveryLogic.syncedState(
+        notes: [voiceNote, textNote],
+        deletedNotes: [],
+        persistedState: initial
+    )
+    let shouldPresent = WidgetDiscoveryLogic.shouldPresent(
+        isDismissed: false,
+        isPresented: false,
+        isRecording: false,
+        completedTitleNoteID: voiceNote.id,
+        notes: [voiceNote, textNote],
+        persistedState: updated
+    )
+
+    #expect(updated.trackedSuccessfulVoiceNoteIDs == [voiceNote.id])
+    #expect(updated.isPendingPresentation == false)
+    #expect(shouldPresent == false)
+}
+
+@Test func widgetDiscoveryCanRecoverAfterEarlierVoiceTitleFailure() {
+    let firstVoice = makeNote(content: "First transcript", source: .voice)
+    let secondVoice = makeNote(content: "Second transcript", source: .voice)
+    let thirdVoice = makeNote(content: "Third transcript", source: .voice)
+    let initial = WidgetDiscoveryProgressState(
+        trackedSuccessfulVoiceNoteIDs: [],
+        isInitialized: false,
+        isPendingPresentation: false
+    )
+
+    let afterFirst = WidgetDiscoveryLogic.syncedState(
+        notes: [firstVoice],
+        deletedNotes: [],
+        persistedState: initial
+    )
+    let afterSecondTranscription = WidgetDiscoveryLogic.syncedState(
+        notes: [secondVoice, firstVoice],
+        deletedNotes: [],
+        persistedState: afterFirst
+    )
+    let afterThirdTranscription = WidgetDiscoveryLogic.syncedState(
+        notes: [thirdVoice, secondVoice, firstVoice],
+        deletedNotes: [],
+        persistedState: afterSecondTranscription
+    )
+    let shouldPresent = WidgetDiscoveryLogic.shouldPresent(
+        isDismissed: false,
+        isPresented: false,
+        isRecording: false,
+        completedTitleNoteID: thirdVoice.id,
+        notes: [thirdVoice, secondVoice, firstVoice],
+        persistedState: afterThirdTranscription
+    )
+
+    #expect(afterSecondTranscription.isPendingPresentation == true)
+    #expect(shouldPresent == true)
+}
+
+@Test func widgetDiscoveryDoesNotResetAfterDeletingEarlierVoiceNotes() {
+    let priorVoiceNotes = (0..<5).map { index in
+        makeNote(content: "Prior transcript \(index)", source: .voice)
+    }
+    let newFirstVoice = makeNote(content: "New transcript 1", source: .voice)
+    let newSecondVoice = makeNote(content: "New transcript 2", source: .voice)
+    let initial = WidgetDiscoveryProgressState(
+        trackedSuccessfulVoiceNoteIDs: [],
+        isInitialized: false,
+        isPendingPresentation: false
+    )
+
+    let seeded = WidgetDiscoveryLogic.syncedState(
+        notes: [],
+        deletedNotes: priorVoiceNotes,
+        persistedState: initial
+    )
+    let afterNewRecordings = WidgetDiscoveryLogic.syncedState(
+        notes: [newSecondVoice, newFirstVoice],
+        deletedNotes: priorVoiceNotes,
+        persistedState: seeded
+    )
+    let shouldPresent = WidgetDiscoveryLogic.shouldPresent(
+        isDismissed: false,
+        isPresented: false,
+        isRecording: false,
+        completedTitleNoteID: newSecondVoice.id,
+        notes: [newSecondVoice, newFirstVoice],
+        persistedState: afterNewRecordings
+    )
+
+    #expect(seeded.trackedSuccessfulVoiceNoteIDs.count == 5)
+    #expect(seeded.isPendingPresentation == false)
+    #expect(afterNewRecordings.trackedSuccessfulVoiceNoteIDs.count == 7)
+    #expect(afterNewRecordings.isPendingPresentation == false)
+    #expect(shouldPresent == false)
 }
 
 @Suite(.serialized)

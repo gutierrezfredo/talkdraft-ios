@@ -116,6 +116,7 @@ final class NoteStore {
     var hasInitiallyLoaded = false
     var lastError: String?
     var generatingTitleIds: Set<UUID> = []
+    var lastCompletedTitleGenerationNoteId: UUID?
     var activeTranscriptionIds: Set<UUID> = []
     var rewriteJobsByNoteId: [UUID: NoteRewriteJob] = [:]
     var activeRewriteIds: Set<UUID> = []

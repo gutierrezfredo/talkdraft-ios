@@ -32,6 +32,7 @@ extension NoteStore {
                 note.title = aiTitle
                 note.updatedAt = Date()
                 updateNote(note)
+                lastCompletedTitleGenerationNoteId = noteId
                 clearPendingTitleGeneration(id: noteId)
             } catch is CancellationError {
                 generatingTitleIds.remove(noteId)

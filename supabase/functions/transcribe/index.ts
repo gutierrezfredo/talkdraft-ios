@@ -4,23 +4,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 const GROQ_API_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const PROJECT_REF = new URL(SUPABASE_URL).host.split(".")[0];
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ??
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmdHd2dWR1enp5bXF4ZHZrd3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NTA3MTAsImV4cCI6MjA4NzIyNjcxMH0.LyFLwFsWTmpa55lFpTi0Pbk-FAuJDvJ5W5vlHCjb1sA";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LANGUAGE_NAMES: Record<string, string> = {
-  ar: "Arabic",
-  de: "German",
-  en: "English",
-  es: "Spanish",
-  fr: "French",
-  hi: "Hindi",
-  it: "Italian",
-  ja: "Japanese",
-  ko: "Korean",
-  pt: "Portuguese",
-  ru: "Russian",
-  zh: "Chinese",
-};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +23,49 @@ function jsonResponse(body: unknown, status = 200): Response {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     },
   );
+}
+
+function sanitizeTranscriptionPrompt(prompt: string | null): string | null {
+  const trimmed = prompt?.trim();
+  if (!trimmed) return null;
+
+  const normalized = trimmed.toLowerCase();
+  const instructionalFragments = [
+    "transcribe the spoken words",
+    "language actually spoken",
+    "do not translate",
+    "use that only as a recognition hint",
+  ];
+
+  if (instructionalFragments.some((fragment) => normalized.includes(fragment))) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+
+  try {
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isLegacyAnonToken(token: string): boolean {
+  if (!token) return false;
+  if (token === SUPABASE_ANON_KEY) return true;
+
+  const payload = decodeJwtPayload(token);
+  return payload?.iss === "supabase" &&
+    payload?.ref === PROJECT_REF &&
+    payload?.role === "anon";
 }
 
 Deno.serve(async (req) => {
@@ -70,8 +100,8 @@ Deno.serve(async (req) => {
       ? authHeader.slice("Bearer ".length).trim()
       : "";
     const apiKey = (req.headers.get("apikey") ?? "").trim();
-    const isLegacyAnonRequest =
-      jwt === SUPABASE_ANON_KEY || apiKey === SUPABASE_ANON_KEY;
+    const isLegacyAnonRequest = isLegacyAnonToken(jwt) ||
+      isLegacyAnonToken(apiKey);
 
     let userId = (formUserId as string) || queryUserId || null;
 
@@ -91,8 +121,9 @@ Deno.serve(async (req) => {
       userId = authData.user.id;
     }
 
-    const preferredLanguage = (formLang as string) || queryLang || null;
-    const clientPrompt = formData.get("prompt") as string | null;
+    const _preferredLanguage = (formData.get("preferred_language") as string) ||
+      (formLang as string) || queryLang || null;
+    const clientPrompt = sanitizeTranscriptionPrompt(formData.get("prompt") as string | null);
 
     // Optional separate file for Whisper — allows sending compressed audio for
     // transcription while storing the original full-quality file.
@@ -117,15 +148,8 @@ Deno.serve(async (req) => {
     groqForm.append("model", "whisper-large-v3");
     groqForm.append("response_format", "verbose_json");
     groqForm.append("temperature", "0");
-    const promptParts = [
-      preferredLanguage && LANGUAGE_NAMES[preferredLanguage]
-        ? `The speaker usually records in ${LANGUAGE_NAMES[preferredLanguage]}. Use that only as a recognition hint.`
-        : null,
-      "Transcribe the spoken words verbatim in the language actually spoken. Do not translate.",
-      clientPrompt,
-    ].filter(Boolean);
-    if (promptParts.length > 0) {
-      groqForm.append("prompt", promptParts.join(" "));
+    if (clientPrompt) {
+      groqForm.append("prompt", clientPrompt);
     }
 
     const transcriptionPromise = fetch(GROQ_API_URL, {

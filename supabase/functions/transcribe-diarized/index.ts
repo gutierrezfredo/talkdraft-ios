@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const PROJECT_REF = new URL(SUPABASE_URL).host.split(".")[0];
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ??
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmdHd2dWR1enp5bXF4ZHZrd3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NTA3MTAsImV4cCI6MjA4NzIyNjcxMH0.LyFLwFsWTmpa55lFpTi0Pbk-FAuJDvJ5W5vlHCjb1sA";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -21,6 +22,30 @@ function jsonResponse(body: unknown, status = 200): Response {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     },
   );
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+
+  try {
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isLegacyAnonToken(token: string): boolean {
+  if (!token) return false;
+  if (token === SUPABASE_ANON_KEY) return true;
+
+  const payload = decodeJwtPayload(token);
+  return payload?.iss === "supabase" &&
+    payload?.ref === PROJECT_REF &&
+    payload?.role === "anon";
 }
 
 Deno.serve(async (req) => {
@@ -49,8 +74,8 @@ Deno.serve(async (req) => {
       ? authHeader.slice("Bearer ".length).trim()
       : "";
     const apiKey = (req.headers.get("apikey") ?? "").trim();
-    const isLegacyAnonRequest =
-      jwt === SUPABASE_ANON_KEY || apiKey === SUPABASE_ANON_KEY;
+    const isLegacyAnonRequest = isLegacyAnonToken(jwt) ||
+      isLegacyAnonToken(apiKey);
 
     const url = new URL(req.url);
     const queryUserId = url.searchParams.get("user_id");
