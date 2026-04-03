@@ -35,6 +35,7 @@ struct NoteDetailTranscribingIndicatorView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
             }
         }
         .frame(maxWidth: .infinity)

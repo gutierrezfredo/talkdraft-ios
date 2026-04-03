@@ -92,6 +92,36 @@ import UIKit
     #expect(shouldShow == true)
 }
 
+@Test func debugResetOnboardingStateForcesOnboardingAndClearsCompletionFlags() throws {
+    #if DEBUG
+    let userId = UUID()
+    let suiteName = "SettingsViewTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    let deviceKey = "onboarding.completed.device"
+    let userKey = SettingsView.onboardingCompletedUserKey(for: userId)
+
+    defer {
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    defaults.set(false, forKey: SettingsView.forceOnboardingKey)
+    defaults.set(true, forKey: deviceKey)
+    defaults.set(true, forKey: userKey)
+
+    SettingsView.resetOnboardingState(
+        userId: userId,
+        forceOnboardingFlow: true,
+        defaults: defaults
+    )
+
+    #expect(defaults.bool(forKey: SettingsView.forceOnboardingKey) == true)
+    #expect(defaults.object(forKey: deviceKey) == nil)
+    #expect(defaults.object(forKey: userKey) == nil)
+    #else
+    Issue.record("DEBUG-only onboarding reset helper unavailable in release configuration.")
+    #endif
+}
+
 @Test func trialReminderPermissionStateTreatsAuthorizedStatusAsEnabled() {
     let state = TrialReminderPermissionState.from(.authorized)
 

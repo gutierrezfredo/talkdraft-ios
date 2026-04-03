@@ -21,6 +21,27 @@ struct SettingsView: View {
     @State private var showWidgetDiscoveryTest = false
     @State private var importedNote: Note?
 
+    #if DEBUG
+    static let forceOnboardingKey = "debug.forceOnboardingFlow"
+    private static let onboardingCompletedDeviceKey = "onboarding.completed.device"
+
+    static func onboardingCompletedUserKey(for userId: UUID) -> String {
+        "onboarding.completed.\(userId.uuidString)"
+    }
+
+    static func resetOnboardingState(
+        userId: UUID?,
+        forceOnboardingFlow: Bool,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(forceOnboardingFlow, forKey: forceOnboardingKey)
+        defaults.removeObject(forKey: onboardingCompletedDeviceKey)
+        if let userId {
+            defaults.removeObject(forKey: onboardingCompletedUserKey(for: userId))
+        }
+    }
+    #endif
+
     private var backgroundColor: Color {
         colorScheme == .dark ? .darkBackground : .warmBackground
     }
@@ -252,10 +273,10 @@ struct SettingsView: View {
                 #if DEBUG
                 SettingsSection("Developer") {
                     Button {
-                        UserDefaults.standard.removeObject(forKey: "onboarding.completed.device")
-                        if let userId = authStore.userId {
-                            UserDefaults.standard.removeObject(forKey: "onboarding.completed.\(userId.uuidString)")
-                        }
+                        SettingsView.resetOnboardingState(
+                            userId: authStore.userId,
+                            forceOnboardingFlow: true
+                        )
                         Task {
                             try? await authStore.signOut()
                         }
@@ -264,12 +285,11 @@ struct SettingsView: View {
                     }
 
                     Button {
-                        // Reset all onboarding + discovery flags without signing out
-                        UserDefaults.standard.set(true, forKey: "debug.forceOnboardingFlow")
-                        UserDefaults.standard.removeObject(forKey: "onboarding.completed.device")
-                        if let userId = authStore.userId {
-                            UserDefaults.standard.removeObject(forKey: "onboarding.completed.\(userId.uuidString)")
-                        }
+                        // Reset all onboarding + discovery flags without signing out.
+                        SettingsView.resetOnboardingState(
+                            userId: authStore.userId,
+                            forceOnboardingFlow: true
+                        )
                         UserDefaults.standard.removeObject(forKey: WidgetDiscoverySheet.dismissedKey)
                         WidgetDiscoveryLogic.reset()
                         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
