@@ -271,18 +271,20 @@ struct RecordView: View {
     }
 
     private func scheduleRecordingStart() {
-        cancelPendingStart()
+        cancelPendingStart(discardPreparedSession: false)
         startTask = Task { @MainActor in
-            await Task.yield()
+            if !AudioRecorder.currentRouteUsesCarAudio() {
+                await Task.yield()
+            }
             guard !Task.isCancelled else { return }
             startRecording()
         }
     }
 
-    private func cancelPendingStart() {
+    private func cancelPendingStart(discardPreparedSession: Bool = true) {
         startTask?.cancel()
         startTask = nil
-        if !recorder.isRecording {
+        if discardPreparedSession, !recorder.isRecording {
             Task { @MainActor in
                 AudioRecorder.discardPreparedRecordingSession()
             }

@@ -39,8 +39,13 @@ final class AudioRecorder: @unchecked Sendable {
     private var routeChangeObserver: Any?
     private var backgroundTaskId: UIBackgroundTaskIdentifier = .invalid
     private var startedOnCarAudioRoute = false
+    private var startupRecoveryDeadline: Date?
+    private var startupInterruptionActive = false
+    private var lastAutomaticRecoveryAttemptAt: Date?
 
     private let bandCount = 20
+    private let startupRecoveryDuration: TimeInterval = 2.5
+    private let recoveryAttemptThrottle: TimeInterval = 0.4
 
     @MainActor private static var sessionPreparationTask: Task<PreparedRecordingSession, Error>?
 
@@ -68,6 +73,12 @@ final class AudioRecorder: @unchecked Sendable {
             try Task.checkCancellation()
             let session = AVAudioSession.sharedInstance()
             let usesCarAudioRoute = Self.routeUsesCarAudio(session.currentRoute)
+            guard !usesCarAudioRoute else {
+                logger.info(
+                    "Skipping recording session prewarm for car audio route. route=\(Self.describeRoute(session.currentRoute), privacy: .public)"
+                )
+                return PreparedRecordingSession(usesCarAudioRoute: usesCarAudioRoute)
+            }
             try Self.refreshSessionForCurrentRoute(session)
             try Task.checkCancellation()
             logger.info(
@@ -75,6 +86,10 @@ final class AudioRecorder: @unchecked Sendable {
             )
             return PreparedRecordingSession(usesCarAudioRoute: usesCarAudioRoute)
         }
+    }
+
+    static func currentRouteUsesCarAudio() -> Bool {
+        routeUsesCarAudio(AVAudioSession.sharedInstance().currentRoute)
     }
 
     @MainActor
@@ -100,7 +115,8 @@ final class AudioRecorder: @unchecked Sendable {
         do {
             let preparedSession = try await Self.consumePreparedRecordingSession()
             let usesCarAudioRoute = Self.routeUsesCarAudio(session.currentRoute)
-            if preparedSession?.usesCarAudioRoute != usesCarAudioRoute {
+            let hadOtherAudioBeforeActivation = usesCarAudioRoute && Self.otherAudioIsActive(session)
+            if usesCarAudioRoute || preparedSession?.usesCarAudioRoute != usesCarAudioRoute {
                 try Self.refreshSessionForCurrentRoute(session)
             }
             try FileManager.default.createDirectory(at: recordingDirectory, withIntermediateDirectories: true)
@@ -123,6 +139,10 @@ final class AudioRecorder: @unchecked Sendable {
             pausedElapsed = 0
             elapsedSeconds = 0
             frequencyBands = Array(repeating: 0, count: bandCount)
+            let needsStartupRecovery = !usesCarAudioRoute || hadOtherAudioBeforeActivation
+            startupRecoveryDeadline = needsStartupRecovery ? Date().addingTimeInterval(startupRecoveryDuration) : nil
+            startupInterruptionActive = false
+            lastAutomaticRecoveryAttemptAt = nil
 
             observeInterruptions()
             observeRouteChanges()
@@ -138,6 +158,9 @@ final class AudioRecorder: @unchecked Sendable {
             pipeline?.stop()
             pipeline = nil
             startedOnCarAudioRoute = false
+            startupRecoveryDeadline = nil
+            startupInterruptionActive = false
+            lastAutomaticRecoveryAttemptAt = nil
             removeInterruptionObserver()
             removeRouteChangeObserver()
             try? session.setPreferredInput(nil)
@@ -198,6 +221,9 @@ final class AudioRecorder: @unchecked Sendable {
         isPaused = false
         didRecordInBackground = false
         startedOnCarAudioRoute = false
+        startupRecoveryDeadline = nil
+        startupInterruptionActive = false
+        lastAutomaticRecoveryAttemptAt = nil
         startTime = nil
         pausedElapsed = 0
         endBackgroundTaskIfNeeded()
@@ -221,6 +247,9 @@ final class AudioRecorder: @unchecked Sendable {
         isPaused = false
         didRecordInBackground = false
         startedOnCarAudioRoute = false
+        startupRecoveryDeadline = nil
+        startupInterruptionActive = false
+        lastAutomaticRecoveryAttemptAt = nil
 
         if let url {
             try? FileManager.default.removeItem(at: url)
@@ -250,18 +279,41 @@ final class AudioRecorder: @unchecked Sendable {
             switch type {
             case .began:
                 if self.isRecording, !self.isPaused {
+                    if self.isWithinStartupRecoveryWindow() {
+                        self.startupInterruptionActive = true
+                        logger.info("Ignoring audio interruption during recording startup window")
+                        return
+                    }
                     self.pauseRecording()
                     logger.info("Recording paused due to audio interruption")
                 }
             case .ended:
+                self.startupInterruptionActive = false
                 let options = (info[AVAudioSessionInterruptionOptionKey] as? UInt)
                     .map { AVAudioSession.InterruptionOptions(rawValue: $0) } ?? []
-                if options.contains(.shouldResume), self.isRecording, self.isPaused {
+                let shouldAutoResume = options.contains(.shouldResume) || self.isWithinStartupRecoveryWindow()
+                let shouldRecoverStartup = self.isWithinStartupRecoveryWindow()
+                    && self.isRecording
+                    && !self.isPaused
+                    && !(self.pipeline?.isRunning ?? true)
+                if shouldRecoverStartup {
+                    do {
+                        try AVAudioSession.sharedInstance().setActive(true)
+                        try self.pipeline?.restart()
+                        self.lastAutomaticRecoveryAttemptAt = Date()
+                        logger.info("Recording recovered after startup interruption ended")
+                    } catch {
+                        logger.error("Failed to recover after startup interruption: \(error)")
+                    }
+                } else if shouldAutoResume, self.isRecording, self.isPaused {
                     do {
                         try AVAudioSession.sharedInstance().setActive(true)
                         try self.pipeline?.restart()
                         self.resumeRecording()
-                        logger.info("Recording resumed after interruption")
+                        self.lastAutomaticRecoveryAttemptAt = Date()
+                        logger.info(
+                            "Recording resumed after interruption. startupWindow=\(self.isWithinStartupRecoveryWindow(), privacy: .public)"
+                        )
                     } catch {
                         logger.error("Failed to resume after interruption: \(error)")
                     }
@@ -362,6 +414,16 @@ final class AudioRecorder: @unchecked Sendable {
 
             // Detect engine stopped unexpectedly (e.g. phone call with compact UI)
             if let pipeline = self.pipeline, !pipeline.isRunning, !self.isPaused {
+                if self.startupInterruptionActive {
+                    logger.info("Recording engine waiting for startup interruption to end")
+                    return
+                }
+                if self.isWithinStartupRecoveryWindow() {
+                    guard self.canAttemptAutomaticRecovery() else { return }
+                    _ = self.recoverStoppedEngineIfPossible()
+                    logger.info("Recording engine not running yet during startup window; waiting for recovery")
+                    return
+                }
                 if self.recoverStoppedEngineIfPossible() {
                     return
                 }
@@ -390,8 +452,9 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     private static func refreshSessionForCurrentRoute(_ session: AVAudioSession) throws {
-        let category = recordingCategory(for: session.currentRoute)
-        let options = recordingCategoryOptions(for: session.currentRoute)
+        let otherAudioActive = otherAudioIsActive(session)
+        let category = recordingCategory(for: session.currentRoute, otherAudioActive: otherAudioActive)
+        let options = recordingCategoryOptions(for: session.currentRoute, otherAudioActive: otherAudioActive)
         try session.setCategory(category, mode: .default, options: options)
         try? session.setPreferredIOBufferDuration(0.005)
         try session.setActive(true)
@@ -414,18 +477,30 @@ final class AudioRecorder: @unchecked Sendable {
         )
     }
 
-    private static func recordingCategoryOptions(for route: AVAudioSessionRouteDescription) -> AVAudioSession.CategoryOptions {
-        routeUsesCarAudio(route) ? [] : [.defaultToSpeaker]
+    private static func recordingCategoryOptions(
+        for route: AVAudioSessionRouteDescription,
+        otherAudioActive: Bool
+    ) -> AVAudioSession.CategoryOptions {
+        if routeUsesCarAudio(route) {
+            return otherAudioActive ? [.duckOthers] : []
+        }
+        return [.defaultToSpeaker]
     }
 
-    private static func recordingCategory(for route: AVAudioSessionRouteDescription) -> AVAudioSession.Category {
-        // Wired CarPlay only needs microphone capture here; using a record-only session
-        // avoids forcing iOS to negotiate a simultaneous car-audio output route.
-        routeUsesCarAudio(route) ? .record : .playAndRecord
+    private static func recordingCategory(
+        for route: AVAudioSessionRouteDescription,
+        otherAudioActive: Bool
+    ) -> AVAudioSession.Category {
+        if routeUsesCarAudio(route) {
+            // CarPlay proved more reliable when the route stays in playAndRecord
+            // even if no other audio is currently playing. We only vary options.
+            return .playAndRecord
+        }
+        return .playAndRecord
     }
 
     private func recoverStoppedEngineIfPossible() -> Bool {
-        guard let pipeline, startedOnCarAudioRoute || Self.routeUsesCarAudio(AVAudioSession.sharedInstance().currentRoute) else {
+        guard let pipeline, self.shouldAttemptAutomaticRecovery() else {
             return false
         }
 
@@ -433,9 +508,13 @@ final class AudioRecorder: @unchecked Sendable {
             let session = AVAudioSession.sharedInstance()
             try Self.refreshSessionForCurrentRoute(session)
             try pipeline.restart()
-            logger.info("Recovered stopped audio engine on car audio route")
+            self.lastAutomaticRecoveryAttemptAt = Date()
+            logger.info(
+                "Recovered stopped audio engine. startupWindow=\(self.isWithinStartupRecoveryWindow(), privacy: .public) route=\(Self.describeRoute(session.currentRoute), privacy: .public)"
+            )
             return true
         } catch {
+            self.lastAutomaticRecoveryAttemptAt = Date()
             let session = AVAudioSession.sharedInstance()
             logger.error(
                 "Failed to recover stopped audio engine. error=\(error.localizedDescription, privacy: .public) route=\(Self.describeRoute(session.currentRoute), privacy: .public)"
@@ -446,6 +525,26 @@ final class AudioRecorder: @unchecked Sendable {
 
     private static func routeUsesCarAudio(_ route: AVAudioSessionRouteDescription) -> Bool {
         route.outputs.contains { $0.portType == .carAudio } || route.inputs.contains { $0.portType == .carAudio }
+    }
+
+    private func shouldAttemptAutomaticRecovery() -> Bool {
+        self.startedOnCarAudioRoute
+            || Self.routeUsesCarAudio(AVAudioSession.sharedInstance().currentRoute)
+            || self.isWithinStartupRecoveryWindow()
+    }
+
+    private func canAttemptAutomaticRecovery(now: Date = Date()) -> Bool {
+        guard let lastAutomaticRecoveryAttemptAt else { return true }
+        return now.timeIntervalSince(lastAutomaticRecoveryAttemptAt) >= recoveryAttemptThrottle
+    }
+
+    private func isWithinStartupRecoveryWindow(now: Date = Date()) -> Bool {
+        guard let startupRecoveryDeadline = self.startupRecoveryDeadline else { return false }
+        return now < startupRecoveryDeadline
+    }
+
+    private static func otherAudioIsActive(_ session: AVAudioSession) -> Bool {
+        session.isOtherAudioPlaying || session.secondaryAudioShouldBeSilencedHint
     }
 
     private static func describeRoute(_ route: AVAudioSessionRouteDescription) -> String {

@@ -106,6 +106,55 @@ struct SavedNoteHandoffState: Equatable {
     var isInteractionLocked: Bool
 }
 
+struct RecordDeepLinkRoutingState: Equatable {
+    var selectedNote: Note?
+    var showCategoryPicker: Bool
+    var showWidgetDiscovery: Bool
+    var showAudioImporter: Bool
+    var pendingImportURL: URL?
+    var shouldAttemptRecordImmediately: Bool
+    var shouldResumeAfterNoteDismissal: Bool
+}
+
+enum RecordDeepLinkRoutingLogic {
+    static func prepare(
+        selectedNote: Note?,
+        showCategoryPicker: Bool,
+        showWidgetDiscovery: Bool,
+        showAudioImporter: Bool,
+        pendingImportURL: URL?
+    ) -> RecordDeepLinkRoutingState {
+        let hadOpenNote = selectedNote != nil
+        return RecordDeepLinkRoutingState(
+            selectedNote: nil,
+            showCategoryPicker: false,
+            showWidgetDiscovery: false,
+            showAudioImporter: false,
+            pendingImportURL: nil,
+            shouldAttemptRecordImmediately: !hadOpenNote,
+            shouldResumeAfterNoteDismissal: hadOpenNote
+        )
+    }
+
+    static func shouldResumeDeferredRecord(
+        hasPendingDeferredRecord: Bool,
+        selectedNote: Note?,
+        showCategoryPicker: Bool,
+        showWidgetDiscovery: Bool,
+        showAudioImporter: Bool,
+        pendingImportURL: URL?,
+        isMandatoryPaywallPresented: Bool
+    ) -> Bool {
+        hasPendingDeferredRecord
+            && selectedNote == nil
+            && !showCategoryPicker
+            && !showWidgetDiscovery
+            && !showAudioImporter
+            && pendingImportURL == nil
+            && !isMandatoryPaywallPresented
+    }
+}
+
 enum SavedNoteHandoffLogic {
     static func begin(with savedNote: Note, isMandatoryPaywallPresented: Bool) -> SavedNoteHandoffState {
         SavedNoteHandoffState(
@@ -183,6 +232,7 @@ struct HomeView: View {
     @State var searchPreviousCategory: UUID?
     @State var showsSelectionSearchTransition = false
     @State var selectionSearchTransitionTask: Task<Void, Never>?
+    @State var hasPendingDeferredRecordDeepLink = false
     @State var suppressNextRecordButtonTap = false
     @Namespace var namespace
     @Namespace var bottomBarNamespace
@@ -227,8 +277,41 @@ struct HomeView: View {
 
     private func consumePendingRecordDeepLinkIfPossible() {
         guard pendingDeepLink == .record, !isMandatoryPaywallPresented else { return }
-        attemptRecord()
+        let routing = RecordDeepLinkRoutingLogic.prepare(
+            selectedNote: selectedNote,
+            showCategoryPicker: showCategoryPicker,
+            showWidgetDiscovery: showWidgetDiscovery,
+            showAudioImporter: showAudioImporter,
+            pendingImportURL: pendingImportURL
+        )
+        selectedNote = routing.selectedNote
+        showCategoryPicker = routing.showCategoryPicker
+        showWidgetDiscovery = routing.showWidgetDiscovery
+        showAudioImporter = routing.showAudioImporter
+        pendingImportURL = routing.pendingImportURL
         pendingDeepLink = nil
+        hasPendingDeferredRecordDeepLink = routing.shouldResumeAfterNoteDismissal
+        if routing.shouldAttemptRecordImmediately {
+            attemptRecord()
+        }
+    }
+
+    private func resumeDeferredRecordDeepLinkIfPossible() {
+        guard RecordDeepLinkRoutingLogic.shouldResumeDeferredRecord(
+            hasPendingDeferredRecord: hasPendingDeferredRecordDeepLink,
+            selectedNote: selectedNote,
+            showCategoryPicker: showCategoryPicker,
+            showWidgetDiscovery: showWidgetDiscovery,
+            showAudioImporter: showAudioImporter,
+            pendingImportURL: pendingImportURL,
+            isMandatoryPaywallPresented: isMandatoryPaywallPresented
+        ) else { return }
+        hasPendingDeferredRecordDeepLink = false
+        Task { @MainActor in
+            await Task.yield()
+            guard !showRecordView else { return }
+            attemptRecord()
+        }
     }
 
     var body: some View {
@@ -492,6 +575,9 @@ struct HomeView: View {
             guard link == .record else { return }
             consumePendingRecordDeepLinkIfPossible()
         }
+        .onChange(of: selectedNote?.id) { _, _ in
+            resumeDeferredRecordDeepLinkIfPossible()
+        }
         .onChange(of: isMandatoryPaywallPresented) { _, presented in
             guard !presented else { return }
             applySavedNoteHandoff(
@@ -502,6 +588,7 @@ struct HomeView: View {
                 )
             )
             consumePendingRecordDeepLinkIfPossible()
+            resumeDeferredRecordDeepLinkIfPossible()
         }
         .onChange(of: noteStore.lastCompletedTitleGenerationNoteId) { _, noteId in
             syncWidgetDiscoveryProgress()
