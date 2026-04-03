@@ -115,25 +115,50 @@ extension NoteDetailView {
     // MARK: - Append Recording Actions
 
     func startAppendRecording(scrollToBottom: Bool = false) {
+        Task { @MainActor in
+            AudioRecorder.prewarmRecordingSession()
+        }
         // Use last known cursor position, or end of content if cursor was never placed
         let contentLength = (editedContent as NSString).length
         let position = scrollToBottom ? contentLength : (contentFocused && isCursorReady ? cursorPosition : (lastKnownCursorPosition > 0 ? lastKnownCursorPosition : contentLength))
         appendInsertPosition = min(position, contentLength)
         contentFocused = false
         insertAppendPlaceholder(.recording)
-        do {
-            try appendRecorder.startRecording()
-            isAppendRecording = true
-            if scrollToBottom {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
-                    }
+        isAppendRecording = true
+        scheduleAppendRecordingStart()
+        if scrollToBottom {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    scrollProxy?.scrollTo("scrollBottom", anchor: .bottom)
                 }
             }
-        } catch {
-            removeAppendPlaceholder()
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
+        }
+    }
+
+    func scheduleAppendRecordingStart() {
+        appendRecordingStartTask?.cancel()
+        appendRecordingStartTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            do {
+                try await appendRecorder.startRecording()
+                appendRecordingStartTask = nil
+            } catch {
+                appendRecordingStartTask = nil
+                removeAppendPlaceholder()
+                isAppendRecording = false
+                errorMessage = "Failed to start recording: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func cancelPendingAppendRecordingStart() {
+        appendRecordingStartTask?.cancel()
+        appendRecordingStartTask = nil
+        if !appendRecorder.isRecording {
+            Task { @MainActor in
+                AudioRecorder.discardPreparedRecordingSession()
+            }
         }
     }
 
@@ -177,6 +202,7 @@ extension NoteDetailView {
     }
 
     func stopAppendRecording() {
+        cancelPendingAppendRecordingStart()
         guard let audioFileURL = appendRecorder.stopRecording() else {
             isAppendRecording = false
             removeAppendPlaceholder()
@@ -235,19 +261,16 @@ extension NoteDetailView {
     }
 
     func cancelAppendRecording() {
+        cancelPendingAppendRecordingStart()
         appendRecorder.cancelRecording()
         removeAppendPlaceholder()
         isAppendRecording = false
     }
 
     func restartAppendRecording() {
+        cancelPendingAppendRecordingStart()
         appendRecorder.cancelRecording()
-        do {
-            try appendRecorder.startRecording()
-        } catch {
-            isAppendRecording = false
-            errorMessage = "Failed to restart recording: \(error.localizedDescription)"
-        }
+        scheduleAppendRecordingStart()
     }
 
     func toggleAppendPause() {

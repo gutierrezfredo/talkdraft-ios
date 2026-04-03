@@ -14,6 +14,7 @@ struct RecordView: View {
     @State private var showCancelConfirmation = false
     @State private var multiSpeaker = false
     @State private var showBackgroundBanner = false
+    @State private var startTask: Task<Void, Never>?
     let categoryId: UUID?
     var onNoteSaved: ((Note) -> Void)?
 
@@ -95,6 +96,7 @@ struct RecordView: View {
         .interactiveDismissDisabled(recorder.elapsedSeconds >= 1)
         .alert("Cancel Recording?", isPresented: $showCancelConfirmation) {
             Button("Cancel Recording", role: .destructive) {
+                cancelPendingStart()
                 recorder.cancelRecording()
                 dismiss()
             }
@@ -105,14 +107,17 @@ struct RecordView: View {
         .alert("Recording Error", isPresented: $showError) {
             Button("OK") {
                 if !recorder.isRecording {
-                    startRecording()
+                    scheduleRecordingStart()
                 }
             }
         } message: {
             Text(errorMessage)
         }
         .onAppear {
-            startRecording()
+            scheduleRecordingStart()
+        }
+        .onDisappear {
+            cancelPendingStart()
         }
         .onChange(of: recorder.elapsedSeconds) { _, elapsed in
             if Int(elapsed) >= maxDurationSeconds && recorder.isRecording {
@@ -265,16 +270,39 @@ struct RecordView: View {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
+    private func scheduleRecordingStart() {
+        cancelPendingStart()
+        startTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            startRecording()
+        }
+    }
+
+    private func cancelPendingStart() {
+        startTask?.cancel()
+        startTask = nil
+        if !recorder.isRecording {
+            Task { @MainActor in
+                AudioRecorder.discardPreparedRecordingSession()
+            }
+        }
+    }
+
     private func startRecording() {
-        do {
-            try recorder.startRecording()
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+        startTask = nil
+        Task { @MainActor in
+            do {
+                try await recorder.startRecording()
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
         }
     }
 
     private func stopAndSave() {
+        cancelPendingStart()
         let duration = recorder.elapsedSeconds
 
         guard duration >= 1 else {
