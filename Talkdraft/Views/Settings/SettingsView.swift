@@ -265,11 +265,13 @@ struct SettingsView: View {
 
                     Button {
                         // Reset all onboarding + discovery flags without signing out
+                        UserDefaults.standard.set(true, forKey: "debug.forceOnboardingFlow")
                         UserDefaults.standard.removeObject(forKey: "onboarding.completed.device")
                         if let userId = authStore.userId {
                             UserDefaults.standard.removeObject(forKey: "onboarding.completed.\(userId.uuidString)")
                         }
                         UserDefaults.standard.removeObject(forKey: WidgetDiscoverySheet.dismissedKey)
+                        WidgetDiscoveryLogic.reset()
                         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
                     } label: {
                         SettingsRow(icon: "repeat", title: "Test Full Flow (Stay Signed In)", showChevron: false)

@@ -18,22 +18,6 @@ final class TranscriptionService: Sendable {
     private let diarizedFunctionURL = AppConfig.supabaseUrl
         .appendingPathComponent("functions/v1/transcribe-diarized")
 
-    /// Locale-based prompt hints to bias Whisper's language detection
-    private static let localePrompts: [String: String] = [
-        "en": "This is a voice note.",
-        "es": "Esta es una nota de voz.",
-        "fr": "Ceci est une note vocale.",
-        "pt": "Esta é uma nota de voz.",
-        "de": "Dies ist eine Sprachnotiz.",
-        "it": "Questa è una nota vocale.",
-        "ja": "これは音声メモです。",
-        "ko": "이것은 음성 메모입니다.",
-        "zh": "这是一条语音备忘录。",
-        "ar": "هذه ملاحظة صوتية.",
-        "ru": "Это голосовая заметка.",
-        "hi": "यह एक वॉइस नोट है।",
-    ]
-
     func transcribe(audioData: Data, fileName: String, language: String?, userId: UUID?, customDictionary: [String] = [], whisperData: Data? = nil, whisperFileName: String? = nil, multiSpeaker: Bool = false) async throws -> TranscriptionResult {
         let boundary = UUID().uuidString
         let ext = (fileName as NSString).pathExtension.lowercased()
@@ -60,22 +44,20 @@ final class TranscriptionService: Sendable {
             body.appendMultipart("\r\n")
         }
 
-        // Language part
-        if let language {
-            body.appendMultipart("--\(boundary)\r\n")
-            body.appendMultipart("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
-            body.appendMultipart("\(language)\r\n")
-        }
-
-        // Prompt — custom dictionary words + locale hint (only when language is explicitly set)
-        let localeHint = language.flatMap { Self.localePrompts[$0] }
-        let dictionaryHint = customDictionary.isEmpty ? nil : customDictionary.joined(separator: ", ") + "."
-        let promptParts = [dictionaryHint, localeHint].compactMap { $0 }
-        if !promptParts.isEmpty {
-            let prompt = promptParts.joined(separator: " ")
+        // Some providers can echo instructional prompts back as transcript text,
+        // so only send bare dictionary spellings here.
+        if let prompt = Self.transcriptionPrompt(customDictionary: customDictionary) {
             body.appendMultipart("--\(boundary)\r\n")
             body.appendMultipart("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
             body.appendMultipart("\(prompt)\r\n")
+        }
+
+        // Preferred language is sent separately for future backend heuristics,
+        // but never as a hard transcription override.
+        if let language {
+            body.appendMultipart("--\(boundary)\r\n")
+            body.appendMultipart("Content-Disposition: form-data; name=\"preferred_language\"\r\n\r\n")
+            body.appendMultipart("\(language)\r\n")
         }
 
         // Transitional compatibility: older deployed edge functions still read
@@ -144,6 +126,11 @@ final class TranscriptionService: Sendable {
         case "caf": "audio/x-caf"
         default: "audio/\(ext)"
         }
+    }
+
+    static func transcriptionPrompt(customDictionary: [String]) -> String? {
+        guard !customDictionary.isEmpty else { return nil }
+        return customDictionary.joined(separator: ", ")
     }
 }
 

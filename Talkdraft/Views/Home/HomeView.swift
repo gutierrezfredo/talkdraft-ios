@@ -8,6 +8,145 @@ enum NoteSortOrder: String, CaseIterable {
     case actionItems = "Action Items First"
 }
 
+struct WidgetDiscoveryProgressState: Equatable {
+    var trackedSuccessfulVoiceNoteIDs: Set<UUID>
+    var isInitialized: Bool
+    var isPendingPresentation: Bool
+}
+
+enum WidgetDiscoveryLogic {
+    static let trackedSuccessfulVoiceNoteIDsKey = "widgetDiscovery.trackedSuccessfulVoiceNoteIDs"
+    static let initializedKey = "widgetDiscovery.initialized"
+    static let pendingPresentationKey = "widgetDiscovery.pendingPresentation"
+
+    static func persistedState(defaults: UserDefaults = .standard) -> WidgetDiscoveryProgressState {
+        let rawIDs = defaults.stringArray(forKey: trackedSuccessfulVoiceNoteIDsKey) ?? []
+        let trackedIDs = Set(rawIDs.compactMap(UUID.init(uuidString:)))
+        return WidgetDiscoveryProgressState(
+            trackedSuccessfulVoiceNoteIDs: trackedIDs,
+            isInitialized: defaults.bool(forKey: initializedKey),
+            isPendingPresentation: defaults.bool(forKey: pendingPresentationKey)
+        )
+    }
+
+    static func persist(_ state: WidgetDiscoveryProgressState, defaults: UserDefaults = .standard) {
+        defaults.set(state.trackedSuccessfulVoiceNoteIDs.map(\.uuidString).sorted(), forKey: trackedSuccessfulVoiceNoteIDsKey)
+        defaults.set(state.isInitialized, forKey: initializedKey)
+        defaults.set(state.isPendingPresentation, forKey: pendingPresentationKey)
+    }
+
+    static func clearPendingPresentation(defaults: UserDefaults = .standard) {
+        defaults.set(false, forKey: pendingPresentationKey)
+    }
+
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: trackedSuccessfulVoiceNoteIDsKey)
+        defaults.removeObject(forKey: initializedKey)
+        defaults.removeObject(forKey: pendingPresentationKey)
+    }
+
+    nonisolated static func syncedState(
+        notes: [Note],
+        deletedNotes: [Note],
+        persistedState: WidgetDiscoveryProgressState
+    ) -> WidgetDiscoveryProgressState {
+        let knownSuccessfulVoiceNoteIDs = Set<UUID>(
+            (notes + deletedNotes).compactMap { note in
+                guard note.source == .voice,
+                      !note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else { return nil }
+                return note.id
+            }
+        )
+
+        guard persistedState.isInitialized else {
+            return WidgetDiscoveryProgressState(
+                trackedSuccessfulVoiceNoteIDs: knownSuccessfulVoiceNoteIDs,
+                isInitialized: true,
+                isPendingPresentation: false
+            )
+        }
+
+        let updatedTrackedIDs = persistedState.trackedSuccessfulVoiceNoteIDs.union(knownSuccessfulVoiceNoteIDs)
+        let crossedThreshold = persistedState.trackedSuccessfulVoiceNoteIDs.count < 2 && updatedTrackedIDs.count >= 2
+
+        return WidgetDiscoveryProgressState(
+            trackedSuccessfulVoiceNoteIDs: updatedTrackedIDs,
+            isInitialized: true,
+            isPendingPresentation: persistedState.isPendingPresentation || crossedThreshold
+        )
+    }
+
+    nonisolated static func shouldPresent(
+        isDismissed: Bool,
+        isPresented: Bool,
+        isRecording: Bool,
+        completedTitleNoteID: UUID?,
+        notes: [Note],
+        persistedState: WidgetDiscoveryProgressState
+    ) -> Bool {
+        guard persistedState.isPendingPresentation,
+              !isDismissed,
+              !isPresented,
+              !isRecording,
+              let completedTitleNoteID
+        else { return false }
+
+        return notes.contains { note in
+            note.id == completedTitleNoteID
+                && note.source == .voice
+                && !note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+}
+
+struct SavedNoteHandoffState: Equatable {
+    var pendingNote: Note?
+    var selectedNote: Note?
+    var isInteractionLocked: Bool
+}
+
+enum SavedNoteHandoffLogic {
+    static func begin(with savedNote: Note, isMandatoryPaywallPresented: Bool) -> SavedNoteHandoffState {
+        SavedNoteHandoffState(
+            pendingNote: savedNote,
+            selectedNote: isMandatoryPaywallPresented ? nil : savedNote,
+            isInteractionLocked: true
+        )
+    }
+
+    static func resume(
+        pendingNote: Note?,
+        selectedNote: Note?,
+        isMandatoryPaywallPresented: Bool
+    ) -> SavedNoteHandoffState {
+        guard let pendingNote else {
+            return SavedNoteHandoffState(
+                pendingNote: nil,
+                selectedNote: selectedNote,
+                isInteractionLocked: false
+            )
+        }
+
+        guard !isMandatoryPaywallPresented else {
+            return SavedNoteHandoffState(
+                pendingNote: pendingNote,
+                selectedNote: selectedNote,
+                isInteractionLocked: true
+            )
+        }
+
+        let resolvedSelectedNote = selectedNote ?? pendingNote
+        let routeCompleted = resolvedSelectedNote.id == pendingNote.id
+
+        return SavedNoteHandoffState(
+            pendingNote: routeCompleted ? nil : pendingNote,
+            selectedNote: resolvedSelectedNote,
+            isInteractionLocked: !routeCompleted
+        )
+    }
+}
+
 struct HomeView: View {
     @Environment(AuthStore.self) var authStore
     @Environment(NoteStore.self) var noteStore
@@ -37,6 +176,7 @@ struct HomeView: View {
     @State var editingCategory: Category?
     @State var categoryToDelete: Category?
     @State var pendingNote: Note?
+    @State var isRoutingToSavedNote = false
     @State var keyboardHeight: CGFloat = 0
     @State var draggingCategory: Category?
     @State var chipsBarHeight: CGFloat = 0
@@ -56,7 +196,25 @@ struct HomeView: View {
         authStore.isGuest && noteStore.notes.count >= AuthStore.guestNoteLimit
     }
 
+    private func syncWidgetDiscoveryProgress() {
+        let current = WidgetDiscoveryLogic.persistedState()
+        let updated = WidgetDiscoveryLogic.syncedState(
+            notes: noteStore.notes,
+            deletedNotes: noteStore.deletedNotes,
+            persistedState: current
+        )
+        guard updated != current else { return }
+        WidgetDiscoveryLogic.persist(updated)
+    }
+
+    private func applySavedNoteHandoff(_ state: SavedNoteHandoffState) {
+        pendingNote = state.pendingNote
+        selectedNote = state.selectedNote
+        isRoutingToSavedNote = state.isInteractionLocked
+    }
+
     func attemptRecord() {
+        guard !isRoutingToSavedNote else { return }
         if isGuestAtLimit {
             showGuestPaywall = true
         } else {
@@ -177,6 +335,11 @@ struct HomeView: View {
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+
+                if isRoutingToSavedNote {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                }
             }
             .ignoresSafeArea(.keyboard)
             .navigationBarTitleDisplayMode(.inline)
@@ -227,13 +390,21 @@ struct HomeView: View {
             }
         }
         .fullScreenCover(isPresented: $showRecordView, onDismiss: {
-            if let note = pendingNote {
-                selectedNote = note
-                pendingNote = nil
-            }
+            applySavedNoteHandoff(
+                SavedNoteHandoffLogic.resume(
+                    pendingNote: pendingNote,
+                    selectedNote: selectedNote,
+                    isMandatoryPaywallPresented: isMandatoryPaywallPresented
+                )
+            )
         }) {
             RecordView(categoryId: selectedCategory) { savedNote in
-                pendingNote = savedNote
+                applySavedNoteHandoff(
+                    SavedNoteHandoffLogic.begin(
+                        with: savedNote,
+                        isMandatoryPaywallPresented: isMandatoryPaywallPresented
+                    )
+                )
             }
             .navigationTransition(.zoom(sourceID: "record", in: namespace))
         }
@@ -305,7 +476,14 @@ struct HomeView: View {
             Text(noteStore.lastError ?? "")
         }
         .onAppear {
+            syncWidgetDiscoveryProgress()
             consumePendingRecordDeepLinkIfPossible()
+        }
+        .onChange(of: noteStore.notes) { _, _ in
+            syncWidgetDiscoveryProgress()
+        }
+        .onChange(of: noteStore.deletedNotes) { _, _ in
+            syncWidgetDiscoveryProgress()
         }
         .onChange(of: pendingDeepLink) { _, link in
             guard link == .record else { return }
@@ -313,19 +491,29 @@ struct HomeView: View {
         }
         .onChange(of: isMandatoryPaywallPresented) { _, presented in
             guard !presented else { return }
+            applySavedNoteHandoff(
+                SavedNoteHandoffLogic.resume(
+                    pendingNote: pendingNote,
+                    selectedNote: selectedNote,
+                    isMandatoryPaywallPresented: presented
+                )
+            )
             consumePendingRecordDeepLinkIfPossible()
         }
-        .onChange(of: noteStore.generatingTitleIds) { oldIds, newIds in
-            // A title just finished generating — check if it's the first note's "aha" moment
-            guard !WidgetDiscoverySheet.wasDismissed,
-                  !showWidgetDiscovery,
-                  !showRecordView,
-                  noteStore.notes.count == 1,
-                  let firstNote = noteStore.notes.first,
-                  firstNote.title != nil,
-                  !newIds.contains(firstNote.id),
-                  oldIds.contains(firstNote.id)
+        .onChange(of: noteStore.lastCompletedTitleGenerationNoteId) { _, noteId in
+            syncWidgetDiscoveryProgress()
+            let progress = WidgetDiscoveryLogic.persistedState()
+            guard WidgetDiscoveryLogic.shouldPresent(
+                isDismissed: WidgetDiscoverySheet.wasDismissed,
+                isPresented: showWidgetDiscovery,
+                isRecording: showRecordView,
+                completedTitleNoteID: noteId,
+                notes: noteStore.notes,
+                persistedState: progress
+            )
             else { return }
+
+            WidgetDiscoveryLogic.clearPendingPresentation()
             // Small delay so the user sees their note card update first
             Task {
                 try? await Task.sleep(for: .seconds(1.5))

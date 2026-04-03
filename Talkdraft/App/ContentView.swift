@@ -8,6 +8,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Binding var pendingDeepLink: DeepLink?
     @AppStorage("onboarding.completed.device") private var deviceOnboardingCompleted = false
+    @AppStorage("debug.forceOnboardingFlow") private var debugForceOnboarding = false
     @State private var completedOnboardingUserId: UUID?
     @State private var didFinishInitialAuthBootstrap = false
     @State private var showPostAuthTransition = false
@@ -17,16 +18,29 @@ struct ContentView: View {
     private var showMandatoryPaywall: Binding<Bool> {
         Binding(
             get: {
-                return authStore.isAuthenticated
-                    && isPostAuthBootstrapReady
-                    && !subscriptionStore.isPro
+                return Self.shouldPresentMandatoryPaywall(
+                    isAuthenticated: authStore.isAuthenticated,
+                    isGuest: authStore.isGuest,
+                    isPostAuthBootstrapReady: isPostAuthBootstrapReady,
+                    isPro: subscriptionStore.isPro
+                )
             },
             set: { _ in }
         )
     }
 
+    static func shouldPresentMandatoryPaywall(
+        isAuthenticated: Bool,
+        isGuest: Bool,
+        isPostAuthBootstrapReady: Bool,
+        isPro: Bool
+    ) -> Bool {
+        isAuthenticated && !isGuest && isPostAuthBootstrapReady && !isPro
+    }
+
     /// Device-level onboarding check (works before and after auth).
     private var shouldShowOnboarding: Bool {
+        if debugForceOnboarding { return true }
         if deviceOnboardingCompleted { return false }
         // Legacy: user-specific flag for existing users
         if let userId = authStore.userId,
@@ -51,6 +65,7 @@ struct ContentView: View {
 
     private func markOnboardingComplete(for userId: UUID?) {
         deviceOnboardingCompleted = true
+        debugForceOnboarding = false
         if let userId {
             UserDefaults.standard.set(true, forKey: "onboarding.completed.\(userId.uuidString)")
         }
@@ -237,6 +252,7 @@ struct ContentView: View {
                 await noteStore.refreshRewriteJobs()
                 let language = settingsStore.language == "auto" ? nil : settingsStore.language
                 noteStore.retryWaitingNotes(language: language, userId: authStore.userId, customDictionary: settingsStore.customDictionary)
+                noteStore.retryPendingTitleGenerations()
             }
         }
         .onChange(of: scenePhase) { _, phase in

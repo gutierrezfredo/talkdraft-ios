@@ -8,24 +8,132 @@ extension NoteStore {
     // MARK: - AI Title
 
     func generateTitle(for noteId: UUID, content: String, language: String?) {
-        generatingTitleIds.insert(noteId)
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedContent.isEmpty else {
+            clearPendingTitleGeneration(id: noteId)
+            return
+        }
+
+        queuePendingTitleGeneration(id: noteId)
+        guard generatingTitleIds.insert(noteId).inserted else { return }
+
         Task {
             do {
-                let aiTitle = try await aiTitleExecutor(content, language)
+                let aiTitle = try await generateTitleWithRetries(content: trimmedContent, language: language)
                 generatingTitleIds.remove(noteId)
-                guard var note = notes.first(where: { $0.id == noteId }) else { return }
+                guard var note = notes.first(where: { $0.id == noteId }) else {
+                    clearPendingTitleGeneration(id: noteId)
+                    return
+                }
+                guard pendingTitleGenerationIds.contains(noteId) else {
+                    clearPendingTitleGeneration(id: noteId)
+                    return
+                }
                 note.title = aiTitle
                 note.updatedAt = Date()
                 updateNote(note)
+                lastCompletedTitleGenerationNoteId = noteId
+                clearPendingTitleGeneration(id: noteId)
+            } catch is CancellationError {
+                generatingTitleIds.remove(noteId)
             } catch {
                 generatingTitleIds.remove(noteId)
+                let willRetry = shouldKeepPendingTitleGeneration(after: error)
+                if !willRetry {
+                    clearPendingTitleGeneration(id: noteId)
+                }
                 logger.error("generateTitle failed for \(noteId): \(error)")
                 ErrorLogger.shared.log(
                     type: "title_generation_failed",
                     message: error.localizedDescription,
-                    context: ["note_id": noteId.uuidString]
+                    context: [
+                        "note_id": noteId.uuidString,
+                        "will_retry": willRetry ? "true" : "false",
+                    ]
                 )
             }
+        }
+    }
+
+    func retryPendingTitleGenerations() {
+        seedRecoverableTitleGenerationRepairs()
+
+        let orderedIds = pendingTitleGenerationIds.sorted { lhs, rhs in
+            let lhsDate = notes.first(where: { $0.id == lhs })?.updatedAt ?? .distantPast
+            let rhsDate = notes.first(where: { $0.id == rhs })?.updatedAt ?? .distantPast
+            return lhsDate > rhsDate
+        }
+
+        for noteId in orderedIds {
+            guard !generatingTitleIds.contains(noteId) else { continue }
+            guard let note = notes.first(where: { $0.id == noteId }) else {
+                clearPendingTitleGeneration(id: noteId)
+                continue
+            }
+            guard shouldRetryPendingTitleGeneration(for: note) else {
+                clearPendingTitleGeneration(id: noteId)
+                continue
+            }
+            generateTitle(for: noteId, content: note.content, language: note.language)
+        }
+    }
+
+    private func generateTitleWithRetries(content: String, language: String?) async throws -> String {
+        let retryDelays: [Duration] = [.seconds(1), .seconds(3)]
+
+        for (attempt, delay) in retryDelays.enumerated() {
+            do {
+                return try await aiTitleExecutor(content, language)
+            } catch {
+                guard shouldKeepPendingTitleGeneration(after: error) else { throw error }
+                logger.notice("Retrying title generation after transient failure on attempt \(attempt + 1): \(error.localizedDescription, privacy: .public)")
+                try await Task.sleep(for: delay)
+            }
+        }
+
+        return try await aiTitleExecutor(content, language)
+    }
+
+    private func shouldKeepPendingTitleGeneration(after error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        if error is URLError {
+            return true
+        }
+        if let aiError = error as? AIError {
+            return aiError.isTransient
+        }
+        return false
+    }
+
+    private func shouldRetryPendingTitleGeneration(for note: Note) -> Bool {
+        pendingTitleGenerationIds.contains(note.id)
+            && note.bodyState == .content
+            && !note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func noteHasMissingTitle(_ note: Note) -> Bool {
+        (note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+    }
+
+    private func seedRecoverableTitleGenerationRepairs(now: Date = .now) {
+        let recencyThreshold: TimeInterval = 24 * 60 * 60
+        let titleGenerationWindow: TimeInterval = 15 * 60
+
+        for note in notes {
+            guard note.source == .voice,
+                  noteHasMissingTitle(note),
+                  note.bodyState == .content,
+                  note.durationSeconds != nil,
+                  !note.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  now.timeIntervalSince(note.createdAt) <= recencyThreshold,
+                  note.updatedAt.timeIntervalSince(note.createdAt) <= titleGenerationWindow
+            else {
+                continue
+            }
+
+            queuePendingTitleGeneration(id: note.id)
         }
     }
 

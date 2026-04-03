@@ -82,6 +82,7 @@ extension NoteStore {
 
     func addNote(_ note: Note) {
         let localNote = normalizeLocalVoiceNote(note)
+        reconcilePendingTitleGeneration(for: localNote)
         notes.insert(localNote, at: 0)
         queuePendingNoteUpsert(localNote)
         let revision = bumpNoteSyncRevision(for: note.id)
@@ -91,6 +92,7 @@ extension NoteStore {
     func updateNote(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
         let localNote = normalizeLocalVoiceNote(note)
+        reconcilePendingTitleGeneration(for: localNote)
         notes[index] = localNote
         queuePendingNoteUpsert(localNote)
         let revision = bumpNoteSyncRevision(for: note.id)
@@ -101,6 +103,7 @@ extension NoteStore {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         var removed = notes.remove(at: index)
         removed.deletedAt = Date()
+        clearPendingTitleGeneration(id: id)
         deletedNotes.insert(removed, at: 0)
         setLocalVoiceBodyState(nil, for: id)
         queuePendingNoteUpsert(removed)
@@ -143,6 +146,7 @@ extension NoteStore {
         cancelPendingNoteSyncTask(id: id)
         pendingNoteUpserts.removeValue(forKey: id)
         persistPendingNoteUpserts()
+        clearPendingTitleGeneration(id: id)
         noteSyncRevisions[id] = nil
         setLocalVoiceBodyState(nil, for: id)
         if let audioURL = localAudioFileURL(for: id, audioUrl: deletedNote?.audioUrl) {
@@ -153,6 +157,13 @@ extension NoteStore {
         }
         queuePendingHardDelete(PendingHardDelete(noteId: id, remoteAudioPath: remoteAudioPath))
         schedulePendingHardDelete(id: id)
+    }
+
+    func reconcilePendingTitleGeneration(for note: Note) {
+        let trimmedTitle = note.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedTitle.isEmpty || note.deletedAt != nil {
+            clearPendingTitleGeneration(id: note.id)
+        }
     }
 
     func purgeExpiredNotes() async {

@@ -228,6 +228,13 @@ struct EmailSignInSheet: View {
         !isValid || authStore.isSendingMagicLink || authStore.magicLinkCooldownRemaining > 0
     }
 
+    static func shouldAutoDismiss(
+        isAuthenticated: Bool,
+        isGuest: Bool
+    ) -> Bool {
+        isAuthenticated && !isGuest
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -258,6 +265,15 @@ struct EmailSignInSheet: View {
                             .fontWeight(.semibold)
                     }
                 }
+            }
+            .onAppear {
+                dismissIfAuthenticated()
+            }
+            .onChange(of: authStore.isAuthenticated) { _, _ in
+                dismissIfAuthenticated()
+            }
+            .onChange(of: authStore.isGuest) { _, _ in
+                dismissIfAuthenticated()
             }
         }
     }
@@ -478,6 +494,15 @@ struct EmailSignInSheet: View {
                 resendCooldown -= 1
             }
         }
+    }
+
+    private func dismissIfAuthenticated() {
+        guard Self.shouldAutoDismiss(
+            isAuthenticated: authStore.isAuthenticated,
+            isGuest: authStore.isGuest
+        ) else { return }
+        authStore.error = nil
+        dismiss()
     }
 }
 

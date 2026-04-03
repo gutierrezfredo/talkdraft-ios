@@ -62,6 +62,12 @@ extension NoteStore {
         })
     }
 
+    static func loadPendingTitleGenerationIds(for userId: UUID?) -> Set<UUID> {
+        let key = scopedKey(Self.pendingTitleGenerationKey, userId: userId)
+        let rawIds = (UserDefaults.standard.array(forKey: key) as? [String]) ?? []
+        return Set(rawIds.compactMap(UUID.init(uuidString:)))
+    }
+
     func persistPendingHardDeletes() {
         guard persistsPendingHardDeletes else { return }
         let key = Self.scopedKey(Self.pendingHardDeletesKey, userId: currentSessionUserId)
@@ -72,6 +78,17 @@ extension NoteStore {
         let pendingDeletes = pendingHardDeletes.values.sorted { $0.noteId.uuidString < $1.noteId.uuidString }
         guard let data = try? JSONEncoder().encode(pendingDeletes) else { return }
         UserDefaults.standard.set(data, forKey: key)
+    }
+
+    func persistPendingTitleGenerationIds() {
+        guard persistsPendingTitleGenerations else { return }
+        let key = Self.scopedKey(Self.pendingTitleGenerationKey, userId: currentSessionUserId)
+        if pendingTitleGenerationIds.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        let rawIds = pendingTitleGenerationIds.map(\.uuidString).sorted()
+        UserDefaults.standard.set(rawIds, forKey: key)
     }
 
     func setLocalVoiceBodyState(_ state: NoteBodyState?, for noteId: UUID) {
@@ -107,6 +124,7 @@ extension NoteStore {
         localVoiceBodyStates = persistsLocalVoiceBodyStates ? Self.loadLocalVoiceBodyStates(for: userId) : localVoiceBodyStates
         pendingNoteUpserts = persistsPendingNoteUpserts ? Self.loadPendingNoteUpserts(for: userId) : pendingNoteUpserts
         pendingHardDeletes = persistsPendingHardDeletes ? Self.loadPendingHardDeletes(for: userId) : pendingHardDeletes
+        pendingTitleGenerationIds = persistsPendingTitleGenerations ? Self.loadPendingTitleGenerationIds(for: userId) : pendingTitleGenerationIds
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         notes = mergedPendingNotes(with: [])
@@ -141,6 +159,7 @@ extension NoteStore {
         localVoiceBodyStates = [:]
         pendingNoteUpserts = [:]
         pendingHardDeletes = [:]
+        pendingTitleGenerationIds = []
         noteSyncRevisions = [:]
         categorySyncRevisions = [:]
         currentSessionUserId = nil
@@ -187,6 +206,16 @@ extension NoteStore {
     func queuePendingHardDelete(_ pendingDelete: PendingHardDelete) {
         pendingHardDeletes[pendingDelete.noteId] = pendingDelete
         persistPendingHardDeletes()
+    }
+
+    func queuePendingTitleGeneration(id: UUID) {
+        guard pendingTitleGenerationIds.insert(id).inserted else { return }
+        persistPendingTitleGenerationIds()
+    }
+
+    func clearPendingTitleGeneration(id: UUID) {
+        guard pendingTitleGenerationIds.remove(id) != nil else { return }
+        persistPendingTitleGenerationIds()
     }
 
     func clearPendingHardDelete(id: UUID) {
