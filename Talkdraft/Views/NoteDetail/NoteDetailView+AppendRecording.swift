@@ -135,7 +135,7 @@ extension NoteDetailView {
     }
 
     func scheduleAppendRecordingStart() {
-        cancelPendingAppendRecordingStart(discardPreparedSession: false)
+        appendRecordingStartTask?.cancel()
         appendRecordingStartTask = Task(priority: .userInitiated) { @MainActor in
             guard !Task.isCancelled else { return }
             do {
@@ -150,10 +150,10 @@ extension NoteDetailView {
         }
     }
 
-    func cancelPendingAppendRecordingStart(discardPreparedSession: Bool = true) {
+    func cancelPendingAppendRecordingStart() {
         appendRecordingStartTask?.cancel()
         appendRecordingStartTask = nil
-        if discardPreparedSession, !appendRecorder.isRecording, !appendRecorder.isStarting {
+        if !appendRecorder.isRecording {
             Task { @MainActor in
                 AudioRecorder.discardPreparedRecordingSession()
             }

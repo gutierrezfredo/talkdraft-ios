@@ -8,21 +8,15 @@ struct RecordView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+    @State private var recorder = AudioRecorder()
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showCancelConfirmation = false
     @State private var multiSpeaker = false
     @State private var showBackgroundBanner = false
     @State private var startTask: Task<Void, Never>?
-    let recorder: AudioRecorder
     let categoryId: UUID?
     var onNoteSaved: ((Note) -> Void)?
-
-    init(recorder: AudioRecorder, categoryId: UUID?, onNoteSaved: ((Note) -> Void)? = nil) {
-        self.recorder = recorder
-        self.categoryId = categoryId
-        self.onNoteSaved = onNoteSaved
-    }
 
     private let maxDurationSeconds = 3600
 
@@ -112,7 +106,7 @@ struct RecordView: View {
         }
         .alert("Recording Error", isPresented: $showError) {
             Button("OK") {
-                if !recorder.isRecording, !recorder.isStarting {
+                if !recorder.isRecording {
                     scheduleRecordingStart()
                 }
             }
@@ -120,9 +114,7 @@ struct RecordView: View {
             Text(errorMessage)
         }
         .onAppear {
-            if !recorder.isRecording, !recorder.isStarting {
-                scheduleRecordingStart()
-            }
+            scheduleRecordingStart()
         }
         .onDisappear {
             cancelPendingStart()
@@ -279,14 +271,20 @@ struct RecordView: View {
     }
 
     private func scheduleRecordingStart() {
-        cancelPendingStart(discardPreparedSession: false)
-        startTask = makeRecordingStartTask()
+        cancelPendingStart()
+        startTask = Task { @MainActor in
+            if !AudioRecorder.currentRouteUsesCarAudio() {
+                await Task.yield()
+            }
+            guard !Task.isCancelled else { return }
+            startRecording()
+        }
     }
 
-    private func cancelPendingStart(discardPreparedSession: Bool = true) {
+    private func cancelPendingStart() {
         startTask?.cancel()
         startTask = nil
-        if discardPreparedSession, !recorder.isRecording, !recorder.isStarting {
+        if !recorder.isRecording {
             Task { @MainActor in
                 AudioRecorder.discardPreparedRecordingSession()
             }
@@ -294,18 +292,11 @@ struct RecordView: View {
     }
 
     private func startRecording() {
-        cancelPendingStart(discardPreparedSession: false)
-        startTask = makeRecordingStartTask()
-    }
-
-    private func makeRecordingStartTask() -> Task<Void, Never> {
-        Task(priority: .userInitiated) { @MainActor in
-            defer { startTask = nil }
-            guard !Task.isCancelled else { return }
+        startTask = nil
+        Task { @MainActor in
             do {
                 try await recorder.startRecording()
             } catch {
-                guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 showError = true
             }
