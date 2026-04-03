@@ -210,21 +210,39 @@ extension HomeView {
             }
             .buttonStyle(.plain)
 
-            Image(systemName: "mic.fill")
-                .font(.title)
-                .foregroundStyle(.white)
-                .frame(width: 72, height: 72)
-                .background(Circle().fill(Color.brand))
-                .glassEffect(.regular.interactive(), in: .circle)
-                .onTapGesture {
-                    attemptRecord()
+            Button {
+                guard !suppressNextRecordButtonTap else {
+                    suppressNextRecordButtonTap = false
+                    return
                 }
-                .onLongPressGesture {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    guard !presentGuestPaywallIfNeeded() else { return }
-                    showAudioImporter = true
-                }
-                .matchedTransitionSource(id: "record", in: namespace)
+                attemptRecord()
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.title)
+                    .foregroundStyle(.white)
+                    .frame(width: 72, height: 72)
+                    .background(Circle().fill(Color.brand))
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.45)
+                    .onEnded { _ in
+                        suppressNextRecordButtonTap = true
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        guard !presentGuestPaywallIfNeeded() else { return }
+                        showAudioImporter = true
+
+                        // Button and long press fire independently. Reset the
+                        // suppression flag even if the button action doesn't
+                        // arrive on this gesture cycle.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(250))
+                            suppressNextRecordButtonTap = false
+                        }
+                    }
+            )
+            .matchedTransitionSource(id: "record", in: namespace)
 
             Button {
                 beginSearch()

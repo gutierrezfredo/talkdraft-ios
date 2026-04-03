@@ -183,6 +183,7 @@ struct HomeView: View {
     @State var searchPreviousCategory: UUID?
     @State var showsSelectionSearchTransition = false
     @State var selectionSearchTransitionTask: Task<Void, Never>?
+    @State var suppressNextRecordButtonTap = false
     @Namespace var namespace
     @Namespace var bottomBarNamespace
     @FocusState var searchFocused: Bool

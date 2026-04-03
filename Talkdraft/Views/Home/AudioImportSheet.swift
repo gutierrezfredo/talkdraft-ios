@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AudioImportSheet: View {
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("importMultiSpeaker") private var multiSpeaker = false
+    @State private var multiSpeaker = false
 
     let fileName: String
     let onImport: (Bool) -> Void
@@ -53,5 +53,8 @@ struct AudioImportSheet: View {
         .padding(.horizontal, 24)
         .padding(.top, 32)
         .padding(.bottom, 16)
+        .onAppear {
+            multiSpeaker = false
+        }
     }
 }
