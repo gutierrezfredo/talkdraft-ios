@@ -491,12 +491,10 @@ final class AudioRecorder: @unchecked Sendable {
         for route: AVAudioSessionRouteDescription,
         otherAudioActive: Bool
     ) -> AVAudioSession.Category {
-        // Wired CarPlay only needs microphone capture here; using a record-only session
-        // avoids forcing iOS to negotiate a simultaneous car-audio output route.
-        // If other audio is already active on CarPlay, keep the route alive with
-        // playAndRecord + duckOthers so repeated recordings can still capture input.
         if routeUsesCarAudio(route) {
-            return otherAudioActive ? .playAndRecord : .record
+            // CarPlay proved more reliable when the route stays in playAndRecord
+            // even if no other audio is currently playing. We only vary options.
+            return .playAndRecord
         }
         return .playAndRecord
     }

@@ -188,6 +188,52 @@ import UIKit
     #expect(afterPaywallDismisses.isInteractionLocked == false)
 }
 
+@Test func recordDeepLinkUnwindsOpenNoteBeforePresentingRecorder() {
+    let note = makeNote(content: "Body", source: .text)
+
+    let routing = RecordDeepLinkRoutingLogic.prepare(
+        selectedNote: note,
+        showCategoryPicker: false,
+        showWidgetDiscovery: false,
+        showAudioImporter: false,
+        pendingImportURL: nil
+    )
+
+    #expect(routing.selectedNote == nil)
+    #expect(routing.showCategoryPicker == false)
+    #expect(routing.showWidgetDiscovery == false)
+    #expect(routing.showAudioImporter == false)
+    #expect(routing.pendingImportURL == nil)
+    #expect(routing.shouldAttemptRecordImmediately == false)
+    #expect(routing.shouldResumeAfterNoteDismissal == true)
+}
+
+@Test func recordDeepLinkResumesOnlyAfterHomePresentationIsClear() {
+    #expect(
+        RecordDeepLinkRoutingLogic.shouldResumeDeferredRecord(
+            hasPendingDeferredRecord: true,
+            selectedNote: nil,
+            showCategoryPicker: false,
+            showWidgetDiscovery: false,
+            showAudioImporter: false,
+            pendingImportURL: nil,
+            isMandatoryPaywallPresented: false
+        ) == true
+    )
+
+    #expect(
+        RecordDeepLinkRoutingLogic.shouldResumeDeferredRecord(
+            hasPendingDeferredRecord: true,
+            selectedNote: makeNote(content: "Body", source: .text),
+            showCategoryPicker: false,
+            showWidgetDiscovery: false,
+            showAudioImporter: false,
+            pendingImportURL: nil,
+            isMandatoryPaywallPresented: false
+        ) == false
+    )
+}
+
 @Test func widgetDiscoveryWaitsForSecondSuccessfulVoiceTranscription() {
     let firstVoice = makeNote(content: "First transcript", source: .voice)
     let secondVoice = makeNote(content: "Second transcript", source: .voice)
