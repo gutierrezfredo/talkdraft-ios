@@ -214,14 +214,13 @@ struct HomeView: View {
         isRoutingToSavedNote = state.isInteractionLocked
     }
 
+    @MainActor
     func attemptRecord() {
         guard !isRoutingToSavedNote else { return }
         if isGuestAtLimit {
             showGuestPaywall = true
         } else {
-            Task { @MainActor in
-                AudioRecorder.prewarmRecordingSession()
-            }
+            AudioRecorder.prewarmRecordingSession()
             showRecordView = true
         }
     }

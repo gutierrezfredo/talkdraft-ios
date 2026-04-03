@@ -64,7 +64,7 @@ final class AudioRecorder: @unchecked Sendable {
     @MainActor
     static func prewarmRecordingSession() {
         guard sessionPreparationTask == nil else { return }
-        sessionPreparationTask = Task { @MainActor in
+        sessionPreparationTask = Task(priority: .userInitiated) { @MainActor in
             try Task.checkCancellation()
             let session = AVAudioSession.sharedInstance()
             let usesCarAudioRoute = Self.routeUsesCarAudio(session.currentRoute)
@@ -95,6 +95,7 @@ final class AudioRecorder: @unchecked Sendable {
 
     @MainActor
     func startRecording() async throws {
+        let startTimestamp = Date()
         let session = AVAudioSession.sharedInstance()
         do {
             let preparedSession = try await Self.consumePreparedRecordingSession()
@@ -127,6 +128,9 @@ final class AudioRecorder: @unchecked Sendable {
             observeRouteChanges()
             startTimer()
             beginBackgroundTaskIfNeeded()
+            logger.info(
+                "Recording started in \(Date().timeIntervalSince(startTimestamp), format: .fixed(precision: 3))s"
+            )
         } catch {
             logger.error(
                 "Failed to start recording. error=\(error.localizedDescription, privacy: .public) route=\(Self.describeRoute(session.currentRoute), privacy: .public) availableInputs=\(Self.describeInputs(session.availableInputs), privacy: .public)"
@@ -389,6 +393,7 @@ final class AudioRecorder: @unchecked Sendable {
         let category = recordingCategory(for: session.currentRoute)
         let options = recordingCategoryOptions(for: session.currentRoute)
         try session.setCategory(category, mode: .default, options: options)
+        try? session.setPreferredIOBufferDuration(0.005)
         try session.setActive(true)
         try configurePreferredInputIfNeeded(session)
         logger.info(
@@ -521,7 +526,7 @@ private final class AudioPipeline: @unchecked Sendable {
         let bridge = self.bridge
         let paused = self.paused
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 512, format: nil) { buffer, _ in
             let isPaused = paused.withLock { $0 }
             guard !isPaused else { return }
 
@@ -532,6 +537,7 @@ private final class AudioPipeline: @unchecked Sendable {
             bridge.write(bands)
         }
 
+        engine.prepare()
         try engine.start()
         engineLock.lock()
         self.engine = engine
@@ -548,6 +554,9 @@ private final class AudioPipeline: @unchecked Sendable {
 
         let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
         recorder.isMeteringEnabled = true
+        guard recorder.prepareToRecord() else {
+            throw RecordingError.formatUnavailable
+        }
         guard recorder.record() else {
             throw RecordingError.formatUnavailable
         }

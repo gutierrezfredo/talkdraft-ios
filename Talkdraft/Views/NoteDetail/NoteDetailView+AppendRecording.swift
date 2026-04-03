@@ -114,10 +114,9 @@ enum NoteAppendPlaceholderEditor {
 extension NoteDetailView {
     // MARK: - Append Recording Actions
 
+    @MainActor
     func startAppendRecording(scrollToBottom: Bool = false) {
-        Task { @MainActor in
-            AudioRecorder.prewarmRecordingSession()
-        }
+        AudioRecorder.prewarmRecordingSession()
         // Use last known cursor position, or end of content if cursor was never placed
         let contentLength = (editedContent as NSString).length
         let position = scrollToBottom ? contentLength : (contentFocused && isCursorReady ? cursorPosition : (lastKnownCursorPosition > 0 ? lastKnownCursorPosition : contentLength))
@@ -137,8 +136,7 @@ extension NoteDetailView {
 
     func scheduleAppendRecordingStart() {
         appendRecordingStartTask?.cancel()
-        appendRecordingStartTask = Task { @MainActor in
-            await Task.yield()
+        appendRecordingStartTask = Task(priority: .userInitiated) { @MainActor in
             guard !Task.isCancelled else { return }
             do {
                 try await appendRecorder.startRecording()
