@@ -234,6 +234,15 @@ import UIKit
     )
 }
 
+@Test func shareTextExportsOnlyBodyContent() {
+    let sharedText = NoteShareTextLogic.build(
+        title: "Visible title",
+        body: "Actual body line 1\nActual body line 2"
+    )
+
+    #expect(sharedText == "Actual body line 1\nActual body line 2")
+}
+
 @Test func widgetDiscoveryWaitsForSecondSuccessfulVoiceTranscription() {
     let firstVoice = makeNote(content: "First transcript", source: .voice)
     let secondVoice = makeNote(content: "Second transcript", source: .voice)
