@@ -1,5 +1,12 @@
 import SwiftUI
 
+enum NoteShareTextLogic {
+    static func build(title: String, body: String) -> String {
+        _ = title
+        return NoteTextFormatting.plainDisplayText(for: body)
+    }
+}
+
 extension NoteDetailView {
     var hasChanges: Bool {
         typewriterTask == nil
@@ -64,9 +71,7 @@ extension NoteDetailView {
     }
 
     func buildShareText() -> String {
-        let normalizedBody = NoteTextFormatting.plainDisplayText(for: persistedEditedContent)
-        let title = editedTitle.isEmpty ? "" : editedTitle + (normalizedBody.isEmpty ? "" : "\n\n")
-        return title + normalizedBody
+        NoteShareTextLogic.build(title: editedTitle, body: persistedEditedContent)
     }
 
     func dismissKeyboard() {

@@ -36,18 +36,10 @@ struct OnboardingView: View {
             backgroundColor.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                if step.showsProgressChrome {
-                    progressBar
-                        .padding(.horizontal, 24)
-                        .padding(.top, 12)
-                        .padding(.bottom, 4)
-
-                    backBar
-                }
-
                 ZStack(alignment: .top) {
                     if step == .welcome {
                         OnboardingWelcomeStep(onNext: advance)
+                            .padding(.top, step.topContentInset)
                             .id(stepViewID(for: .welcome))
                             .transition(stepTransition)
                     }
@@ -58,6 +50,7 @@ struct OnboardingView: View {
                             onNext: advance,
                             onBack: goBack
                         )
+                        .padding(.top, step.topContentInset)
                         .id(stepViewID(for: .categories))
                         .transition(stepTransition)
                     }
@@ -71,6 +64,7 @@ struct OnboardingView: View {
                             onRestored: { createCategories(); finishOnboarding() },
                             onGuestContinue: authStore.isAuthenticated ? nil : { handleGuestContinue() }
                         )
+                        .padding(.top, step.topContentInset)
                         .id(stepViewID(for: .paywall))
                         .transition(stepTransition)
                     }
@@ -79,11 +73,17 @@ struct OnboardingView: View {
                         OnboardingTrialReminderStep {
                             finishOnboarding()
                         }
+                        .padding(.top, step.topContentInset)
                         .id(stepViewID(for: .trialReminder))
                         .transition(stepTransition)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+        }
+        .overlay(alignment: .top) {
+            if step.showsTopChrome {
+                topChromeContainer
             }
         }
         .animation(.easeInOut(duration: 0.3), value: step)
@@ -105,51 +105,87 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Back Bar
+    // MARK: - Top Chrome
 
-    private var backBar: some View {
+    private var topChromeContainer: some View {
+        VStack(spacing: 0) {
+            topChrome
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+                .background(backgroundColor.opacity(0.85))
+
+            LinearGradient(
+                colors: [backgroundColor.opacity(0.85), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 20)
+        }
+    }
+
+    private var topChrome: some View {
         HStack {
-            Button {
-                goBack()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.body)
-                        .fontWeight(.semibold)
-                    Text("Back")
-                        .font(.body)
+            Group {
+                if step.showsBackButton {
+                    Button {
+                        goBack()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.body)
+                                .fontWeight(.semibold)
+                            Text("Back")
+                                .font(.body)
+                        }
+                        .foregroundStyle(Color.brand)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear
                 }
-                .foregroundStyle(Color.brand)
             }
-            .buttonStyle(.plain)
-            .opacity(step.showsBackButton ? 1 : 0)
-            .allowsHitTesting(step.showsBackButton)
+            .frame(width: 72, alignment: .leading)
 
             Spacer()
+
+            progressBar
+
+            Spacer()
+
+            Color.clear
+                .frame(width: 72, height: 44)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .frame(height: 32)
+        .frame(height: 44)
     }
 
     // MARK: - Progress Bar
 
-    private var progressSteps: [OnboardingStep] {
-        [.categories, .paywall]
+    private var progressStepIndex: Int {
+        switch step {
+        case .welcome:
+            0
+        case .categories:
+            1
+        case .paywall, .trialReminder:
+            2
+        }
+    }
+
+    private var progressStepCount: Int {
+        3
     }
 
     private var progressBar: some View {
-        let currentIndex = progressSteps.firstIndex(of: step) ?? 0
-
         return HStack(spacing: 6) {
-            ForEach(Array(progressSteps.enumerated()), id: \.offset) { index, _ in
-                if index == currentIndex {
+            ForEach(0..<progressStepCount, id: \.self) { index in
+                if index == progressStepIndex {
                     Capsule()
                         .fill(Color.brand)
                         .frame(width: 24, height: 8)
                 } else {
                     Circle()
-                        .fill(index < currentIndex ? Color.brand : Color.brand.opacity(0.25))
+                        .fill(index < progressStepIndex ? Color.brand : Color.brand.opacity(0.25))
                         .frame(width: 8, height: 8)
                 }
             }
@@ -157,7 +193,7 @@ struct OnboardingView: View {
         .animation(.snappy, value: step)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Onboarding progress")
-        .accessibilityValue("\(currentIndex + 1) of \(progressSteps.count)")
+        .accessibilityValue("\(progressStepIndex + 1) of \(progressStepCount)")
     }
 
     // MARK: - Navigation
@@ -268,11 +304,11 @@ private enum OnboardingStep: Int, CaseIterable {
     case paywall
     case trialReminder
 
-    var showsProgressChrome: Bool {
+    var showsTopChrome: Bool {
         switch self {
-        case .welcome, .trialReminder:
+        case .paywall:
             false
-        case .categories, .paywall:
+        case .welcome, .categories, .trialReminder:
             true
         }
     }
@@ -281,6 +317,15 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome, .paywall, .trialReminder: false
         case .categories: true
+        }
+    }
+
+    var topContentInset: CGFloat {
+        switch self {
+        case .categories:
+            56
+        case .welcome, .paywall, .trialReminder:
+            0
         }
     }
 

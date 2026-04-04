@@ -13,6 +13,7 @@ private struct PreparedRecordingSession: Sendable {
 enum RecordingError: LocalizedError {
     case formatUnavailable
     case incompatibleCarAudioRoute
+    case startupUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +21,8 @@ enum RecordingError: LocalizedError {
             "Audio format unavailable"
         case .incompatibleCarAudioRoute:
             "Talkdraft couldn't start recording with the current car audio route. Try using the iPhone microphone or disconnecting CarPlay, then try again."
+        case .startupUnavailable:
+            "Talkdraft couldn't start recording right now. Please try again."
         }
     }
 }
@@ -129,7 +132,49 @@ final class AudioRecorder: @unchecked Sendable {
                 bandCount: bandCount,
                 allowRecorderFallback: usesCarAudioRoute
             )
-            try pipeline.start()
+            do {
+                try pipeline.start()
+            } catch {
+                guard Self.shouldRetryRecordingStartup(after: error, usesCarAudioRoute: usesCarAudioRoute) else {
+                    throw error
+                }
+                logger.info(
+                    "Retrying recording startup after transient audio failure. code=\(Self.errorCode(from: error), privacy: .public) route=\(Self.describeRoute(session.currentRoute), privacy: .public)"
+                )
+                try? session.setPreferredInput(nil)
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                try? await Task.sleep(for: .milliseconds(120))
+                try Self.refreshSessionForCurrentRoute(session)
+
+                let retryPipeline = AudioPipeline(
+                    outputURL: fileURL,
+                    bandCount: bandCount,
+                    allowRecorderFallback: usesCarAudioRoute
+                )
+                try retryPipeline.start()
+                self.pipeline = retryPipeline
+                self.startedOnCarAudioRoute = usesCarAudioRoute
+                Self.logStartupRetrySucceeded(for: session)
+                isRecording = true
+                isPaused = false
+                startTime = Date()
+                pausedElapsed = 0
+                elapsedSeconds = 0
+                frequencyBands = Array(repeating: 0, count: bandCount)
+                let needsStartupRecovery = !usesCarAudioRoute || hadOtherAudioBeforeActivation
+                startupRecoveryDeadline = needsStartupRecovery ? Date().addingTimeInterval(startupRecoveryDuration) : nil
+                startupInterruptionActive = false
+                lastAutomaticRecoveryAttemptAt = nil
+
+                observeInterruptions()
+                observeRouteChanges()
+                startTimer()
+                beginBackgroundTaskIfNeeded()
+                logger.info(
+                    "Recording started in \(Date().timeIntervalSince(startTimestamp), format: .fixed(precision: 3))s"
+                )
+                return
+            }
             self.pipeline = pipeline
             self.startedOnCarAudioRoute = usesCarAudioRoute
 
@@ -168,6 +213,9 @@ final class AudioRecorder: @unchecked Sendable {
 
             if Self.routeUsesCarAudio(session.currentRoute) {
                 throw RecordingError.incompatibleCarAudioRoute
+            }
+            if Self.isTransientRecordingStartupError(error) {
+                throw RecordingError.startupUnavailable
             }
             throw error
         }
@@ -497,6 +545,27 @@ final class AudioRecorder: @unchecked Sendable {
             return .playAndRecord
         }
         return .playAndRecord
+    }
+
+    private static func shouldRetryRecordingStartup(after error: Error, usesCarAudioRoute: Bool) -> Bool {
+        !usesCarAudioRoute && isTransientRecordingStartupError(error)
+    }
+
+    private static func isTransientRecordingStartupError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let isAudioStartupDomain = nsError.domain == "com.apple.coreaudio.avfaudio"
+            || nsError.domain == NSOSStatusErrorDomain
+        return isAudioStartupDomain && nsError.code == 2_003_329_396
+    }
+
+    private static func errorCode(from error: Error) -> Int {
+        (error as NSError).code
+    }
+
+    private static func logStartupRetrySucceeded(for session: AVAudioSession) {
+        logger.info(
+            "Recording startup retry succeeded. route=\(Self.describeRoute(session.currentRoute), privacy: .public)"
+        )
     }
 
     private func recoverStoppedEngineIfPossible() -> Bool {
