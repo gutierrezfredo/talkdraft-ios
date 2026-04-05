@@ -114,10 +114,11 @@ struct ContentView: View {
                 if effectiveSplashColorScheme == .dark {
                     Color.darkBackground
                 } else {
-                    LinearGradient(
+                    RadialGradient(
                         colors: [Color(hex: "#8B5CF6"), Color(hex: "#6D28D9")],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 400
                     )
                 }
             }
