@@ -160,3 +160,28 @@ struct NoteDetailTranscriptionFailedView: View {
         .padding(.horizontal, 24)
     }
 }
+
+struct NoteDetailNoSpeechFallbackView: View {
+    let message: String
+    let onRecordAgain: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(message)
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            Button(action: onRecordAgain) {
+                Label("Record Again", systemImage: "mic.fill")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Capsule().fill(Color.brand))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+    }
+}

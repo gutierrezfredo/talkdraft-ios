@@ -144,6 +144,7 @@ extension NoteDetailView {
             } catch {
                 appendRecordingStartTask = nil
                 removeAppendPlaceholder()
+                restoreAppendRecoveryContentIfNeeded()
                 isAppendRecording = false
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
             }
@@ -174,6 +175,13 @@ extension NoteDetailView {
         self.appendPlaceholder = nil
     }
 
+    func restoreAppendRecoveryContentIfNeeded() {
+        guard let appendRecoveryOriginalContent else { return }
+        preserveScroll = true
+        editedContent = appendRecoveryOriginalContent
+        self.appendRecoveryOriginalContent = nil
+    }
+
     func transitionAppendPlaceholder(to phase: NoteAppendPlaceholderPhase) {
         preserveScroll = true
         guard let appendPlaceholder,
@@ -201,6 +209,7 @@ extension NoteDetailView {
 
     func stopAppendRecording() {
         cancelPendingAppendRecordingStart()
+        let recordingDuration = appendRecorder.elapsedSeconds
         guard let audioFileURL = appendRecorder.stopRecording() else {
             isAppendRecording = false
             removeAppendPlaceholder()
@@ -213,7 +222,18 @@ extension NoteDetailView {
         transitionAppendPlaceholder(to: .transcribing)
 
         Task {
+            var shouldDeleteAudioFile = true
             do {
+                if let analysis = try? await AudioSignalAnalyzer.analyze(url: audioFileURL),
+                   AudioSignalAnalyzer.shouldTreatAsSilent(analysis) {
+                    removeAppendPlaceholder()
+                    restoreAppendRecoveryContentIfNeeded()
+                    errorMessage = TranscriptionService.nextNoSpeechFallbackText()
+                    isAppendTranscribing = false
+                    try? FileManager.default.removeItem(at: audioFileURL)
+                    return
+                }
+
                 let uploadURL = (try? await AudioCompressor.compress(sourceURL: audioFileURL)) ?? audioFileURL
                 defer { if uploadURL != audioFileURL { AudioCompressor.cleanup(uploadURL) } }
 
@@ -238,22 +258,55 @@ extension NoteDetailView {
                     return
                 }
 
+                if TranscriptionService.shouldUseShortRecordingFallback(
+                    for: transcribedText,
+                    durationSeconds: recordingDuration
+                ) {
+                    removeAppendPlaceholder()
+                    restoreAppendRecoveryContentIfNeeded()
+                    errorMessage = TranscriptionService.nextNoSpeechFallbackText()
+                    isAppendTranscribing = false
+                    return
+                }
+
                 // Replace placeholder with transcribed text
+                let isReplacingNoSpeechFallback = appendRecoveryOriginalContent != nil
                 replaceAppendPlaceholder(with: transcribedText)
 
                 // Save to store + server
                 var updated = note
                 updated.content = persistedEditedContent
                 updated.title = editedTitle.isEmpty ? nil : editedTitle
+                if isReplacingNoSpeechFallback {
+                    let replacementDurationSeconds = result.durationSeconds ?? Int(recordingDuration.rounded())
+                    let replacementAudioURL = result.audioUrl ?? audioFileURL.absoluteString
+                    let existingAudioURL = localAudioFileURL
+                    if let existingAudioURL, existingAudioURL != audioFileURL {
+                        try? FileManager.default.removeItem(at: existingAudioURL)
+                    }
+                    updated.audioUrl = replacementAudioURL
+                    updated.durationSeconds = replacementDurationSeconds
+                    updated.language = result.language
+                    if result.audioUrl != nil {
+                        noteStore.unregisterLocalAudio(for: noteId)
+                    } else {
+                        noteStore.registerLocalAudio(audioFileURL, for: noteId)
+                        shouldDeleteAudioFile = false
+                    }
+                }
                 updated.updatedAt = Date()
                 noteStore.updateNote(updated)
+                appendRecoveryOriginalContent = nil
                 markCurrentStateAsSaved()
             } catch {
                 removeAppendPlaceholder()
+                restoreAppendRecoveryContentIfNeeded()
                 errorMessage = "Transcription failed: \(error.localizedDescription)"
             }
             // Clean up local audio — append recordings don't need to be kept
-            try? FileManager.default.removeItem(at: audioFileURL)
+            if shouldDeleteAudioFile {
+                try? FileManager.default.removeItem(at: audioFileURL)
+            }
             isAppendTranscribing = false
         }
     }
@@ -262,6 +315,7 @@ extension NoteDetailView {
         cancelPendingAppendRecordingStart()
         appendRecorder.cancelRecording()
         removeAppendPlaceholder()
+        restoreAppendRecoveryContentIfNeeded()
         isAppendRecording = false
     }
 
