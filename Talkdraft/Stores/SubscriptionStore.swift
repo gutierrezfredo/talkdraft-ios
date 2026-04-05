@@ -98,8 +98,11 @@ final class SubscriptionStore {
 
     /// Check whether the user is eligible for a StoreKit introductory offer (free trial).
     private func checkTrialEligibility() async {
-        guard let product = monthlyProduct ?? yearlyProduct,
-              let subscription = product.subscription else { return }
+        guard let product = monthlyProduct,
+              let subscription = product.subscription else {
+            isTrialEligible = false
+            return
+        }
         isTrialEligible = await subscription.isEligibleForIntroOffer
     }
 
