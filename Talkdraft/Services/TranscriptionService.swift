@@ -8,6 +8,27 @@ struct TranscriptionResult: Sendable {
     let language: String?
     let audioUrl: String?
     let durationSeconds: Int?
+    let speechMetrics: TranscriptionSpeechMetrics?
+}
+
+struct TranscriptionSpeechMetrics: Decodable, Sendable {
+    let speechDetected: Bool?
+    let segmentCount: Int?
+    let nonemptySegmentCount: Int?
+    let likelySpeechSegmentRatio: Double?
+    let avgNoSpeechProb: Double?
+    let avgLogprob: Double?
+    let avgCompressionRatio: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case speechDetected = "speech_detected"
+        case segmentCount = "segment_count"
+        case nonemptySegmentCount = "nonempty_segment_count"
+        case likelySpeechSegmentRatio = "likely_speech_segment_ratio"
+        case avgNoSpeechProb = "avg_no_speech_prob"
+        case avgLogprob = "avg_logprob"
+        case avgCompressionRatio = "avg_compression_ratio"
+    }
 }
 
 final class TranscriptionService: Sendable {
@@ -117,7 +138,8 @@ final class TranscriptionService: Sendable {
             text: sanitizedText,
             language: result.language,
             audioUrl: result.audioUrl,
-            durationSeconds: result.durationSeconds
+            durationSeconds: result.durationSeconds,
+            speechMetrics: result.speechMetrics
         )
     }
 
@@ -185,7 +207,79 @@ final class TranscriptionService: Sendable {
             return true
         }
 
-        if durationSeconds <= 2, normalized.tokens.count >= 8 {
+        return false
+    }
+
+    static func shouldUseLowSpeechFallback(
+        for text: String,
+        analysis: AudioSignalAnalysis?,
+        speechMetrics: TranscriptionSpeechMetrics?,
+        usesCarAudioRoute: Bool = AudioRecorder.currentRouteUsesCarAudio()
+    ) -> Bool {
+        let normalized = normalizedTranscriptTokens(text)
+        guard !normalized.tokens.isEmpty else { return false }
+
+        let suspiciousGenericPhrases: Set<String> = [
+            "thank you",
+            "thanks",
+            "thank you very much",
+            "you",
+        ]
+        let genericNoiseTokens: Set<String> = [
+            "a", "an", "and", "bye", "for", "hello", "hi", "hmm", "i", "im", "it's",
+            "its", "no", "oh", "ok", "okay", "thanks", "thank", "the", "to", "uh",
+            "um", "you", "yeah", "yep"
+        ]
+
+        let looksLikeMostlyNoise = analysis.map {
+            $0.durationSeconds >= 2.5
+                && $0.speechSampleRatio < (usesCarAudioRoute ? 0.015 : 0.05)
+                && $0.rmsAmplitude < (usesCarAudioRoute ? 0.015 : 0.04)
+                && $0.peakAmplitude < (usesCarAudioRoute ? 0.12 : 0.3)
+        } ?? false
+
+        let looksTrulySilentOnCarAudio = analysis.map {
+            $0.durationSeconds >= 2.5
+                && $0.speechSampleRatio < 0.008
+                && $0.rmsAmplitude < 0.006
+                && $0.peakAmplitude < 0.05
+        } ?? false
+
+        let backendSuggestsNoSpeech = speechMetrics.map { metrics in
+            if metrics.speechDetected == false { return true }
+
+            let likelySpeechSegmentRatio = metrics.likelySpeechSegmentRatio ?? 1
+            let avgNoSpeechProb = metrics.avgNoSpeechProb ?? 0
+            let avgLogprob = metrics.avgLogprob ?? 0
+            let avgCompressionRatio = metrics.avgCompressionRatio ?? 0
+
+            let highNoSpeechProbability = avgNoSpeechProb > 0.55
+            let weakSpeechSegmentRatio = likelySpeechSegmentRatio < 0.4
+            let lowConfidence = avgLogprob < -0.6
+            let suspiciousCompression = avgCompressionRatio > 2.4
+
+            return (highNoSpeechProbability && weakSpeechSegmentRatio)
+                || (highNoSpeechProbability && lowConfidence)
+                || (weakSpeechSegmentRatio && lowConfidence && suspiciousCompression)
+        } ?? false
+
+        let shouldTrustBackendOverLevels = usesCarAudioRoute
+        let shouldEvaluateTranscriptAsNoSpeech =
+            backendSuggestsNoSpeech
+            || (!shouldTrustBackendOverLevels && looksLikeMostlyNoise)
+            || (shouldTrustBackendOverLevels && looksTrulySilentOnCarAudio)
+
+        guard shouldEvaluateTranscriptAsNoSpeech else { return false }
+        if suspiciousGenericPhrases.contains(normalized.joined) {
+            return true
+        }
+
+        let allTokensAreGenericNoise = normalized.tokens.allSatisfy { genericNoiseTokens.contains($0) }
+        if allTokensAreGenericNoise && normalized.tokens.count <= 4 {
+            return true
+        }
+
+        if backendSuggestsNoSpeech && normalized.tokens.count <= 3 && normalized.joined.count <= 16 {
             return true
         }
 
@@ -229,12 +323,14 @@ private struct TranscriptionResponse: Decodable {
     let language: String?
     let audioUrl: String?
     let durationSeconds: Int?
+    let speechMetrics: TranscriptionSpeechMetrics?
 
     enum CodingKeys: String, CodingKey {
         case text
         case language
         case audioUrl = "audio_url"
         case durationSeconds = "duration_seconds"
+        case speechMetrics = "speech_metrics"
     }
 }
 

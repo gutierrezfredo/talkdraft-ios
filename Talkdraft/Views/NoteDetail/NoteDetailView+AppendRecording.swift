@@ -224,7 +224,9 @@ extension NoteDetailView {
         Task {
             var shouldDeleteAudioFile = true
             do {
-                if let analysis = try? await AudioSignalAnalyzer.analyze(url: audioFileURL),
+                let signalAnalysis = try? await AudioSignalAnalyzer.analyze(url: audioFileURL)
+
+                if let analysis = signalAnalysis,
                    AudioSignalAnalyzer.shouldTreatAsSilent(analysis) {
                     removeAppendPlaceholder()
                     restoreAppendRecoveryContentIfNeeded()
@@ -253,7 +255,8 @@ extension NoteDetailView {
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
                     removeAppendPlaceholder()
-                    errorMessage = "Could not transcribe the recording."
+                    restoreAppendRecoveryContentIfNeeded()
+                    errorMessage = TranscriptionService.nextNoSpeechFallbackText()
                     isAppendTranscribing = false
                     return
                 }
@@ -261,6 +264,10 @@ extension NoteDetailView {
                 if TranscriptionService.shouldUseShortRecordingFallback(
                     for: transcribedText,
                     durationSeconds: recordingDuration
+                ) || TranscriptionService.shouldUseLowSpeechFallback(
+                    for: transcribedText,
+                    analysis: signalAnalysis,
+                    speechMetrics: result.speechMetrics
                 ) {
                     removeAppendPlaceholder()
                     restoreAppendRecoveryContentIfNeeded()
