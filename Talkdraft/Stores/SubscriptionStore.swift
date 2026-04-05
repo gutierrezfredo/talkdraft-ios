@@ -15,6 +15,7 @@ final class SubscriptionStore {
     // StoreKit2 products fetched directly (RevenueCat offerings fallback)
     var monthlyProduct: StoreKit.Product?
     var yearlyProduct: StoreKit.Product?
+    var lifetimeProduct: StoreKit.Product?
 
     // MARK: - Access
 
@@ -24,7 +25,7 @@ final class SubscriptionStore {
     /// Single gate for all write-action enforcement points.
     var isReadOnly: Bool { !isPro }
 
-    var hasProducts: Bool { monthlyProduct != nil || yearlyProduct != nil }
+    var hasProducts: Bool { monthlyProduct != nil || lifetimeProduct != nil }
 
     // MARK: - Configuration
 
@@ -76,12 +77,13 @@ final class SubscriptionStore {
     func fetchProducts() async {
         do {
             let products = try await StoreKit.Product.products(
-                for: ["talkdraft_monthly", "talkdraft_yearly"]
+                for: ["talkdraft_monthly", "talkdraft_yearly", "talkdraft_lifetime"]
             )
             for product in products {
                 switch product.id {
                 case "talkdraft_monthly": monthlyProduct = product
                 case "talkdraft_yearly": yearlyProduct = product
+                case "talkdraft_lifetime": lifetimeProduct = product
                 default: break
                 }
             }

@@ -2,6 +2,11 @@ import AuthenticationServices
 import StoreKit
 import SwiftUI
 
+enum PaywallPlan: String, CaseIterable {
+    case lifetime
+    case monthly
+}
+
 struct OnboardingPaywallStep: View {
     let onPurchaseCompleted: (_ startedTrial: Bool) -> Void
     let onRestored: () -> Void
@@ -13,71 +18,45 @@ struct OnboardingPaywallStep: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
+    @State private var selectedPlan: PaywallPlan = .lifetime
     @State private var showEmailForm = false
     @State private var awaitingPurchaseAfterAuth = false
     @State private var errorMessage: String?
 
-    private let fallbackYearlyPrice = "$59.99"
+    private let fallbackMonthlyPrice = "$4.99"
+    private let fallbackLifetimePrice = "$29.99"
 
     /// User is signed in with a real account (not guest, not unauthenticated)
     private var isAuthenticatedUser: Bool {
         authStore.isAuthenticated && !authStore.isGuest
     }
 
-    private var yearlyPrice: String {
-        subscriptionStore.yearlyProduct?.displayPrice ?? fallbackYearlyPrice
+    private var monthlyPrice: String {
+        subscriptionStore.monthlyProduct?.displayPrice ?? fallbackMonthlyPrice
     }
 
-    private var monthlyEquivalent: String {
-        if let price = subscriptionStore.yearlyProduct?.price {
-            let monthly = NSDecimalNumber(decimal: price).doubleValue / 12
-            let floored = floor(monthly * 100) / 100
-            return String(format: "$%.2f", floored)
-        }
-        return "$4.99"
+    private var lifetimePrice: String {
+        subscriptionStore.lifetimeProduct?.displayPrice ?? fallbackLifetimePrice
     }
 
     private var isProcessing: Bool {
         subscriptionStore.isLoading
     }
 
-    private var shouldShowGuestContinueButton: Bool {
-        Self.shouldShowGuestContinueButton(
-            isAuthenticated: authStore.isAuthenticated,
-            hasGuestContinueAction: onGuestContinue != nil
-        )
-    }
-
-    static func shouldShowGuestContinueButton(
-        isAuthenticated: Bool,
-        hasGuestContinueAction: Bool
-    ) -> Bool {
-        hasGuestContinueAction && !isAuthenticated
+    private var selectedProduct: StoreKit.Product? {
+        switch selectedPlan {
+        case .monthly: subscriptionStore.monthlyProduct
+        case .lifetime: subscriptionStore.lifetimeProduct
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar (only when dismiss is available)
-            if let onDismiss {
-                HStack {
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-            }
-
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: 24) {
                     header
-                    trustTimeline
-                        .padding(.horizontal, 8)
+                    planToggle
+                    planContent
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
@@ -88,17 +67,6 @@ struct OnboardingPaywallStep: View {
                 actionStack
                     .padding(.horizontal, 24)
                     .padding(.top, 16)
-
-                if shouldShowGuestContinueButton, let onGuestContinue {
-                    Button(action: onGuestContinue) {
-                        Text("Continue as Guest")
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .frame(height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
 
                 legalFooter
                     .padding(.bottom, 8)
@@ -128,12 +96,28 @@ struct OnboardingPaywallStep: View {
         .task {
             await subscriptionStore.fetchProducts()
         }
+        .overlay(alignment: .topLeading) {
+            if let dismiss = onDismiss ?? onGuestContinue {
+                Button(action: dismiss) {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 36, height: 36)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .padding(.leading, 12)
+                .padding(.top, 4)
+            }
+        }
     }
 
     // MARK: - Header
 
     private var headerBackground: Color {
-        colorScheme == .dark ? Color.brand.opacity(0.12) : Color.brand.opacity(0.06)
+        colorScheme == .dark ? Color.brand.opacity(0.16) : Color.brand.opacity(0.08)
     }
 
     private var header: some View {
@@ -148,49 +132,186 @@ struct OnboardingPaywallStep: View {
                 .fontDesign(nil)
                 .multilineTextAlignment(.center)
 
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.brand)
-                Text("Unlimited AI transcription")
-            }
-            .font(.subheadline)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.brand.opacity(colorScheme == .dark ? 0.15 : 0.08), in: Capsule())
-            .padding(.top, 4)
-            .padding(.bottom, 2)
         }
         .background(alignment: .bottom) {
             ConcaveArchShape()
                 .fill(headerBackground)
                 .frame(height: 2000)
                 .padding(.horizontal, -300)
-                .offset(y: 1480)
+                .offset(y: 1520)
         }
     }
 
-    // MARK: - Trust Timeline
+    // MARK: - Plan Toggle
 
-    private var trustTimeline: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            timelineNode(
-                emoji: "🎁",
-                title: "Today — Free Trial Starts",
-                subtitle: "Nothing will be charged today.",
-                isLast: false
-            )
-            timelineNode(
-                emoji: "🔔",
-                title: "Day 6 — Trial Reminder",
-                subtitle: "We'll notify you 24h before",
-                isLast: false
-            )
-            timelineNode(
-                emoji: "🪄",
-                title: "Day 7 — Subscription Begins",
-                subtitle: "\(yearlyPrice)/yr · Cancel anytime",
-                isLast: true
-            )
+    private var planToggle: some View {
+        HStack(spacing: 0) {
+            ForEach(PaywallPlan.allCases, id: \.self) { plan in
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) {
+                        selectedPlan = plan
+                    }
+                } label: {
+                    Text(plan == .monthly ? "Monthly" : "Lifetime")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .foregroundStyle(selectedPlan == plan ? .white : .primary)
+                        .background(
+                            selectedPlan == plan
+                                ? Capsule().fill(Color.brand)
+                                : Capsule().fill(Color.clear)
+                        )
+                        .contentShape(Capsule())
+                        .overlay(alignment: .top) {
+                            if plan == .lifetime {
+                                Text("SAVE 60%")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(colorScheme == .dark ? Color(hex: "#34D399") : Color.brandText)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(colorScheme == .dark ? Color.darkBackground : Color.white, in: UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 8))
+                                    .offset(y: -22)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .padding(.top, 16)
+        .background(
+            Capsule().fill(colorScheme == .dark ? Color.darkBackground : .white)
+                .padding(.top, 16)
+        )
+        .sensoryFeedback(.selection, trigger: selectedPlan)
+    }
+
+    // MARK: - Plan Content
+
+    private var planContent: some View {
+        Group {
+            if selectedPlan == .monthly {
+                monthlyTimeline
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+            } else {
+                lifetimePerks
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: selectedPlan)
+    }
+
+    // MARK: - Monthly Timeline
+
+    private var monthlyTimeline: some View {
+        VStack(spacing: 40) {
+            VStack(alignment: .leading, spacing: 0) {
+                timelineNode(
+                    emoji: "🎁",
+                    title: "Today — Free Trial Starts",
+                    subtitle: "Nothing will be charged today.",
+                    isLast: false
+                )
+                timelineNode(
+                    emoji: "🔔",
+                    title: "Day 6 — Trial Reminder",
+                    subtitle: "We'll notify you 24h before",
+                    isLast: false
+                )
+                timelineNode(
+                    emoji: "🚀",
+                    title: "Day 7 — Subscription Begins",
+                    subtitle: "\(monthlyPrice)/mo · Cancel anytime",
+                    isLast: true
+                )
+            }
+            .padding(.horizontal, 8)
+
+            VStack(spacing: 8) {
+                Text("7 Days Free")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(Color.brandText)
+
+                Text("Then \(monthlyPrice)/mo  ·  Cancel Anytime")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    // MARK: - Lifetime Perks
+
+    private var lifetimePerks: some View {
+        VStack(spacing: 40) {
+            VStack(alignment: .leading, spacing: 20) {
+                perkRow(
+                    emoji: "🎙️",
+                    title: "Capture Without Limits",
+                    subtitle: "Unlimited recordings and transcriptions."
+                )
+                perkRow(
+                    emoji: "🪄",
+                    title: "Notes That Write Themselves",
+                    subtitle: "Talk messy, read clean. Every time."
+                )
+                perkRow(
+                    emoji: "💎",
+                    title: "Pay Once, Own it Forever",
+                    subtitle: "Full Pro access. No subscriptions."
+                )
+            }
+            .padding(.horizontal, 8)
+
+            VStack(spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(lifetimePrice)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(colorScheme == .dark ? Color(hex: "#34D399") : Color.brandText)
+
+                    Text("$59.99")
+                        .font(.callout)
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("Introductory Price  ·  Lifetime Access")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    private func perkRow(emoji: String, title: String, subtitle: String) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.brand.opacity(colorScheme == .dark ? 0.25 : 0.12))
+                    .frame(width: 48, height: 48)
+                Text(emoji)
+                    .font(.title3)
+            }
+            .frame(width: 48)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.body)
+                    .fontWeight(.semibold)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.55))
+            }
+            .padding(.top, 4)
+
+            Spacer()
         }
     }
 
@@ -242,7 +363,6 @@ struct OnboardingPaywallStep: View {
                 ProgressView()
                     .frame(height: 56)
             } else if isAuthenticatedUser {
-                // Already signed in — show direct subscribe button
                 subscribeButton
             } else {
                 // Not signed in or guest — show auth buttons
@@ -260,28 +380,17 @@ struct OnboardingPaywallStep: View {
                     awaitingPurchaseAfterAuth = true
                     showEmailForm = true
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "envelope.fill")
-                            .font(.body)
-                        Text("Continue with Email")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(
-                        Capsule()
-                            .fill(colorScheme == .dark ? Color.darkSurface : .white)
-                    )
+                    Text("Continue with Email")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
 
-            Text("Start your 7-day free trial. Then \(yearlyPrice)/year (\(monthlyEquivalent)/mo).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
         }
     }
 
@@ -290,12 +399,12 @@ struct OnboardingPaywallStep: View {
     private var subscribeButton: some View {
         Button {
             Task {
-                guard let product = subscriptionStore.yearlyProduct else {
+                guard let product = selectedProduct else {
                     errorMessage = "Products not available. Please try again later."
                     return
                 }
                 do {
-                    let startedTrial = subscriptionStore.isTrialEligible
+                    let startedTrial = selectedPlan == .monthly && subscriptionStore.isTrialEligible
                     try await subscriptionStore.purchase(product)
                     if subscriptionStore.isPro {
                         onPurchaseCompleted(startedTrial)
@@ -305,7 +414,7 @@ struct OnboardingPaywallStep: View {
                 }
             }
         } label: {
-            Text(subscriptionStore.isTrialEligible ? "Try Free for 7 Days" : "Continue")
+            Text(subscribeButtonTitle)
                 .fontWeight(.bold)
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
@@ -313,6 +422,15 @@ struct OnboardingPaywallStep: View {
                 .background(Color.brand, in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private var subscribeButtonTitle: String {
+        switch selectedPlan {
+        case .monthly:
+            subscriptionStore.isTrialEligible ? "Try Free for 7 Days" : "Subscribe · \(monthlyPrice)/mo"
+        case .lifetime:
+            "Buy Lifetime · \(lifetimePrice)"
+        }
     }
 
     // MARK: - Purchase Logic (for auth → purchase flow)
@@ -330,12 +448,12 @@ struct OnboardingPaywallStep: View {
                 return
             }
 
-            guard let product = subscriptionStore.yearlyProduct else {
+            guard let product = selectedProduct else {
                 errorMessage = "Products not available. Please try again later."
                 return
             }
             do {
-                let startedTrial = subscriptionStore.isTrialEligible
+                let startedTrial = selectedPlan == .monthly && subscriptionStore.isTrialEligible
                 try await subscriptionStore.purchase(product)
                 if subscriptionStore.isPro {
                     onPurchaseCompleted(startedTrial)
