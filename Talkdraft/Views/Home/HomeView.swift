@@ -496,7 +496,7 @@ struct HomeView: View {
         }
         .fullScreenCover(isPresented: $showGuestPaywall) {
             OnboardingPaywallStep(
-                onPurchaseCompleted: { _ in showGuestPaywall = false },
+                onPurchaseCompleted: { _, _ in showGuestPaywall = false },
                 onRestored: { showGuestPaywall = false },
                 onDismiss: { showGuestPaywall = false }
             )
