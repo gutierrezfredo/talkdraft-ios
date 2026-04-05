@@ -118,8 +118,8 @@ struct NoteDetailWaitingForConnectionView: View {
             }
 
             Text("Will transcribe automatically when online.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 24)
@@ -132,7 +132,7 @@ struct NoteDetailTranscriptionFailedView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Transcription failed")
+            Text("😿 Couldn't transcribe this one")
                 .font(.body)
                 .foregroundStyle(.secondary)
 
@@ -147,13 +147,13 @@ struct NoteDetailTranscriptionFailedView: View {
                         .background(Capsule().fill(Color.brand))
                 }
 
-                Text("Your audio recording is still saved on this device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Text("Tap retry to try again.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             } else {
-                Text("Audio file is no longer available on this device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Text("The audio file is no longer on this device.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
