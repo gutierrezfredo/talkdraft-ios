@@ -26,20 +26,27 @@ final class SubscriptionStore {
     var isReadOnly: Bool { !isPro }
 
     var hasProducts: Bool { monthlyProduct != nil || lifetimeProduct != nil }
+    @ObservationIgnored private var isRevenueCatConfigured = false
 
     // MARK: - Configuration
 
     /// Call once at app launch, before any purchases.
     func configure() {
+        guard !isRevenueCatConfigured else { return }
         Purchases.configure(withAPIKey: "appl_frykQRtNuFfPccuCcMLrDUvagyu")
         let adapter = DelegateAdapter(store: self)
         delegateAdapter = adapter
         Purchases.shared.delegate = adapter
+        isRevenueCatConfigured = true
     }
 
     // MARK: - User Sync
 
     func login(userId: UUID) async {
+        guard isRevenueCatConfigured else {
+            entitlementChecked = true
+            return
+        }
         do {
             let (customerInfo, _) = try await Purchases.shared.logIn(userId.uuidString)
             updateEntitlement(from: customerInfo)
@@ -50,6 +57,11 @@ final class SubscriptionStore {
     }
 
     func logout() async {
+        guard isRevenueCatConfigured else {
+            isPro = false
+            entitlementChecked = false
+            return
+        }
         do {
             let customerInfo = try await Purchases.shared.logOut()
             updateEntitlement(from: customerInfo)
@@ -62,6 +74,10 @@ final class SubscriptionStore {
     // MARK: - Entitlement
 
     func checkEntitlement() async {
+        guard isRevenueCatConfigured else {
+            entitlementChecked = true
+            return
+        }
         do {
             let customerInfo = try await Purchases.shared.customerInfo()
             updateEntitlement(from: customerInfo)
@@ -110,6 +126,7 @@ final class SubscriptionStore {
 
     /// Purchase a StoreKit2 product and sync with RevenueCat.
     func purchase(_ product: StoreKit.Product) async throws {
+        guard isRevenueCatConfigured else { return }
         isLoading = true
         defer { isLoading = false }
 
@@ -140,6 +157,7 @@ final class SubscriptionStore {
     }
 
     func restorePurchases() async throws {
+        guard isRevenueCatConfigured else { return }
         isLoading = true
         defer { isLoading = false }
 

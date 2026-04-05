@@ -166,12 +166,12 @@ private struct TrialReminderContent: View {
             Task {
                 switch permissionState {
                 case .enabled:
-                    await completeOnboarding()
+                    completeOnboarding()
                 case .blocked:
-                    await completeOnboarding()
+                    completeOnboarding()
                 case .needsPermission:
                     await requestAndSchedule()
-                    await completeOnboarding()
+                    completeOnboarding()
                 }
             }
         } label: {

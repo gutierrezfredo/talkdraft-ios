@@ -5,7 +5,8 @@ import SwiftUI
 import UIKit
 
 @Test func appLaunches() async throws {
-    #expect(true)
+    let launched = Bool(true)
+    #expect(launched)
 }
 
 @Test func transcriptionPromptUsesCustomDictionaryOnly() {
@@ -835,7 +836,8 @@ struct AudioWorkflowRegressionTests {
                 text: "Imported transcript",
                 language: "en",
                 audioUrl: "https://example.com/audio/imported.m4a",
-                durationSeconds: 2
+                durationSeconds: 2,
+                speechMetrics: nil
             )
         },
         aiTitleExecutor: { _, _ in
@@ -845,8 +847,8 @@ struct AudioWorkflowRegressionTests {
 
     let note = try await store.importAudioNote(
         from: sourceURL,
-        userId: nil,
-        categoryId: nil,
+        userId: UUID?.none,
+        categoryId: UUID?.none,
         language: "en",
         customDictionary: ["Talkdraft"],
         requiresSecurityScopedAccess: false
@@ -867,7 +869,7 @@ struct AudioWorkflowRegressionTests {
         return
     }
 
-    #expect(updated.source == .voice)
+    #expect(updated.source == Note.NoteSource.voice)
     #expect(updated.content == "Imported transcript")
     #expect(updated.language == "en")
     #expect(updated.audioUrl == "https://example.com/audio/imported.m4a")
@@ -1131,7 +1133,8 @@ struct AudioWorkflowRegressionTests {
                 text: "Recovered transcript",
                 language: "en",
                 audioUrl: "https://tftwvuduzzymqxdvkwwd.supabase.co/storage/v1/object/public/audio/orphans/missing-note.m4a",
-                durationSeconds: 2
+                durationSeconds: 2,
+                speechMetrics: nil
             )
         },
         aiTitleExecutor: { _, _ in
@@ -1139,7 +1142,7 @@ struct AudioWorkflowRegressionTests {
         }
     )
 
-    store.transcribeNote(id: UUID(), audioFileURL: sourceURL, language: "en", userId: nil)
+    store.transcribeNote(id: UUID(), audioFileURL: sourceURL, language: "en", userId: UUID?.none)
 
     for _ in 0..<40 {
         if deletedPaths == ["orphans/missing-note.m4a"] {
