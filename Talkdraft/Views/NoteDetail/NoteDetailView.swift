@@ -124,11 +124,11 @@ struct NoteDetailView: View {
     ]
 
     let whilePhrases: [(pose: LunaPose, subtitle: String)] = [
-        (.binge, "Luna's catching up on her favorite show - sounds like a good idea. Your note will be waiting for you."),
-        (.snack, "Luna's grabbing a snack - not a bad idea. Your note will be waiting for you."),
-        (.read, "Luna's reading a good book - perfect time for one. Your note will be waiting for you."),
-        (.hobby, "Luna's working on a side project - great time for one. Your note will be waiting for you."),
-        (.work, "Luna's staying busy - not a bad plan. Your note will be waiting for you."),
+        (.binge, "While Luna's catching up on her favorite show — sounds like a good idea. Your note will be waiting for you."),
+        (.snack, "While Luna's grabbing a snack — not a bad idea. Your note will be waiting for you."),
+        (.read, "While Luna's reading a good book — perfect time for one. Your note will be waiting for you."),
+        (.hobby, "While Luna's working on a side project — great time for one. Your note will be waiting for you."),
+        (.work, "While Luna's staying busy — not a bad plan. Your note will be waiting for you."),
     ]
     @State var titlePhraseIndex = 0
 
