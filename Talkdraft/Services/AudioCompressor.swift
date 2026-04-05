@@ -135,6 +135,111 @@ enum AudioCompressor {
     }
 }
 
+struct AudioSignalAnalysis: Sendable {
+    let durationSeconds: TimeInterval
+    let rmsAmplitude: Float
+    let peakAmplitude: Float
+    let speechSampleRatio: Float
+}
+
+enum AudioSignalAnalyzer {
+    static func analyze(url: URL) async throws -> AudioSignalAnalysis {
+        let asset = AVURLAsset(url: url)
+
+        guard let audioTrack = try await asset.loadTracks(withMediaType: .audio).first else {
+            throw AudioCompressor.CompressionError.noAudioTrack
+        }
+
+        let duration = try await asset.load(.duration)
+        let durationSeconds = CMTimeGetSeconds(duration)
+
+        let reader = try AVAssetReader(asset: asset)
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: outputSettings)
+        reader.add(output)
+
+        reader.startReading()
+
+        var sumSquares: Double = 0
+        var sampleCount: Int64 = 0
+        var peak: Float = 0
+        var speechLikeSampleCount: Int64 = 0
+
+        while reader.status == .reading, let sampleBuffer = output.copyNextSampleBuffer() {
+            guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
+
+            let byteCount = CMBlockBufferGetDataLength(blockBuffer)
+            var dataPointer: UnsafeMutablePointer<CChar>?
+            CMBlockBufferGetDataPointer(
+                blockBuffer,
+                atOffset: 0,
+                lengthAtOffsetOut: nil,
+                totalLengthOut: nil,
+                dataPointerOut: &dataPointer
+            )
+            guard let dataPointer else { continue }
+
+            let floatCount = byteCount / MemoryLayout<Float>.size
+            let samples = UnsafeMutableRawPointer(dataPointer).bindMemory(to: Float.self, capacity: floatCount)
+
+            for index in 0..<floatCount {
+                let sample = samples[index]
+                let magnitude = abs(sample)
+                peak = max(peak, magnitude)
+                sumSquares += Double(sample * sample)
+                if magnitude >= 0.015 {
+                    speechLikeSampleCount += 1
+                }
+            }
+            sampleCount += Int64(floatCount)
+        }
+
+        if reader.status == .failed {
+            throw reader.error ?? AudioCompressor.CompressionError.writeFailed("failed to analyze audio levels")
+        }
+
+        let rms = sampleCount > 0 ? sqrt(sumSquares / Double(sampleCount)) : 0
+        let speechSampleRatio = sampleCount > 0
+            ? Float(speechLikeSampleCount) / Float(sampleCount)
+            : 0
+        return AudioSignalAnalysis(
+            durationSeconds: durationSeconds.isFinite ? durationSeconds : 0,
+            rmsAmplitude: Float(rms),
+            peakAmplitude: peak,
+            speechSampleRatio: speechSampleRatio
+        )
+    }
+
+    static func shouldTreatAsSilent(_ analysis: AudioSignalAnalysis) -> Bool {
+        if analysis.peakAmplitude < 0.003 && analysis.rmsAmplitude < 0.0008 {
+            return true
+        }
+
+        if analysis.durationSeconds <= 3 &&
+            analysis.peakAmplitude < 0.02 &&
+            analysis.rmsAmplitude < 0.004 {
+            return true
+        }
+
+        if analysis.durationSeconds >= 4 &&
+            analysis.rmsAmplitude < 0.01 &&
+            analysis.speechSampleRatio < 0.015 &&
+            analysis.peakAmplitude < 0.08 {
+            return true
+        }
+
+        return false
+    }
+}
+
 // MARK: - High-Pass Filter
 
 /// First-order IIR high-pass filter, ~100 Hz cutoff at 16 kHz.

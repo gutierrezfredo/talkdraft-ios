@@ -73,6 +73,7 @@ struct NoteDetailView: View {
     @State var isAppendTranscribing = false
     @State var appendRecordingStartTask: Task<Void, Never>?
     @State var appendPlaceholder: NoteAppendPlaceholderState?
+    @State var appendRecoveryOriginalContent: String?
     @State var cursorPosition: Int = 0
     @State var lastKnownCursorPosition: Int = 0
     @State var isCursorReady = false

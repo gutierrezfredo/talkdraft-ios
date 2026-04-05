@@ -617,6 +617,9 @@ extension NoteDetailView {
             } else if isTranscriptionFailed {
                 transcriptionFailedView
                     .padding(.top, 40)
+            } else if isNoSpeechFallback {
+                noSpeechFallbackView
+                    .padding(.top, 40)
             } else {
                 if !detectedSpeakers.isEmpty {
                     speakerChipsRow

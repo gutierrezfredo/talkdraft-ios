@@ -11,6 +11,14 @@ struct TranscriptionResult: Sendable {
 }
 
 final class TranscriptionService: Sendable {
+    static let noSpeechFallbackMessages = [
+        "No speech detected. Try recording again.",
+        "We couldn't pick up any words. Give it another go.",
+        "This recording was too quiet to transcribe.",
+        "Nothing to transcribe — the audio was mostly silence.",
+        "No words were captured. Try speaking closer to the mic."
+    ]
+    private static let noSpeechFallbackRotationKey = "transcription.noSpeechFallbackRotationIndex"
 
     private let edgeFunctionURL = AppConfig.supabaseUrl
         .appendingPathComponent("functions/v1/transcribe")
@@ -104,8 +112,9 @@ final class TranscriptionService: Sendable {
         logger.info("Transcription succeeded")
 
         let result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        let sanitizedText = Self.sanitizedTranscriptText(result.text)
         return TranscriptionResult(
-            text: result.text,
+            text: sanitizedText,
             language: result.language,
             audioUrl: result.audioUrl,
             durationSeconds: result.durationSeconds
@@ -131,6 +140,85 @@ final class TranscriptionService: Sendable {
     static func transcriptionPrompt(customDictionary: [String]) -> String? {
         guard !customDictionary.isEmpty else { return nil }
         return customDictionary.joined(separator: ", ")
+    }
+
+    static func sanitizedTranscriptText(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+
+        let range = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+        let pattern = #"([.!?…]["')\]]?)\s+you\.?$"#
+        guard
+            let regex = try? NSRegularExpression(pattern: pattern),
+            regex.firstMatch(in: trimmed, range: range) != nil
+        else {
+            return trimmed
+        }
+
+        let sanitized = regex.stringByReplacingMatches(in: trimmed, range: range, withTemplate: "$1")
+        return sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func shouldUseShortRecordingFallback(
+        for text: String,
+        durationSeconds: TimeInterval?
+    ) -> Bool {
+        guard let durationSeconds, durationSeconds <= 3 else { return false }
+
+        let normalized = normalizedTranscriptTokens(text)
+        guard !normalized.tokens.isEmpty else { return false }
+
+        let obviousHallucinationPhrases: Set<String> = [
+            "thank you for watching",
+            "thanks for watching",
+            "thank you for listening",
+            "please subscribe",
+            "subscribe to my channel",
+            "thanks for listening",
+        ]
+
+        if obviousHallucinationPhrases.contains(normalized.joined) {
+            return true
+        }
+
+        if normalized.tokens.count >= 3, Set(normalized.tokens).count == 1 {
+            return true
+        }
+
+        if durationSeconds <= 2, normalized.tokens.count >= 8 {
+            return true
+        }
+
+        return false
+    }
+
+    private static func normalizedTranscriptTokens(_ text: String) -> (tokens: [String], joined: String) {
+        let scalars = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .unicodeScalars
+            .map { scalar -> Character in
+                CharacterSet.alphanumerics.contains(scalar) ? Character(String(scalar)) : " "
+            }
+        let normalized = String(scalars)
+        let tokens = normalized
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        return (tokens, tokens.joined(separator: " "))
+    }
+
+    static func noSpeechFallbackMessage(at rotationIndex: Int) -> String {
+        let index = ((rotationIndex % noSpeechFallbackMessages.count) + noSpeechFallbackMessages.count) % noSpeechFallbackMessages.count
+        return noSpeechFallbackMessages[index]
+    }
+
+    static func isNoSpeechFallbackText(_ text: String) -> Bool {
+        noSpeechFallbackMessages.contains(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    static func nextNoSpeechFallbackText(defaults: UserDefaults = .standard) -> String {
+        let currentIndex = defaults.integer(forKey: noSpeechFallbackRotationKey)
+        let message = noSpeechFallbackMessage(at: currentIndex)
+        defaults.set(currentIndex + 1, forKey: noSpeechFallbackRotationKey)
+        return message
     }
 }
 

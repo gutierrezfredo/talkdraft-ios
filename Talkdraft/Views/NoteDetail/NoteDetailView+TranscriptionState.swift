@@ -22,6 +22,12 @@ extension NoteDetailView {
         bodyState == .waitingForConnection
     }
 
+    var isNoSpeechFallback: Bool {
+        note.source == .voice
+            && bodyState == .content
+            && TranscriptionService.isNoSpeechFallbackText(persistedEditedContent)
+    }
+
     /// Returns the local audio file URL if it still exists on disk,
     /// falling back to the persisted index in case the app was restarted after a failed transcription.
     var localAudioFileURL: URL? {
@@ -78,6 +84,13 @@ extension NoteDetailView {
         )
     }
 
+    var noSpeechFallbackView: some View {
+        NoteDetailNoSpeechFallbackView(
+            message: persistedEditedContent,
+            onRecordAgain: recordAgainFromNoSpeechFallback
+        )
+    }
+
     func retryTranscription() {
         guard let audioFileURL = localAudioFileURL else { return }
 
@@ -94,5 +107,15 @@ extension NoteDetailView {
             userId: authStore.userId,
             customDictionary: settingsStore.customDictionary
         )
+    }
+
+    func recordAgainFromNoSpeechFallback() {
+        guard !isAppendRecording && !isAppendTranscribing else { return }
+        appendRecoveryOriginalContent = persistedEditedContent
+        editedContent = ""
+        cursorPosition = 0
+        lastKnownCursorPosition = 0
+        isCursorReady = false
+        startAppendRecording()
     }
 }

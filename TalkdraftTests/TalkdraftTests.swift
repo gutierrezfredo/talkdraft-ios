@@ -20,6 +20,103 @@ import UIKit
     #expect(prompt == nil)
 }
 
+@Test func transcriptionSanitizerRemovesDanglingTrailingYouArtifact() {
+    let sanitized = TranscriptionService.sanitizedTranscriptText(
+        "You can open your eyes with a big, big smile. you"
+    )
+
+    #expect(sanitized == "You can open your eyes with a big, big smile.")
+}
+
+@Test func transcriptionSanitizerPreservesLegitimateEndingWithYou() {
+    let sanitized = TranscriptionService.sanitizedTranscriptText(
+        "I appreciate you"
+    )
+
+    #expect(sanitized == "I appreciate you")
+}
+
+@Test func shortRecordingFallbackDetectsKnownHallucinationPhrase() {
+    let shouldFallback = TranscriptionService.shouldUseShortRecordingFallback(
+        for: "Thank you for watching",
+        durationSeconds: 2
+    )
+
+    #expect(shouldFallback == true)
+}
+
+@Test func shortRecordingFallbackPreservesLegitimateShortTranscript() {
+    let shouldFallback = TranscriptionService.shouldUseShortRecordingFallback(
+        for: "Call mom",
+        durationSeconds: 2
+    )
+
+    #expect(shouldFallback == false)
+}
+
+@Test func audioSignalAnalyzerTreatsNearSilentShortAudioAsSilent() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 2,
+        rmsAmplitude: 0.001,
+        peakAmplitude: 0.008,
+        speechSampleRatio: 0
+    )
+
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis) == true)
+}
+
+@Test func transcriptionNoSpeechFallbackMessagesMatchApprovedCopy() {
+    #expect(TranscriptionService.noSpeechFallbackMessages == [
+        "No speech detected. Try recording again.",
+        "We couldn't pick up any words. Give it another go.",
+        "This recording was too quiet to transcribe.",
+        "Nothing to transcribe — the audio was mostly silence.",
+        "No words were captured. Try speaking closer to the mic."
+    ])
+}
+
+@Test func transcriptionNoSpeechFallbackRotationAdvancesAcrossMessages() throws {
+    let suiteName = "TranscriptionFallbackRotationTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+
+    defer {
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    let first = TranscriptionService.nextNoSpeechFallbackText(defaults: defaults)
+    let second = TranscriptionService.nextNoSpeechFallbackText(defaults: defaults)
+
+    #expect(first == TranscriptionService.noSpeechFallbackMessage(at: 0))
+    #expect(second == TranscriptionService.noSpeechFallbackMessage(at: 1))
+}
+
+@Test func transcriptionServiceRecognizesSavedNoSpeechFallbackText() {
+    #expect(TranscriptionService.isNoSpeechFallbackText("No speech detected. Try recording again.") == true)
+    #expect(TranscriptionService.isNoSpeechFallbackText("Call mom") == false)
+}
+
+@Test func audioSignalAnalyzerDoesNotTreatNormalSpeechLevelsAsSilent() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 2,
+        rmsAmplitude: 0.02,
+        peakAmplitude: 0.12,
+        speechSampleRatio: 0.22
+    )
+
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis) == false)
+}
+
+@Test func audioSignalAnalyzerTreatsLongRoomToneAsSilent() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 5,
+        rmsAmplitude: 0.006,
+        peakAmplitude: 0.04,
+        speechSampleRatio: 0.004
+    )
+
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis) == true)
+}
+
 @Test func mandatoryPaywallSkipsGuests() {
     let shouldPresent = ContentView.shouldPresentMandatoryPaywall(
         isAuthenticated: true,

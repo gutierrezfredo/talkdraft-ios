@@ -38,6 +38,31 @@ extension NoteStore {
                     return
                 }
 
+                if let analysis = try? await AudioSignalAnalyzer.analyze(url: audioFileURL),
+                   AudioSignalAnalyzer.shouldTreatAsSilent(analysis) {
+                    logger.info(
+                        "transcribeNote: skipping transcription for quiet audio note=\(id) duration=\(analysis.durationSeconds, privacy: .public) peak=\(analysis.peakAmplitude, privacy: .public) rms=\(analysis.rmsAmplitude, privacy: .public)"
+                    )
+                    guard var note = notes.first(where: { $0.id == id }) else { return }
+                    let fallbackMessage = TranscriptionService.nextNoSpeechFallbackText()
+                    setLocalVoiceBodyState(nil, for: id)
+                    note.content = fallbackMessage
+                    note.updatedAt = Date()
+                    updateNote(note)
+                    ErrorLogger.shared.log(
+                        type: "transcription_silent_fallback",
+                        message: "Skipped transcription for near-silent recording",
+                        context: [
+                            "note_id": id.uuidString,
+                            "duration_seconds": String(Int(analysis.durationSeconds)),
+                            "peak_amplitude": String(analysis.peakAmplitude),
+                            "rms_amplitude": String(analysis.rmsAmplitude)
+                        ],
+                        userId: userId
+                    )
+                    return
+                }
+
                 // Connectivity probe — quick request to verify network before heavy upload
                 do {
                     try await transcriptionConnectivityProbe()
@@ -98,9 +123,33 @@ extension NoteStore {
                     await deleteRemoteAudioIfNeeded(for: result.audioUrl, noteId: id, reason: "missing_note_after_transcription")
                     return
                 }
-                let (formattedContent, initialSpeakerNames) = Self.formatMultiSpeakerTranscript(transcribedText)
+                let transcriptionDuration = TimeInterval(note.durationSeconds ?? result.durationSeconds ?? 0)
+                let shouldUseShortRecordingFallback = TranscriptionService.shouldUseShortRecordingFallback(
+                    for: transcribedText,
+                    durationSeconds: transcriptionDuration
+                )
+                let finalContent: String
+                let initialSpeakerNames: [String: String]?
+                if shouldUseShortRecordingFallback {
+                    finalContent = TranscriptionService.nextNoSpeechFallbackText()
+                    initialSpeakerNames = nil
+                    ErrorLogger.shared.log(
+                        type: "transcription_short_fallback",
+                        message: "Replaced likely hallucinated short transcription with fallback copy",
+                        context: [
+                            "note_id": id.uuidString,
+                            "duration_seconds": String(Int(transcriptionDuration)),
+                            "transcript_preview": String(transcribedText.prefix(80))
+                        ],
+                        userId: userId
+                    )
+                } else {
+                    let formatted = Self.formatMultiSpeakerTranscript(transcribedText)
+                    finalContent = formatted.content
+                    initialSpeakerNames = formatted.speakerNames
+                }
                 setLocalVoiceBodyState(nil, for: id)
-                note.content = formattedContent
+                note.content = finalContent
                 if let initialSpeakerNames { note.speakerNames = initialSpeakerNames }
                 note.language = result.language
                 if let audioUrl = result.audioUrl {
@@ -119,7 +168,9 @@ extension NoteStore {
                 }
 
                 // Generate AI title in background
-                generateTitle(for: id, content: transcribedText, language: result.language)
+                if !shouldUseShortRecordingFallback {
+                    generateTitle(for: id, content: transcribedText, language: result.language)
+                }
             } catch {
                 logger.error("transcribeNote failed for \(id): \(error)")
                 guard notes.contains(where: { $0.id == id }) else {
