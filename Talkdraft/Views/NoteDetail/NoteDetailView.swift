@@ -59,7 +59,10 @@ struct NoteDetailView: View {
     @State var scrollProxy: ScrollViewProxy?
     @State var contentFocused = false
     @State var moveCursorToEnd = false
-    @FocusState var titleFocused: Bool
+    @State var titleFocused = false
+    @State var isTitleFocusHandoff = false
+    @State var titleHeight: CGFloat = ceil(TitleTextView.titleFont.lineHeight + 6)
+    @State var titleRevealOpacity: Double = 1
     @State var contentOpacity: Double = 1
     @State var errorMessage: String?
     @State var isDownloadingAudio = false
@@ -127,7 +130,6 @@ struct NoteDetailView: View {
         (.work, "Luna's staying busy - not a bad plan. Your note will be waiting for you."),
     ]
     @State var titlePhraseIndex = 0
-    @State var titleTypewriterTask: Task<Void, Never>?
 
     let titlePhrases = [
         "Naming this masterpiece…",
@@ -334,7 +336,6 @@ struct NoteDetailView: View {
             }
             .onDisappear {
                 typewriterTask?.cancel()
-                titleTypewriterTask?.cancel()
                 appendRecordingStartTask?.cancel()
             }
             .onChange(of: editedTitle) {
@@ -530,13 +531,11 @@ struct NoteDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !titleFocused && bodyState == .content && renamingSpeaker == nil {
+            if !titleFocused && !isTitleFocusHandoff && bodyState == .content && renamingSpeaker == nil {
                 bottomBarContainer
                     .transition(.opacity)
-                    .id(contentFocused)
             }
         }
-        .animation(.easeOut(duration: 0.2), value: contentFocused)
         .animation(.easeInOut(duration: 0.4), value: isRewriting)
         .animation(.easeOut(duration: 0.25), value: renamingSpeaker == nil)
         .animation(.easeOut(duration: 0.2), value: bodyState)

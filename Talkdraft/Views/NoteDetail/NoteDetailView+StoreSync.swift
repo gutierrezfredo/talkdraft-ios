@@ -33,18 +33,16 @@ extension NoteDetailView {
     func syncStoreTitle(_ title: String) {
         editorSession.syncSavedBaselines(title: title)
         guard !title.isEmpty else {
+            titleRevealOpacity = 1
             editedTitle = title
             return
         }
-        titleTypewriterTask?.cancel()
-        editedTitle = ""
-        titleTypewriterTask = Task {
-            for char in title {
-                guard !Task.isCancelled else { break }
-                editedTitle.append(char)
-                try? await Task.sleep(for: .milliseconds(25))
+        titleRevealOpacity = 0
+        editedTitle = title
+        DispatchQueue.main.async {
+            withAnimation(.easeIn(duration: 0.22)) {
+                titleRevealOpacity = 1
             }
-            titleTypewriterTask = nil
         }
     }
 
