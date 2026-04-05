@@ -13,10 +13,12 @@ struct OnboardingView: View {
     @State private var guestAuthError: String?
 
     static func shouldShowTrialReminderAfterPurchase(
+        plan: PaywallPlan,
         startedTrial: Bool,
         showsReminderForDebugPurchases: Bool
     ) -> Bool {
-        startedTrial || showsReminderForDebugPurchases
+        guard plan != .lifetime else { return false }
+        return startedTrial || showsReminderForDebugPurchases
     }
 
     private static var showsReminderForDebugPurchases: Bool {
@@ -57,9 +59,9 @@ struct OnboardingView: View {
 
                     if step == .paywall {
                         OnboardingPaywallStep(
-                            onPurchaseCompleted: { startedTrial in
+                            onPurchaseCompleted: { plan, startedTrial in
                                 createCategories()
-                                handlePurchaseCompletion(startedTrial: startedTrial)
+                                handlePurchaseCompletion(plan: plan, startedTrial: startedTrial)
                             },
                             onRestored: { createCategories(); finishOnboarding() },
                             onGuestContinue: authStore.isAuthenticated ? nil : { handleGuestContinue() }
@@ -274,8 +276,9 @@ struct OnboardingView: View {
         }
     }
 
-    private func handlePurchaseCompletion(startedTrial: Bool) {
+    private func handlePurchaseCompletion(plan: PaywallPlan, startedTrial: Bool) {
         if Self.shouldShowTrialReminderAfterPurchase(
+            plan: plan,
             startedTrial: startedTrial,
             showsReminderForDebugPurchases: Self.showsReminderForDebugPurchases
         ) {
@@ -287,11 +290,6 @@ struct OnboardingView: View {
     }
 
     private func finishOnboarding() {
-        UserDefaults.standard.set(false, forKey: "debug.forceOnboardingFlow")
-        UserDefaults.standard.set(true, forKey: "onboarding.completed.device")
-        if let userId = authStore.userId {
-            UserDefaults.standard.set(true, forKey: "onboarding.completed.\(userId.uuidString)")
-        }
         onComplete()
     }
 }

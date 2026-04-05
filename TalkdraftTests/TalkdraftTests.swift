@@ -42,6 +42,44 @@ import UIKit
     #expect(shouldPresent == true)
 }
 
+@Test func postOnboardingBootstrapUsesSplashInsteadOfLoginTransition() {
+    let shouldShowSplash = ContentView.shouldShowSplashAfterOnboardingCompletion(
+        completedOnboardingUserId: UUID(),
+        isPostAuthBootstrapReady: false
+    )
+
+    #expect(shouldShowSplash == true)
+}
+
+@Test func regularPostAuthBootstrapDoesNotForceSplashWithoutOnboardingCompletion() {
+    let shouldShowSplash = ContentView.shouldShowSplashAfterOnboardingCompletion(
+        completedOnboardingUserId: nil,
+        isPostAuthBootstrapReady: false
+    )
+
+    #expect(shouldShowSplash == false)
+}
+
+@Test func guestOnboardingCompletionCanShowHomeBeforeBootstrapFinishes() {
+    let shouldShowHome = ContentView.shouldShowHomeDuringGuestBootstrap(
+        completedOnboardingUserId: UUID(),
+        isAuthenticated: true,
+        isGuest: true
+    )
+
+    #expect(shouldShowHome == true)
+}
+
+@Test func signedInNonGuestOnboardingCompletionDoesNotBypassToHomeEarly() {
+    let shouldShowHome = ContentView.shouldShowHomeDuringGuestBootstrap(
+        completedOnboardingUserId: UUID(),
+        isAuthenticated: true,
+        isGuest: false
+    )
+
+    #expect(shouldShowHome == false)
+}
+
 @Test func onboardingPaywallUsesGuestDismissOnlyBeforeSignIn() {
     let actionBeforeSignIn = OnboardingPaywallStep.dismissActionKind(
         isAuthenticated: false,
@@ -108,6 +146,7 @@ import UIKit
 
 @Test func onboardingTrialReminderShowsForStartedTrial() {
     let shouldShow = OnboardingView.shouldShowTrialReminderAfterPurchase(
+        plan: .monthly,
         startedTrial: true,
         showsReminderForDebugPurchases: false
     )
@@ -117,11 +156,22 @@ import UIKit
 
 @Test func onboardingTrialReminderCanBeForcedForDebugPurchases() {
     let shouldShow = OnboardingView.shouldShowTrialReminderAfterPurchase(
+        plan: .monthly,
         startedTrial: false,
         showsReminderForDebugPurchases: true
     )
 
     #expect(shouldShow == true)
+}
+
+@Test func onboardingTrialReminderSkipsLifetimePurchasesEvenInDebug() {
+    let shouldShow = OnboardingView.shouldShowTrialReminderAfterPurchase(
+        plan: .lifetime,
+        startedTrial: false,
+        showsReminderForDebugPurchases: true
+    )
+
+    #expect(shouldShow == false)
 }
 
 @Test func debugResetOnboardingStateForcesOnboardingAndClearsCompletionFlags() throws {

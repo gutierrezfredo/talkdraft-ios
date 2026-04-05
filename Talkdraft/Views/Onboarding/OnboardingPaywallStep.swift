@@ -28,7 +28,7 @@ enum PaywallDismissActionKind: Equatable {
 }
 
 struct OnboardingPaywallStep: View {
-    let onPurchaseCompleted: (_ startedTrial: Bool) -> Void
+    let onPurchaseCompleted: (_ plan: PaywallPlan, _ startedTrial: Bool) -> Void
     let onRestored: () -> Void
     var onGuestContinue: (() -> Void)?
     var onDismiss: (() -> Void)?
@@ -471,7 +471,7 @@ struct OnboardingPaywallStep: View {
                     let startedTrial = effectiveSelectedPlan == .monthly && subscriptionStore.isTrialEligible
                     try await subscriptionStore.purchase(product)
                     if subscriptionStore.isPro {
-                        onPurchaseCompleted(startedTrial)
+                        onPurchaseCompleted(effectiveSelectedPlan, startedTrial)
                     }
                 } catch {
                     errorMessage = "Purchase failed: \(error.localizedDescription)"
@@ -520,7 +520,7 @@ struct OnboardingPaywallStep: View {
                 let startedTrial = effectiveSelectedPlan == .monthly && subscriptionStore.isTrialEligible
                 try await subscriptionStore.purchase(product)
                 if subscriptionStore.isPro {
-                    onPurchaseCompleted(startedTrial)
+                    onPurchaseCompleted(effectiveSelectedPlan, startedTrial)
                 }
             } catch {
                 errorMessage = "Purchase failed: \(error.localizedDescription)"

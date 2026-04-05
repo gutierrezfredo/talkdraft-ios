@@ -38,6 +38,21 @@ struct ContentView: View {
         isAuthenticated && !isGuest && isPostAuthBootstrapReady && !isPro
     }
 
+    static func shouldShowSplashAfterOnboardingCompletion(
+        completedOnboardingUserId: UUID?,
+        isPostAuthBootstrapReady: Bool
+    ) -> Bool {
+        completedOnboardingUserId != nil && !isPostAuthBootstrapReady
+    }
+
+    static func shouldShowHomeDuringGuestBootstrap(
+        completedOnboardingUserId: UUID?,
+        isAuthenticated: Bool,
+        isGuest: Bool
+    ) -> Bool {
+        completedOnboardingUserId != nil && isAuthenticated && isGuest
+    }
+
     /// Device-level onboarding check (works before and after auth).
     private var shouldShowOnboarding: Bool {
         if debugForceOnboarding { return true }
@@ -144,7 +159,10 @@ struct ContentView: View {
                 // Onboarding shown regardless of auth state (auth happens inside paywall)
                 OnboardingView {
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        completedOnboardingUserId = authStore.userId
+                        // Keep a local completion marker even if auth user hydration
+                        // lags slightly, so we don't flash login/loading states.
+                        completedOnboardingUserId = authStore.userId ?? UUID()
+                        markOnboardingComplete(for: authStore.userId)
                         startedPreAuthOnboarding = false
                     }
                 }
@@ -153,6 +171,20 @@ struct ContentView: View {
                         startedPreAuthOnboarding = true
                     }
                 }
+            } else if Self.shouldShowHomeDuringGuestBootstrap(
+                completedOnboardingUserId: completedOnboardingUserId,
+                isAuthenticated: authStore.isAuthenticated,
+                isGuest: authStore.isGuest
+            ) {
+                HomeView(
+                    pendingDeepLink: $pendingDeepLink,
+                    isMandatoryPaywallPresented: false
+                )
+            } else if Self.shouldShowSplashAfterOnboardingCompletion(
+                completedOnboardingUserId: completedOnboardingUserId,
+                isPostAuthBootstrapReady: isPostAuthBootstrapReady
+            ) {
+                splashView
             } else if authStore.isAuthenticated {
                 if isPostAuthBootstrapReady {
                     HomeView(
@@ -161,7 +193,7 @@ struct ContentView: View {
                     )
                         .fullScreenCover(isPresented: showMandatoryPaywall) {
                             OnboardingPaywallStep(
-                                onPurchaseCompleted: { _ in },
+                                onPurchaseCompleted: { _, _ in },
                                 onRestored: {}
                             )
                         }
