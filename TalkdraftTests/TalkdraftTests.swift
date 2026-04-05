@@ -1296,6 +1296,19 @@ struct AudioWorkflowRegressionTests {
     #expect(session.bodyState == .waitingForConnection)
 }
 
+@Test func transcriptionFailedPlaceholderUsesNonMisleadingCopy() {
+    #expect(NoteBodyState.transcriptionFailedPlaceholder == "Transcription failed")
+}
+
+@Test func legacyFailedPlaceholderStillMapsToTranscriptionFailedState() {
+    let state = NoteBodyState(
+        content: NoteBodyState.legacyTranscriptionFailedPlaceholder,
+        source: .voice
+    )
+
+    #expect(state == .transcriptionFailed)
+}
+
 @Test func noteDetailTitleInputLeavesPlainEditsInTitleField() {
     let transition = NoteDetailView.normalizedTitleInput("Updated title")
 
