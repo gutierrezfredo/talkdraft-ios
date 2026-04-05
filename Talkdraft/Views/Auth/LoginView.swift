@@ -419,7 +419,7 @@ struct EmailSignInSheet: View {
             } label: {
                 Text(effectiveCooldown > 0 ? "Resend in \(effectiveCooldown)s" : "Resend email")
                     .font(.subheadline)
-                    .foregroundStyle(effectiveCooldown > 0 ? .tertiary : .secondary)
+                    .foregroundStyle(effectiveCooldown > 0 ? .secondary : .primary)
             }
             .buttonStyle(.plain)
             .disabled(effectiveCooldown > 0)

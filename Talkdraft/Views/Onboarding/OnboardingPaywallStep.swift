@@ -113,6 +113,7 @@ struct OnboardingPaywallStep: View {
                 VStack(spacing: 24) {
                     header
                     planToggle
+                        .padding(.bottom, 8)
                     planContent
                 }
                 .padding(.horizontal, 24)
@@ -316,7 +317,7 @@ struct OnboardingPaywallStep: View {
 
     private var lifetimePerks: some View {
         VStack(spacing: 40) {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 24) {
                 perkRow(
                     emoji: "🎙️",
                     title: "Capture Without Limits",
