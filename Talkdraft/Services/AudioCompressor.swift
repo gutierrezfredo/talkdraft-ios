@@ -218,7 +218,31 @@ enum AudioSignalAnalyzer {
         )
     }
 
-    static func shouldTreatAsSilent(_ analysis: AudioSignalAnalysis) -> Bool {
+    static func shouldTreatAsSilent(
+        _ analysis: AudioSignalAnalysis,
+        usesCarAudioRoute: Bool = AudioRecorder.currentRouteUsesCarAudio()
+    ) -> Bool {
+        if usesCarAudioRoute {
+            if analysis.peakAmplitude < 0.0025 && analysis.rmsAmplitude < 0.0007 {
+                return true
+            }
+
+            if analysis.durationSeconds <= 3 &&
+                analysis.peakAmplitude < 0.006 &&
+                analysis.rmsAmplitude < 0.0012 {
+                return true
+            }
+
+            if analysis.durationSeconds >= 4 &&
+                analysis.rmsAmplitude < 0.001 &&
+                analysis.speechSampleRatio < 0.003 &&
+                analysis.peakAmplitude < 0.015 {
+                return true
+            }
+
+            return false
+        }
+
         if analysis.peakAmplitude < 0.003 && analysis.rmsAmplitude < 0.0008 {
             return true
         }

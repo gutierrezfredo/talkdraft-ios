@@ -25,6 +25,67 @@ function jsonResponse(body: unknown, status = 200): Response {
   );
 }
 
+type WhisperSegment = {
+  text?: string;
+  avg_logprob?: number;
+  compression_ratio?: number;
+  no_speech_prob?: number;
+};
+
+function summarizeSpeechMetrics(result: Record<string, unknown>) {
+  const rawSegments = Array.isArray(result.segments)
+    ? result.segments as WhisperSegment[]
+    : [];
+  const nonemptySegments = rawSegments.filter((segment) =>
+    typeof segment.text === "string" && segment.text.trim().length > 0
+  );
+
+  if (nonemptySegments.length === 0) {
+    return null;
+  }
+
+  const sum = <T>(values: T[], map: (value: T) => number) =>
+    values.reduce((total, value) => total + map(value), 0);
+
+  const avgNoSpeechProb = sum(
+    nonemptySegments,
+    (segment) => Number(segment.no_speech_prob ?? 1),
+  ) / nonemptySegments.length;
+  const avgLogprob = sum(
+    nonemptySegments,
+    (segment) => Number(segment.avg_logprob ?? -1.5),
+  ) / nonemptySegments.length;
+  const avgCompressionRatio = sum(
+    nonemptySegments,
+    (segment) => Number(segment.compression_ratio ?? 9),
+  ) / nonemptySegments.length;
+
+  const likelySpeechSegments = nonemptySegments.filter((segment) => {
+    const noSpeechProb = Number(segment.no_speech_prob ?? 1);
+    const avgLogprob = Number(segment.avg_logprob ?? -1.5);
+    const compressionRatio = Number(segment.compression_ratio ?? 9);
+
+    return noSpeechProb < 0.6 &&
+      avgLogprob > -0.7 &&
+      compressionRatio < 2.4;
+  });
+
+  const likelySpeechSegmentRatio = likelySpeechSegments.length /
+    nonemptySegments.length;
+  const speechDetected = likelySpeechSegmentRatio >= 0.5 ||
+    (avgNoSpeechProb < 0.45 && avgLogprob > -0.6);
+
+  return {
+    speech_detected: speechDetected,
+    segment_count: rawSegments.length,
+    nonempty_segment_count: nonemptySegments.length,
+    likely_speech_segment_ratio: likelySpeechSegmentRatio,
+    avg_no_speech_prob: avgNoSpeechProb,
+    avg_logprob: avgLogprob,
+    avg_compression_ratio: avgCompressionRatio,
+  };
+}
+
 function sanitizeTranscriptionPrompt(prompt: string | null): string | null {
   const trimmed = prompt?.trim();
   if (!trimmed) return null;
@@ -192,6 +253,7 @@ Deno.serve(async (req) => {
     const transcript = result.segments
       ? result.segments.map((segment: { text: string }) => segment.text.trim()).join(" ")
       : result.text ?? "";
+    const speechMetrics = summarizeSpeechMetrics(result);
 
     const detectedLang: string = result.language ?? null;
     const durationSeconds = Math.round(result.duration ?? 0);
@@ -201,6 +263,7 @@ Deno.serve(async (req) => {
       language: detectedLang,
       audio_url: audioUrl,
       duration_seconds: durationSeconds,
+      speech_metrics: speechMetrics,
     });
   } catch (error) {
     return jsonResponse({ error: (error as Error).message }, 500);

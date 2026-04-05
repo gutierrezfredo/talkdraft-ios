@@ -54,6 +54,168 @@ import UIKit
     #expect(shouldFallback == false)
 }
 
+@Test func shortRecordingFallbackPreservesDenseButLegitimateSpeech() {
+    let shouldFallback = TranscriptionService.shouldUseShortRecordingFallback(
+        for: "Yo, what the fuck, man? What the fuck?",
+        durationSeconds: 2
+    )
+
+    #expect(shouldFallback == false)
+}
+
+@Test func lowSpeechFallbackDetectsGenericThankYouHallucination() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 5,
+        rmsAmplitude: 0.012,
+        peakAmplitude: 0.09,
+        speechSampleRatio: 0.01
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Thank you",
+        analysis: analysis,
+        speechMetrics: nil
+    )
+
+    #expect(shouldFallback == true)
+}
+
+@Test func lowSpeechFallbackDetectsGenericShortHallucinationWithoutSpecificPhraseMatch() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 5,
+        rmsAmplitude: 0.018,
+        peakAmplitude: 0.11,
+        speechSampleRatio: 0.012
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Okay",
+        analysis: analysis,
+        speechMetrics: nil
+    )
+
+    #expect(shouldFallback == true)
+}
+
+@Test func lowSpeechFallbackPreservesGenericPhraseWhenAudioLooksLikeRealSpeech() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 5,
+        rmsAmplitude: 0.05,
+        peakAmplitude: 0.42,
+        speechSampleRatio: 0.18
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Thank you",
+        analysis: analysis,
+        speechMetrics: nil
+    )
+
+    #expect(shouldFallback == false)
+}
+
+@Test func lowSpeechFallbackPreservesRealShortCommandEvenWhenAudioIsQuiet() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 3,
+        rmsAmplitude: 0.018,
+        peakAmplitude: 0.14,
+        speechSampleRatio: 0.07
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Call mom",
+        analysis: analysis,
+        speechMetrics: nil
+    )
+
+    #expect(shouldFallback == false)
+}
+
+@Test func lowSpeechFallbackPreservesWeakCarAudioSpeechWithoutBackendNoSpeechSignal() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 8,
+        rmsAmplitude: 0.012,
+        peakAmplitude: 0.09,
+        speechSampleRatio: 0.01
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Thank you",
+        analysis: analysis,
+        speechMetrics: nil,
+        usesCarAudioRoute: true
+    )
+
+    #expect(shouldFallback == false)
+}
+
+@Test func lowSpeechFallbackDetectsBackendNoSpeechSignalForGenericShortTranscript() {
+    let metrics = TranscriptionSpeechMetrics(
+        speechDetected: false,
+        segmentCount: 2,
+        nonemptySegmentCount: 1,
+        likelySpeechSegmentRatio: 0,
+        avgNoSpeechProb: 0.82,
+        avgLogprob: -0.94,
+        avgCompressionRatio: 1.1
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Thanks",
+        analysis: nil,
+        speechMetrics: metrics
+    )
+
+    #expect(shouldFallback == true)
+}
+
+@Test func lowSpeechFallbackPreservesRealShortCommandWithHealthyBackendSpeechMetrics() {
+    let metrics = TranscriptionSpeechMetrics(
+        speechDetected: true,
+        segmentCount: 2,
+        nonemptySegmentCount: 2,
+        likelySpeechSegmentRatio: 1,
+        avgNoSpeechProb: 0.08,
+        avgLogprob: -0.12,
+        avgCompressionRatio: 1.02
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Call mom",
+        analysis: nil,
+        speechMetrics: metrics
+    )
+
+    #expect(shouldFallback == false)
+}
+
+@Test func lowSpeechFallbackStillRejectsCarAudioWhenBackendSignalsNoSpeech() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 8,
+        rmsAmplitude: 0.012,
+        peakAmplitude: 0.09,
+        speechSampleRatio: 0.01
+    )
+    let metrics = TranscriptionSpeechMetrics(
+        speechDetected: false,
+        segmentCount: 2,
+        nonemptySegmentCount: 1,
+        likelySpeechSegmentRatio: 0,
+        avgNoSpeechProb: 0.84,
+        avgLogprob: -0.9,
+        avgCompressionRatio: 1.2
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Thank you",
+        analysis: analysis,
+        speechMetrics: metrics,
+        usesCarAudioRoute: true
+    )
+
+    #expect(shouldFallback == true)
+}
+
 @Test func audioSignalAnalyzerTreatsNearSilentShortAudioAsSilent() {
     let analysis = AudioSignalAnalysis(
         durationSeconds: 2,
@@ -63,6 +225,29 @@ import UIKit
     )
 
     #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis) == true)
+}
+
+@Test func audioSignalAnalyzerIsLessAggressiveOnCarAudio() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 6,
+        rmsAmplitude: 0.007,
+        peakAmplitude: 0.06,
+        speechSampleRatio: 0.01
+    )
+
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis, usesCarAudioRoute: false) == true)
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis, usesCarAudioRoute: true) == false)
+}
+
+@Test func audioSignalAnalyzerPreservesSoftCarAudioSpeechLevels() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 5,
+        rmsAmplitude: 0.00131,
+        peakAmplitude: 0.0201,
+        speechSampleRatio: 0.004
+    )
+
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis, usesCarAudioRoute: true) == false)
 }
 
 @Test func transcriptionNoSpeechFallbackMessagesMatchApprovedCopy() {

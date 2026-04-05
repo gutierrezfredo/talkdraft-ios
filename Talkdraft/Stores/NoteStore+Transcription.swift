@@ -4,6 +4,29 @@ import os
 private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteStore")
 
 extension NoteStore {
+    private enum TranscriptionFallbackReason {
+        case shortRecording
+        case lowSpeech
+
+        var errorType: String {
+            switch self {
+            case .shortRecording:
+                return "transcription_short_fallback"
+            case .lowSpeech:
+                return "transcription_low_speech_fallback"
+            }
+        }
+
+        var errorMessage: String {
+            switch self {
+            case .shortRecording:
+                return "Replaced likely hallucinated short transcription with fallback copy"
+            case .lowSpeech:
+                return "Replaced likely non-speech hallucination with fallback copy"
+            }
+        }
+    }
+
     // MARK: - Transcription
 
     func transcribeNote(id: UUID, audioFileURL: URL, language: String?, userId: UUID?, customDictionary: [String] = [], multiSpeaker: Bool = false) {
@@ -22,6 +45,8 @@ extension NoteStore {
             defer { if let compressedURL { AudioCompressor.cleanup(compressedURL) } }
 
             do {
+                let signalAnalysis = try? await AudioSignalAnalyzer.analyze(url: audioFileURL)
+
                 // Validate audio file before processing
                 guard FileManager.default.fileExists(atPath: audioFileURL.path),
                       let attrs = try? FileManager.default.attributesOfItem(atPath: audioFileURL.path),
@@ -38,7 +63,7 @@ extension NoteStore {
                     return
                 }
 
-                if let analysis = try? await AudioSignalAnalyzer.analyze(url: audioFileURL),
+                if let analysis = signalAnalysis,
                    AudioSignalAnalyzer.shouldTreatAsSilent(analysis) {
                     logger.info(
                         "transcribeNote: skipping transcription for quiet audio note=\(id) duration=\(analysis.durationSeconds, privacy: .public) peak=\(analysis.peakAmplitude, privacy: .public) rms=\(analysis.rmsAmplitude, privacy: .public)"
@@ -106,12 +131,39 @@ extension NoteStore {
                 let transcribedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !transcribedText.isEmpty else {
                     logger.warning("transcribeNote: received empty transcription for \(id)")
-                    await deleteRemoteAudioIfNeeded(for: result.audioUrl, noteId: id, reason: "empty_transcription")
-                    setNoteBodyState(id: id, state: .transcriptionFailed)
+                    guard var note = notes.first(where: { $0.id == id }) else {
+                        logger.error("transcribeNote: note \(id) not found in local store after empty transcription")
+                        await deleteRemoteAudioIfNeeded(for: result.audioUrl, noteId: id, reason: "missing_note_after_empty_transcription")
+                        return
+                    }
+
+                    let fallbackMessage = TranscriptionService.nextNoSpeechFallbackText()
+                    setLocalVoiceBodyState(nil, for: id)
+                    note.content = fallbackMessage
+                    note.language = result.language
+                    if let audioUrl = result.audioUrl {
+                        note.audioUrl = audioUrl
+                    }
+                    if let duration = result.durationSeconds {
+                        note.durationSeconds = duration
+                    }
+                    note.updatedAt = Date()
+                    updateNote(note)
+
+                    if result.audioUrl != nil {
+                        unregisterLocalAudio(for: id)
+                        try? FileManager.default.removeItem(at: audioFileURL)
+                    }
+
                     ErrorLogger.shared.log(
-                        type: "transcription_empty",
-                        message: "Whisper returned empty text",
-                        context: ["note_id": id.uuidString, "language": language ?? "auto"],
+                        type: "transcription_empty_fallback",
+                        message: "Replaced empty transcription with fallback copy",
+                        context: [
+                            "note_id": id.uuidString,
+                            "language": language ?? "auto",
+                            "duration_seconds": String(result.durationSeconds ?? 0),
+                            "has_remote_audio": String(result.audioUrl != nil)
+                        ],
                         userId: userId
                     )
                     return
@@ -124,23 +176,24 @@ extension NoteStore {
                     return
                 }
                 let transcriptionDuration = TimeInterval(note.durationSeconds ?? result.durationSeconds ?? 0)
-                let shouldUseShortRecordingFallback = TranscriptionService.shouldUseShortRecordingFallback(
+                let fallbackReason = transcriptionFallbackReason(
                     for: transcribedText,
-                    durationSeconds: transcriptionDuration
+                    durationSeconds: transcriptionDuration,
+                    signalAnalysis: signalAnalysis,
+                    speechMetrics: result.speechMetrics
                 )
                 let finalContent: String
                 let initialSpeakerNames: [String: String]?
-                if shouldUseShortRecordingFallback {
+                if let fallbackReason {
                     finalContent = TranscriptionService.nextNoSpeechFallbackText()
                     initialSpeakerNames = nil
-                    ErrorLogger.shared.log(
-                        type: "transcription_short_fallback",
-                        message: "Replaced likely hallucinated short transcription with fallback copy",
-                        context: [
-                            "note_id": id.uuidString,
-                            "duration_seconds": String(Int(transcriptionDuration)),
-                            "transcript_preview": String(transcribedText.prefix(80))
-                        ],
+                    logTranscriptionFallback(
+                        fallbackReason,
+                        noteId: id,
+                        durationSeconds: transcriptionDuration,
+                        transcribedText: transcribedText,
+                        signalAnalysis: signalAnalysis,
+                        speechMetrics: result.speechMetrics,
                         userId: userId
                     )
                 } else {
@@ -168,7 +221,7 @@ extension NoteStore {
                 }
 
                 // Generate AI title in background
-                if !shouldUseShortRecordingFallback {
+                if fallbackReason == nil {
                     generateTitle(for: id, content: transcribedText, language: result.language)
                 }
             } catch {
@@ -216,6 +269,76 @@ extension NoteStore {
 
     private func transcriptionTimeoutSeconds(for noteId: UUID) -> TimeInterval {
         transcriptionTimeoutSeconds(for: notes.first(where: { $0.id == noteId })?.durationSeconds)
+    }
+
+    private func transcriptionFallbackReason(
+        for transcribedText: String,
+        durationSeconds: TimeInterval,
+        signalAnalysis: AudioSignalAnalysis?,
+        speechMetrics: TranscriptionSpeechMetrics?
+    ) -> TranscriptionFallbackReason? {
+        if TranscriptionService.shouldUseShortRecordingFallback(
+            for: transcribedText,
+            durationSeconds: durationSeconds
+        ) {
+            return .shortRecording
+        }
+
+        if TranscriptionService.shouldUseLowSpeechFallback(
+            for: transcribedText,
+            analysis: signalAnalysis,
+            speechMetrics: speechMetrics
+        ) {
+            return .lowSpeech
+        }
+
+        return nil
+    }
+
+    private func logTranscriptionFallback(
+        _ reason: TranscriptionFallbackReason,
+        noteId: UUID,
+        durationSeconds: TimeInterval,
+        transcribedText: String,
+        signalAnalysis: AudioSignalAnalysis?,
+        speechMetrics: TranscriptionSpeechMetrics?,
+        userId: UUID?
+    ) {
+        ErrorLogger.shared.log(
+            type: reason.errorType,
+            message: reason.errorMessage,
+            context: transcriptionFallbackContext(
+                noteId: noteId,
+                durationSeconds: durationSeconds,
+                transcribedText: transcribedText,
+                signalAnalysis: signalAnalysis,
+                speechMetrics: speechMetrics
+            ),
+            userId: userId
+        )
+    }
+
+    private func transcriptionFallbackContext(
+        noteId: UUID,
+        durationSeconds: TimeInterval,
+        transcribedText: String,
+        signalAnalysis: AudioSignalAnalysis?,
+        speechMetrics: TranscriptionSpeechMetrics?
+    ) -> [String: String] {
+        var context: [String: String] = [
+            "note_id": noteId.uuidString,
+            "duration_seconds": String(Int(durationSeconds)),
+            "transcript_preview": String(transcribedText.prefix(80))
+        ]
+
+        context["speech_sample_ratio"] = signalAnalysis.map { String($0.speechSampleRatio) } ?? "n/a"
+        context["rms_amplitude"] = signalAnalysis.map { String($0.rmsAmplitude) } ?? "n/a"
+        context["speech_detected"] = speechMetrics?.speechDetected.map { String($0) } ?? "n/a"
+        context["likely_speech_segment_ratio"] = speechMetrics?.likelySpeechSegmentRatio.map { String($0) } ?? "n/a"
+        context["avg_no_speech_prob"] = speechMetrics?.avgNoSpeechProb.map { String($0) } ?? "n/a"
+        context["avg_logprob"] = speechMetrics?.avgLogprob.map { String($0) } ?? "n/a"
+
+        return context
     }
 
     private func transcriptionTimeoutSeconds(for durationSeconds: Int?) -> TimeInterval {
