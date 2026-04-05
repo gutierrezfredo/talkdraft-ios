@@ -27,52 +27,59 @@ struct LoginView: View {
     }
 
     var body: some View {
-        ZStack {
-            backgroundColor.ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                onboardingHero
-                    .padding(.top, 12)
-                    .padding(.bottom, 32)
-
+        VStack(spacing: 0) {
+            ScrollView {
                 VStack(spacing: 0) {
-                    Text("Say it messy.")
-                        .font(.brandLargeTitle)
-                        .fontDesign(nil)
+                    onboardingHero
+                        .padding(.top, 20)
+                        .padding(.bottom, 8)
 
-                    ZStack(alignment: .bottom) {
-                        Text("Read it clean.")
+                    VStack(spacing: 0) {
+                        Text("Say it messy.")
                             .font(.brandLargeTitle)
                             .fontDesign(nil)
 
-                        Rectangle()
-                            .fill(Color.brand)
-                            .frame(width: 80, height: 2.5)
-                            .clipShape(Capsule())
-                            .offset(x: 58, y: 2)
+                        ZStack(alignment: .bottom) {
+                            Text("Read it clean.")
+                                .font(.brandLargeTitle)
+                                .fontDesign(nil)
+
+                            Rectangle()
+                                .fill(Color.brand)
+                                .frame(width: 80, height: 2.5)
+                                .clipShape(Capsule())
+                                .offset(x: 58, y: 2)
+                        }
                     }
-                }
-                .multilineTextAlignment(.center)
-                .padding(.bottom, 16)
-
-                Text("Capture voice notes and quick thoughts, then let Talkdraft turn them into organized notes.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 16)
 
-                authSection
-
-                Spacer()
-
-                legalText
-                    .opacity(isInteractive ? 1 : 0)
-                    .allowsHitTesting(isInteractive)
+                    Text("Capture voice notes and quick thoughts, then let Talkdraft turn them into organized notes.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, 32)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
+
+            VStack(spacing: 12) {
+                authSection
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+
+                if isInteractive {
+                    legalText
+                        .padding(.bottom, 8)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .background(backgroundColor.ignoresSafeArea())
         }
+        .background(backgroundColor.ignoresSafeArea())
         .ignoresSafeArea(.keyboard)
         .fullScreenCover(isPresented: $showEmailForm) {
             EmailSignInSheet()
@@ -100,17 +107,16 @@ struct LoginView: View {
     }
 
     private var authSection: some View {
-        ZStack(alignment: .top) {
+        Group {
             if isInteractive {
                 interactiveActions
             } else {
                 transitionState
-                    .padding(.horizontal, 24)
                     .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(minHeight: 184, alignment: .top)
+        .frame(minHeight: 136, alignment: .top)
     }
 
     private var interactiveActions: some View {
@@ -154,20 +160,7 @@ struct LoginView: View {
                     )
                 }
                 .buttonStyle(.plain)
-
-                Button {
-                    Task { await authStore.signInAnonymously() }
-                } label: {
-                    Text("Continue as Guest")
-                        .font(.subheadline)
-                        .foregroundStyle(colorScheme == .dark ? Color.secondary : Color.primary.opacity(0.62))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 24)
         }
     }
 
@@ -179,7 +172,7 @@ struct LoginView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
             .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.bottom, 4)
     }
 
     private var transitionState: some View {
@@ -441,7 +434,7 @@ struct EmailSignInSheet: View {
                     authStore.error = nil
                 }
             } label: {
-                Text("Back")
+                Text("Use different email")
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)

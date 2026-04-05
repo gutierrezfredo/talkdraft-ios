@@ -320,7 +320,7 @@ struct OnboardingPaywallStep: View {
                 perkRow(
                     emoji: "🎙️",
                     title: "Capture Without Limits",
-                    subtitle: "Unlimited recordings and transcriptions."
+                    subtitle: "Unlimited recordings and uploads."
                 )
                 perkRow(
                     emoji: "🪄",
