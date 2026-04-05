@@ -42,18 +42,50 @@ import UIKit
     #expect(shouldPresent == true)
 }
 
-@Test func onboardingPaywallShowsGuestContinueOnlyBeforeSignIn() {
-    let shouldShowBeforeSignIn = OnboardingPaywallStep.shouldShowGuestContinueButton(
+@Test func onboardingPaywallUsesGuestDismissOnlyBeforeSignIn() {
+    let actionBeforeSignIn = OnboardingPaywallStep.dismissActionKind(
         isAuthenticated: false,
+        hasDismissAction: false,
         hasGuestContinueAction: true
     )
-    let shouldShowAfterSignIn = OnboardingPaywallStep.shouldShowGuestContinueButton(
+    let actionAfterSignIn = OnboardingPaywallStep.dismissActionKind(
         isAuthenticated: true,
+        hasDismissAction: false,
         hasGuestContinueAction: true
     )
 
-    #expect(shouldShowBeforeSignIn == true)
-    #expect(shouldShowAfterSignIn == false)
+    #expect(actionBeforeSignIn == .continueAsGuest)
+    #expect(actionAfterSignIn == nil)
+}
+
+@Test func paywallDismissActionPrefersExplicitDismiss() {
+    let action = OnboardingPaywallStep.dismissActionKind(
+        isAuthenticated: false,
+        hasDismissAction: true,
+        hasGuestContinueAction: true
+    )
+
+    #expect(action == .dismiss)
+}
+
+@Test func paywallPlanFallsBackToMonthlyWhenLifetimeProductIsUnavailable() {
+    let plan = PaywallPlan.normalized(
+        selected: .lifetime,
+        hasMonthly: true,
+        hasLifetime: false
+    )
+
+    #expect(plan == .monthly)
+}
+
+@Test func paywallPlanKeepsLifetimeSelectedWhenAvailable() {
+    let plan = PaywallPlan.normalized(
+        selected: .lifetime,
+        hasMonthly: true,
+        hasLifetime: true
+    )
+
+    #expect(plan == .lifetime)
 }
 
 @Test func emailSignInSheetStaysOpenForGuests() {

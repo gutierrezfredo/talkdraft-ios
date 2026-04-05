@@ -5,6 +5,26 @@ import SwiftUI
 enum PaywallPlan: String, CaseIterable {
     case lifetime
     case monthly
+
+    static func normalized(selected: PaywallPlan, hasMonthly: Bool, hasLifetime: Bool) -> PaywallPlan {
+        switch selected {
+        case .lifetime where hasLifetime:
+            .lifetime
+        case .monthly where hasMonthly:
+            .monthly
+        case .lifetime where hasMonthly:
+            .monthly
+        case .monthly where hasLifetime:
+            .lifetime
+        default:
+            selected
+        }
+    }
+}
+
+enum PaywallDismissActionKind: Equatable {
+    case dismiss
+    case continueAsGuest
 }
 
 struct OnboardingPaywallStep: View {
@@ -43,11 +63,48 @@ struct OnboardingPaywallStep: View {
         subscriptionStore.isLoading
     }
 
+    private var effectiveSelectedPlan: PaywallPlan {
+        PaywallPlan.normalized(
+            selected: selectedPlan,
+            hasMonthly: subscriptionStore.monthlyProduct != nil,
+            hasLifetime: subscriptionStore.lifetimeProduct != nil
+        )
+    }
+
     private var selectedProduct: StoreKit.Product? {
-        switch selectedPlan {
+        switch effectiveSelectedPlan {
         case .monthly: subscriptionStore.monthlyProduct
         case .lifetime: subscriptionStore.lifetimeProduct
         }
+    }
+
+    private func isPlanAvailable(_ plan: PaywallPlan) -> Bool {
+        if subscriptionStore.monthlyProduct == nil && subscriptionStore.lifetimeProduct == nil {
+            return true
+        }
+
+        switch plan {
+        case .monthly:
+            return subscriptionStore.monthlyProduct != nil
+        case .lifetime:
+            return subscriptionStore.lifetimeProduct != nil
+        }
+    }
+
+    static func dismissActionKind(
+        isAuthenticated: Bool,
+        hasDismissAction: Bool,
+        hasGuestContinueAction: Bool
+    ) -> PaywallDismissActionKind? {
+        if hasDismissAction {
+            return .dismiss
+        }
+
+        if hasGuestContinueAction && !isAuthenticated {
+            return .continueAsGuest
+        }
+
+        return nil
     }
 
     var body: some View {
@@ -97,7 +154,12 @@ struct OnboardingPaywallStep: View {
             await subscriptionStore.fetchProducts()
         }
         .overlay(alignment: .topLeading) {
-            if let dismiss = onDismiss ?? onGuestContinue {
+            if let dismissAction = Self.dismissActionKind(
+                isAuthenticated: authStore.isAuthenticated,
+                hasDismissAction: onDismiss != nil,
+                hasGuestContinueAction: onGuestContinue != nil
+            ),
+               let dismiss = dismissAction == .dismiss ? onDismiss : onGuestContinue {
                 Button(action: dismiss) {
                     Image(systemName: "xmark")
                         .font(.body.weight(.semibold))
@@ -148,6 +210,7 @@ struct OnboardingPaywallStep: View {
         HStack(spacing: 0) {
             ForEach(PaywallPlan.allCases, id: \.self) { plan in
                 Button {
+                    guard isPlanAvailable(plan) else { return }
                     withAnimation(.snappy(duration: 0.25)) {
                         selectedPlan = plan
                     }
@@ -157,12 +220,13 @@ struct OnboardingPaywallStep: View {
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 7)
-                        .foregroundStyle(selectedPlan == plan ? .white : .primary)
+                        .foregroundStyle(effectiveSelectedPlan == plan ? .white : .primary)
                         .background(
-                            selectedPlan == plan
+                            effectiveSelectedPlan == plan
                                 ? Capsule().fill(Color.brand)
                                 : Capsule().fill(Color.clear)
                         )
+                        .opacity(isPlanAvailable(plan) ? 1 : 0.45)
                         .contentShape(Capsule())
                         .overlay(alignment: .top) {
                             if plan == .lifetime {
@@ -193,7 +257,7 @@ struct OnboardingPaywallStep: View {
 
     private var planContent: some View {
         Group {
-            if selectedPlan == .monthly {
+            if effectiveSelectedPlan == .monthly {
                 monthlyTimeline
                     .transition(.asymmetric(
                         insertion: .move(edge: .leading).combined(with: .opacity),
@@ -207,7 +271,7 @@ struct OnboardingPaywallStep: View {
                     ))
             }
         }
-        .animation(.snappy(duration: 0.25), value: selectedPlan)
+        .animation(.snappy(duration: 0.25), value: effectiveSelectedPlan)
     }
 
     // MARK: - Monthly Timeline
@@ -404,7 +468,7 @@ struct OnboardingPaywallStep: View {
                     return
                 }
                 do {
-                    let startedTrial = selectedPlan == .monthly && subscriptionStore.isTrialEligible
+                    let startedTrial = effectiveSelectedPlan == .monthly && subscriptionStore.isTrialEligible
                     try await subscriptionStore.purchase(product)
                     if subscriptionStore.isPro {
                         onPurchaseCompleted(startedTrial)
@@ -425,7 +489,7 @@ struct OnboardingPaywallStep: View {
     }
 
     private var subscribeButtonTitle: String {
-        switch selectedPlan {
+        switch effectiveSelectedPlan {
         case .monthly:
             subscriptionStore.isTrialEligible ? "Try Free for 7 Days" : "Subscribe · \(monthlyPrice)/mo"
         case .lifetime:
@@ -453,7 +517,7 @@ struct OnboardingPaywallStep: View {
                 return
             }
             do {
-                let startedTrial = selectedPlan == .monthly && subscriptionStore.isTrialEligible
+                let startedTrial = effectiveSelectedPlan == .monthly && subscriptionStore.isTrialEligible
                 try await subscriptionStore.purchase(product)
                 if subscriptionStore.isPro {
                     onPurchaseCompleted(startedTrial)
