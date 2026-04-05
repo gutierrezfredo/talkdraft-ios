@@ -10,7 +10,6 @@ enum NoteShareTextLogic {
 extension NoteDetailView {
     var hasChanges: Bool {
         typewriterTask == nil
-            && titleTypewriterTask == nil
             && !isRewriting
             && editorSession.hasUnsavedChanges(persistedContent: persistedEditedContent)
     }

@@ -1,6 +1,225 @@
 import SwiftUI
+import UIKit
+
+struct TitleTextView: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    @Binding var measuredHeight: CGFloat
+    var isEditable: Bool = true
+    var placeholder: String = "Untitled"
+    var onReturn: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = TitleEntryTextView()
+        tv.delegate = context.coordinator
+        tv.backgroundColor = .clear
+        tv.isScrollEnabled = false
+        tv.clipsToBounds = false
+        tv.showsVerticalScrollIndicator = false
+        tv.showsHorizontalScrollIndicator = false
+        tv.contentInsetAdjustmentBehavior = .never
+        tv.textAlignment = .center
+        tv.textContainerInset = UIEdgeInsets(top: 2, left: 0, bottom: 4, right: 0)
+        tv.textContainer.widthTracksTextView = true
+        tv.textContainer.heightTracksTextView = false
+        tv.textContainer.lineFragmentPadding = 0
+        tv.textContainer.maximumNumberOfLines = 0
+        tv.textContainer.lineBreakMode = .byWordWrapping
+        tv.font = Self.titleFont
+        tv.textColor = .label
+        tv.tintColor = ExpandingTextView.brandColor
+        tv.keyboardAppearance = colorScheme == .dark ? .dark : .light
+        tv.setContentCompressionResistancePriority(.required, for: .vertical)
+        tv.setContentHuggingPriority(.required, for: .vertical)
+
+        return tv
+    }
+
+    func updateUIView(_ tv: UITextView, context: Context) {
+        context.coordinator.parent = self
+
+        let normalized = Self.normalized(text)
+        if normalized != text {
+            DispatchQueue.main.async { self.text = normalized }
+        }
+        if tv.text != normalized {
+            tv.text = normalized
+        }
+
+        tv.keyboardAppearance = colorScheme == .dark ? .dark : .light
+        tv.isEditable = isEditable
+        tv.isSelectable = isEditable
+        context.coordinator.updateMeasuredHeight(for: tv)
+
+        if context.coordinator.lastRequestedFocus != isFocused {
+            context.coordinator.lastRequestedFocus = isFocused
+            if isEditable && isFocused && !tv.isFirstResponder {
+                DispatchQueue.main.async {
+                    guard !tv.isFirstResponder else { return }
+                    _ = tv.becomeFirstResponder()
+                }
+            } else if !isFocused && tv.isFirstResponder {
+                DispatchQueue.main.async {
+                    guard tv.isFirstResponder else { return }
+                    tv.resignFirstResponder()
+                }
+            }
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? uiView.bounds.width
+        let fitting = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: max(ceil(Self.titleFont.lineHeight + 6), ceil(fitting.height)))
+    }
+
+    static let titleDisplayFont = Font.custom("Bricolage Grotesque", size: 28, relativeTo: .title).weight(.bold)
+
+    static let titleFont: UIFont = {
+        let size: CGFloat = 28
+        let weightAxis = fourCharTag("wght")
+        let descriptor = UIFontDescriptor(fontAttributes: [
+            .name: "Bricolage Grotesque",
+            UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [weightAxis: 600]
+        ])
+        let weighted = UIFont(descriptor: descriptor, size: size)
+        if weighted.familyName != ".SFUI" {
+            return weighted
+        }
+        return UIFont(name: "Bricolage Grotesque", size: size) ?? .systemFont(ofSize: size, weight: .bold)
+    }()
+
+    static func normalized(_ text: String) -> String {
+        text.replacingOccurrences(of: "\n", with: "")
+    }
+
+    static let minimumHeight = ceil(titleFont.lineHeight + 6)
+
+    static func fourCharTag(_ string: String) -> NSNumber {
+        let value = string.utf8.reduce(UInt32(0)) { partial, byte in
+            (partial << 8) + UInt32(byte)
+        }
+        return NSNumber(value: value)
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: TitleTextView
+        var lastRequestedFocus = false
+
+        init(_ parent: TitleTextView) {
+            self.parent = parent
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard text == "\n" else { return true }
+            parent.onReturn()
+            return false
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            let normalized = TitleTextView.normalized(textView.text)
+            if textView.text != normalized {
+                textView.text = normalized
+            }
+            parent.text = normalized
+            textView.invalidateIntrinsicContentSize()
+            textView.setNeedsLayout()
+            updateMeasuredHeight(for: textView)
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            parent.isFocused = true
+            updateMeasuredHeight(for: textView)
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.isFocused = false
+            updateMeasuredHeight(for: textView)
+        }
+
+        func updateMeasuredHeight(for textView: UITextView) {
+            let width = textView.bounds.width > 0
+                ? textView.bounds.width
+                : max((textView.window?.windowScene?.screen.bounds.width ?? textView.superview?.bounds.width ?? 320) - 48, 0)
+            let fitting = textView.sizeThatFits(
+                CGSize(width: width, height: .greatestFiniteMagnitude)
+            )
+            let nextHeight = max(TitleTextView.minimumHeight, ceil(fitting.height))
+            guard abs(parent.measuredHeight - nextHeight) > 0.5 else { return }
+            DispatchQueue.main.async {
+                self.parent.measuredHeight = nextHeight
+            }
+        }
+    }
+
+    final class TitleEntryTextView: UITextView {
+        override var contentSize: CGSize {
+            didSet {
+                guard oldValue != contentSize else { return }
+                invalidateIntrinsicContentSize()
+            }
+        }
+
+        override var intrinsicContentSize: CGSize {
+            let fallbackWidth = window?.windowScene?.screen.bounds.width ?? superview?.bounds.width ?? 320
+            let fitting = sizeThatFits(
+                CGSize(
+                    width: bounds.width > 0 ? bounds.width : fallbackWidth,
+                    height: .greatestFiniteMagnitude
+                )
+            )
+            return CGSize(width: UIView.noIntrinsicMetric, height: fitting.height)
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let topOffset = CGPoint(x: 0, y: -adjustedContentInset.top)
+            guard abs(contentOffset.x - topOffset.x) > 0.5 || abs(contentOffset.y - topOffset.y) > 0.5 else { return }
+            UIView.performWithoutAnimation {
+                setContentOffset(topOffset, animated: false)
+            }
+        }
+    }
+}
 
 extension NoteDetailView {
+    static func normalizedTitleInput(_ newValue: String) -> (title: String, moveFocusToBody: Bool) {
+        guard newValue.contains(where: \.isNewline) else {
+            return (newValue, false)
+        }
+
+        let normalized = newValue
+            .components(separatedBy: .newlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        return (normalized, true)
+    }
+
+    func moveFocusFromTitleToBody() {
+        let transition = Self.normalizedTitleInput(editedTitle)
+        editedTitle = transition.title
+
+        var noAnimation = Transaction()
+        noAnimation.animation = nil
+        withTransaction(noAnimation) {
+            isTitleFocusHandoff = true
+            titleFocused = false
+        }
+        DispatchQueue.main.async {
+            withTransaction(noAnimation) {
+                contentFocused = true
+                moveCursorToEnd = true
+                isTitleFocusHandoff = false
+            }
+        }
+    }
+
     @ViewBuilder
     func deadZone(height: CGFloat) -> some View {
         Color.clear
@@ -414,46 +633,51 @@ extension NoteDetailView {
     }
 
     var titleField: some View {
-        let titleInputBinding = Binding<String>(
-            get: { editedTitle },
-            set: { newValue in
-                guard newValue.contains(where: \.isNewline) else {
-                    editedTitle = newValue
-                    return
-                }
+        let containerHeight = max(titleHeight, TitleTextView.minimumHeight)
 
-                editedTitle = newValue
-                    .components(separatedBy: .newlines)
-                    .filter { !$0.isEmpty }
-                    .joined(separator: " ")
-                titleFocused = false
-                contentFocused = true
-            }
-        )
-
-        return Group {
+        return ZStack {
             if isGeneratingTitle {
                 Text(titlePhrases[titlePhraseIndex])
-                    .font(.brandTitle)
+                    .font(TitleTextView.titleDisplayFont)
                     .fontDesign(nil)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.horizontal, 24)
-            } else {
-                TextField("Untitled", text: titleInputBinding, axis: .vertical)
-                    .font(.brandTitle)
-                    .fontDesign(nil)
-                    .tint(Color.brand)
-                    .multilineTextAlignment(.center)
-                    .contentTransition(.opacity)
-                    .lineLimit(1...3)
-                    .focused($titleFocused)
-                    .disabled(isRewriting)
-                    .padding(.horizontal, 24)
             }
+
+            if editedTitle.isEmpty && !isGeneratingTitle {
+                Text("Untitled")
+                    .font(TitleTextView.titleDisplayFont)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .allowsHitTesting(false)
+                    .opacity(titleRevealOpacity)
+            }
+
+            TitleTextView(
+                text: editedTitleBinding,
+                isFocused: Binding(
+                    get: { titleFocused },
+                    set: { focused in
+                        titleFocused = focused
+                        if focused {
+                            contentFocused = false
+                            moveCursorToEnd = false
+                        }
+                    }
+                ),
+                measuredHeight: $titleHeight,
+                isEditable: !isRewriting && !isGeneratingTitle,
+                placeholder: "",
+                onReturn: moveFocusFromTitleToBody
+            )
+            .frame(height: titleHeight)
+            .opacity(isGeneratingTitle ? 0 : titleRevealOpacity)
+            .allowsHitTesting(!isGeneratingTitle)
         }
+        .frame(maxWidth: .infinity, minHeight: containerHeight, alignment: .center)
+        .padding(.horizontal, 24)
     }
 
     var speakerChipsRow: some View {

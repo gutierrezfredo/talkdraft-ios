@@ -1296,6 +1296,20 @@ struct AudioWorkflowRegressionTests {
     #expect(session.bodyState == .waitingForConnection)
 }
 
+@Test func noteDetailTitleInputLeavesPlainEditsInTitleField() {
+    let transition = NoteDetailView.normalizedTitleInput("Updated title")
+
+    #expect(transition.title == "Updated title")
+    #expect(transition.moveFocusToBody == false)
+}
+
+@Test func noteDetailTitleInputReturnNormalizesTitleAndMovesFocusToBody() {
+    let transition = NoteDetailView.normalizedTitleInput("Project title\n")
+
+    #expect(transition.title == "Project title")
+    #expect(transition.moveFocusToBody == true)
+}
+
 @Test func noteDetailEditorSessionResolvesVoiceFallbackStateWhenPlaceholderStripsToEmpty() {
     let inserted = NoteAppendPlaceholderEditor.insert(.transcribing, into: "", at: 0)
 
