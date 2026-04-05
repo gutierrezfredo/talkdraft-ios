@@ -308,7 +308,7 @@ struct OnboardingPaywallStep: View {
 
                 Text("Then \(monthlyPrice)/mo  ·  Cancel Anytime")
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -350,7 +350,7 @@ struct OnboardingPaywallStep: View {
 
                 Text("Introductory Price  ·  Lifetime Access")
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.secondary)
             }
         }
     }
