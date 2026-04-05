@@ -18,7 +18,7 @@
 |------|----------|--------|
 | HomeView | `Views/Home/HomeView.swift` | Built — category chips, notes grid, search, bulk select, sort options |
 | LoginView | `Views/Auth/LoginView.swift` | Built — merged welcome/auth screen with Apple sign-in, email magic link, and guest entry |
-| PaywallView | `Views/Onboarding/OnboardingPaywallStep.swift` | Built — unified paywall: trust timeline, adaptive auth (Apple/Email/Guest or direct subscribe), yearly plan only |
+| PaywallView | `Views/Onboarding/OnboardingPaywallStep.swift` | Built — unified paywall: Lifetime/Monthly toggle, trust timeline or lifetime perks, adaptive auth, "SAVE 60%" badge |
 | RecordView | `Views/Record/` | Built — real-time FFT frequency visualization |
 | NoteDetailView | `Views/NoteDetail/` | Built — editing, audio player, category picker, rewrite sheet, share |
 | SettingsView | `Views/Settings/` | Built — custom card layout, language/theme pickers, legal links, audio import, recently deleted |

@@ -17,13 +17,14 @@
 
 ## Pricing
 
-Talkdraft is a subscription app with a StoreKit introductory offer when eligible. Yearly plan only — no monthly/yearly toggle.
+Talkdraft offers a monthly subscription with a 7-day free trial and a one-time lifetime purchase. Toggle on the paywall defaults to Lifetime.
 
 | Access | Details |
 |--------|---------|
 | Guest | 5-note limit, anonymous Supabase auth, paywall shown on 6th note |
-| Intro Trial (if eligible) | 7-day free trial with full Pro access |
-| Pro ($59.99/yr) | Full access — unlimited notes/categories, AI rewrite, multi-speaker transcription |
+| Intro Trial (if eligible) | 7-day free trial with full Pro access (monthly only) |
+| Pro Monthly ($4.99/mo) | Full access — unlimited notes/categories, AI rewrite, multi-speaker transcription |
+| Pro Lifetime ($29.99) | Same full access, one-time purchase, no renewals |
 
 ## Key Flows
 
@@ -33,11 +34,12 @@ Onboarding runs before authentication. Auth happens inside the paywall step.
 
 1. **Welcome** — Luna mascot, "Say it messy. Read it clean." tagline, "Get Started" CTA
 2. **Categories** — 16 starter category suggestions (multi-select chips), scrollable, no skip
-3. **Paywall** — Trust timeline (🎁 today, 🔔 day 6, 🪄 day 7), adaptive auth:
-   - Unauthenticated: Apple Sign In + Email buttons + "Continue as Guest"
-   - Guest (from note limit): Apple Sign In + Email buttons + dismiss X
-   - Authenticated non-Pro: direct "Start 7-Day Free Trial" / "Subscribe Now" button
-4. **Trial Reminder** (conditional) — post-purchase bottom sheet requesting notification permission, schedules Day 6 local reminder. Only shows after trial start, never for guests.
+3. **Paywall** — Lifetime/Monthly toggle (defaults to Lifetime), adaptive content:
+   - Lifetime: outcome-focused perks (🎙️🪄💎) + "$29.99" with ~~$59.99~~ strikethrough + "SAVE 60%" badge
+   - Monthly: trust timeline (🎁→🔔→🚀) + "7 Days Free" + "$4.99/mo"
+   - Auth: Apple Sign In + Email (unauthenticated), direct subscribe button (authenticated)
+   - X dismiss button (liquid glass) for guest/dismiss contexts
+4. **Trial Reminder** (conditional) — post-purchase bottom sheet requesting notification permission, schedules Day 6 local reminder. Only shows after monthly trial start, never for lifetime or guests.
 5. **Widget Discovery** (post-first-note) — triggered 1.5s after first AI title generates. Luna widget promo hero + 3-step setup guide. One-and-done — never shows again after dismissal.
 
 ### Capture (Voice)
@@ -69,7 +71,7 @@ Note detail → Rewrite action → Choose tone or custom instructions → Previe
 1. **Splash** — Luna logo with floating Z's, adaptive background (brand violet gradient in light mode, dark with violet radial glow in dark mode)
 2. **Welcome** — Luna (notes pose) with radial glow, brand tagline, "Get Started" CTA, entrance animations
 3. **Categories (Onboarding)** — 16 starter suggestions as colored pill chips in FlowLayout, scrollable
-4. **Paywall** — Luna (paywall pose) with concave arch, trust timeline, adaptive auth buttons or subscribe button, legal footer. Single component used everywhere (`OnboardingPaywallStep`).
+4. **Paywall** — Luna (paywall pose) with concave arch, Lifetime/Monthly toggle, trust timeline or lifetime perks, adaptive auth or subscribe button, "SAVE 60%" badge, legal footer. Single component used everywhere (`OnboardingPaywallStep`).
 5. **Trial Reminder** — Bell emoji, headline, notification permission request, Day 6 local notification scheduling
 6. **Login** — Apple Sign In, Email magic link, "Continue as Guest". Shown for returning users who signed out.
 7. **Home (Note List)** — 2-column card grid, category chip filter bar, search, sort options, bulk select, floating mic button
