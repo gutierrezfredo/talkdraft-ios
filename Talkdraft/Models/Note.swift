@@ -17,7 +17,7 @@ enum NoteBodyState: Equatable, Sendable {
             self = .transcribing
         case NoteBodyState.waitingForConnectionPlaceholder:
             self = .waitingForConnection
-        case NoteBodyState.transcriptionFailedPlaceholder:
+        case NoteBodyState.transcriptionFailedPlaceholder, NoteBodyState.legacyTranscriptionFailedPlaceholder:
             self = .transcriptionFailed
         default:
             self = .content
@@ -27,7 +27,8 @@ enum NoteBodyState: Equatable, Sendable {
     static let recordingPlaceholder = "Recording…"
     static let transcribingPlaceholder = "Transcribing…"
     static let waitingForConnectionPlaceholder = "Waiting for connection…"
-    static let transcriptionFailedPlaceholder = "Transcription failed — tap to edit"
+    static let transcriptionFailedPlaceholder = "Transcription failed"
+    static let legacyTranscriptionFailedPlaceholder = "Transcription failed — tap to edit"
 
     init?(storageKey: String) {
         switch storageKey {
