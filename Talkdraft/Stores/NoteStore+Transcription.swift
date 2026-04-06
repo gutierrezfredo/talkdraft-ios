@@ -5,13 +5,10 @@ private let logger = Logger(subsystem: "com.pleymob.talkdraft", category: "NoteS
 
 extension NoteStore {
     private enum TranscriptionFallbackReason {
-        case shortRecording
         case lowSpeech
 
         var errorType: String {
             switch self {
-            case .shortRecording:
-                return "transcription_short_fallback"
             case .lowSpeech:
                 return "transcription_low_speech_fallback"
             }
@@ -19,8 +16,6 @@ extension NoteStore {
 
         var errorMessage: String {
             switch self {
-            case .shortRecording:
-                return "Replaced likely hallucinated short transcription with fallback copy"
             case .lowSpeech:
                 return "Replaced likely non-speech hallucination with fallback copy"
             }
@@ -277,12 +272,7 @@ extension NoteStore {
         signalAnalysis: AudioSignalAnalysis?,
         speechMetrics: TranscriptionSpeechMetrics?
     ) -> TranscriptionFallbackReason? {
-        if TranscriptionService.shouldUseShortRecordingFallback(
-            for: transcribedText,
-            durationSeconds: durationSeconds
-        ) {
-            return .shortRecording
-        }
+        _ = durationSeconds
 
         if TranscriptionService.shouldUseLowSpeechFallback(
             for: transcribedText,

@@ -37,73 +37,12 @@ import UIKit
     #expect(sanitized == "I appreciate you")
 }
 
-@Test func shortRecordingFallbackDetectsKnownHallucinationPhrase() {
-    let shouldFallback = TranscriptionService.shouldUseShortRecordingFallback(
-        for: "Thank you for watching",
-        durationSeconds: 2
-    )
-
-    #expect(shouldFallback == true)
-}
-
-@Test func shortRecordingFallbackPreservesLegitimateShortTranscript() {
-    let shouldFallback = TranscriptionService.shouldUseShortRecordingFallback(
-        for: "Call mom",
-        durationSeconds: 2
-    )
-
-    #expect(shouldFallback == false)
-}
-
-@Test func shortRecordingFallbackPreservesDenseButLegitimateSpeech() {
-    let shouldFallback = TranscriptionService.shouldUseShortRecordingFallback(
-        for: "Yo, what the fuck, man? What the fuck?",
-        durationSeconds: 2
-    )
-
-    #expect(shouldFallback == false)
-}
-
-@Test func lowSpeechFallbackDetectsGenericThankYouHallucination() {
+@Test func lowSpeechFallbackPreservesTranscriptWithoutBackendNoSpeechSignal() {
     let analysis = AudioSignalAnalysis(
         durationSeconds: 5,
         rmsAmplitude: 0.012,
         peakAmplitude: 0.09,
         speechSampleRatio: 0.01
-    )
-
-    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
-        for: "Thank you",
-        analysis: analysis,
-        speechMetrics: nil
-    )
-
-    #expect(shouldFallback == true)
-}
-
-@Test func lowSpeechFallbackDetectsGenericShortHallucinationWithoutSpecificPhraseMatch() {
-    let analysis = AudioSignalAnalysis(
-        durationSeconds: 5,
-        rmsAmplitude: 0.018,
-        peakAmplitude: 0.11,
-        speechSampleRatio: 0.012
-    )
-
-    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
-        for: "Okay",
-        analysis: analysis,
-        speechMetrics: nil
-    )
-
-    #expect(shouldFallback == true)
-}
-
-@Test func lowSpeechFallbackPreservesGenericPhraseWhenAudioLooksLikeRealSpeech() {
-    let analysis = AudioSignalAnalysis(
-        durationSeconds: 5,
-        rmsAmplitude: 0.05,
-        peakAmplitude: 0.42,
-        speechSampleRatio: 0.18
     )
 
     let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
@@ -217,6 +156,32 @@ import UIKit
     #expect(shouldFallback == true)
 }
 
+@Test func lowSpeechFallbackPreservesSpeechBurstFollowedByLongSilence() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 12,
+        rmsAmplitude: 0.012,
+        peakAmplitude: 0.18,
+        speechSampleRatio: 0.005
+    )
+    let metrics = TranscriptionSpeechMetrics(
+        speechDetected: false,
+        segmentCount: 4,
+        nonemptySegmentCount: 1,
+        likelySpeechSegmentRatio: 0.25,
+        avgNoSpeechProb: 0.66,
+        avgLogprob: -0.72,
+        avgCompressionRatio: 1.15
+    )
+
+    let shouldFallback = TranscriptionService.shouldUseLowSpeechFallback(
+        for: "Okay",
+        analysis: analysis,
+        speechMetrics: metrics
+    )
+
+    #expect(shouldFallback == false)
+}
+
 @Test func audioSignalAnalyzerTreatsNearSilentShortAudioAsSilent() {
     let analysis = AudioSignalAnalysis(
         durationSeconds: 2,
@@ -246,6 +211,17 @@ import UIKit
         rmsAmplitude: 0.00131,
         peakAmplitude: 0.0201,
         speechSampleRatio: 0.004
+    )
+
+    #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis, usesCarAudioRoute: true) == false)
+}
+
+@Test func audioSignalAnalyzerPreservesVerySoftLongCarAudioSpeech() {
+    let analysis = AudioSignalAnalysis(
+        durationSeconds: 8,
+        rmsAmplitude: 0.0009,
+        peakAmplitude: 0.012,
+        speechSampleRatio: 0.002
     )
 
     #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis, usesCarAudioRoute: true) == false)
@@ -295,9 +271,9 @@ import UIKit
 @Test func audioSignalAnalyzerTreatsLongRoomToneAsSilent() {
     let analysis = AudioSignalAnalysis(
         durationSeconds: 5,
-        rmsAmplitude: 0.006,
-        peakAmplitude: 0.04,
-        speechSampleRatio: 0.004
+        rmsAmplitude: 0.0012,
+        peakAmplitude: 0.009,
+        speechSampleRatio: 0.0004
     )
 
     #expect(AudioSignalAnalyzer.shouldTreatAsSilent(analysis) == true)
