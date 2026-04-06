@@ -181,109 +181,30 @@ final class TranscriptionService: Sendable {
         return sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static func shouldUseShortRecordingFallback(
-        for text: String,
-        durationSeconds: TimeInterval?
-    ) -> Bool {
-        guard let durationSeconds, durationSeconds <= 3 else { return false }
-
-        let normalized = normalizedTranscriptTokens(text)
-        guard !normalized.tokens.isEmpty else { return false }
-
-        let obviousHallucinationPhrases: Set<String> = [
-            "thank you for watching",
-            "thanks for watching",
-            "thank you for listening",
-            "please subscribe",
-            "subscribe to my channel",
-            "thanks for listening",
-        ]
-
-        if obviousHallucinationPhrases.contains(normalized.joined) {
-            return true
-        }
-
-        if normalized.tokens.count >= 3, Set(normalized.tokens).count == 1 {
-            return true
-        }
-
-        return false
-    }
-
     static func shouldUseLowSpeechFallback(
         for text: String,
         analysis: AudioSignalAnalysis?,
         speechMetrics: TranscriptionSpeechMetrics?,
         usesCarAudioRoute: Bool = AudioRecorder.currentRouteUsesCarAudio()
     ) -> Bool {
+        _ = analysis
+        _ = usesCarAudioRoute
         let normalized = normalizedTranscriptTokens(text)
         guard !normalized.tokens.isEmpty else { return false }
+        guard let speechMetrics else { return false }
 
-        let suspiciousGenericPhrases: Set<String> = [
-            "thank you",
-            "thanks",
-            "thank you very much",
-            "you",
-        ]
-        let genericNoiseTokens: Set<String> = [
-            "a", "an", "and", "bye", "for", "hello", "hi", "hmm", "i", "im", "it's",
-            "its", "no", "oh", "ok", "okay", "thanks", "thank", "the", "to", "uh",
-            "um", "you", "yeah", "yep"
-        ]
-
-        let looksLikeMostlyNoise = analysis.map {
-            $0.durationSeconds >= 2.5
-                && $0.speechSampleRatio < (usesCarAudioRoute ? 0.015 : 0.05)
-                && $0.rmsAmplitude < (usesCarAudioRoute ? 0.015 : 0.04)
-                && $0.peakAmplitude < (usesCarAudioRoute ? 0.12 : 0.3)
-        } ?? false
-
-        let looksTrulySilentOnCarAudio = analysis.map {
-            $0.durationSeconds >= 2.5
-                && $0.speechSampleRatio < 0.008
-                && $0.rmsAmplitude < 0.006
-                && $0.peakAmplitude < 0.05
-        } ?? false
-
-        let backendSuggestsNoSpeech = speechMetrics.map { metrics in
-            if metrics.speechDetected == false { return true }
-
-            let likelySpeechSegmentRatio = metrics.likelySpeechSegmentRatio ?? 1
-            let avgNoSpeechProb = metrics.avgNoSpeechProb ?? 0
-            let avgLogprob = metrics.avgLogprob ?? 0
-            let avgCompressionRatio = metrics.avgCompressionRatio ?? 0
-
-            let highNoSpeechProbability = avgNoSpeechProb > 0.55
-            let weakSpeechSegmentRatio = likelySpeechSegmentRatio < 0.4
-            let lowConfidence = avgLogprob < -0.6
-            let suspiciousCompression = avgCompressionRatio > 2.4
-
-            return (highNoSpeechProbability && weakSpeechSegmentRatio)
-                || (highNoSpeechProbability && lowConfidence)
-                || (weakSpeechSegmentRatio && lowConfidence && suspiciousCompression)
-        } ?? false
-
-        let shouldTrustBackendOverLevels = usesCarAudioRoute
-        let shouldEvaluateTranscriptAsNoSpeech =
-            backendSuggestsNoSpeech
-            || (!shouldTrustBackendOverLevels && looksLikeMostlyNoise)
-            || (shouldTrustBackendOverLevels && looksTrulySilentOnCarAudio)
-
-        guard shouldEvaluateTranscriptAsNoSpeech else { return false }
-        if suspiciousGenericPhrases.contains(normalized.joined) {
+        if speechMetrics.speechDetected == false,
+           (speechMetrics.avgNoSpeechProb ?? 1) > 0.7 {
             return true
         }
 
-        let allTokensAreGenericNoise = normalized.tokens.allSatisfy { genericNoiseTokens.contains($0) }
-        if allTokensAreGenericNoise && normalized.tokens.count <= 4 {
-            return true
-        }
+        let likelySpeechSegmentRatio = speechMetrics.likelySpeechSegmentRatio ?? 1
+        let avgNoSpeechProb = speechMetrics.avgNoSpeechProb ?? 0
+        let avgLogprob = speechMetrics.avgLogprob ?? 0
 
-        if backendSuggestsNoSpeech && normalized.tokens.count <= 3 && normalized.joined.count <= 16 {
-            return true
-        }
-
-        return false
+        return likelySpeechSegmentRatio < 0.2
+            && avgNoSpeechProb > 0.75
+            && avgLogprob < -0.8
     }
 
     private static func normalizedTranscriptTokens(_ text: String) -> (tokens: [String], joined: String) {

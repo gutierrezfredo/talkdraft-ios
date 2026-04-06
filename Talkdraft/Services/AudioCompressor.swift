@@ -228,15 +228,15 @@ enum AudioSignalAnalyzer {
             }
 
             if analysis.durationSeconds <= 3 &&
-                analysis.peakAmplitude < 0.006 &&
-                analysis.rmsAmplitude < 0.0012 {
+                analysis.peakAmplitude < 0.004 &&
+                analysis.rmsAmplitude < 0.0009 {
                 return true
             }
 
             if analysis.durationSeconds >= 4 &&
-                analysis.rmsAmplitude < 0.001 &&
-                analysis.speechSampleRatio < 0.003 &&
-                analysis.peakAmplitude < 0.015 {
+                analysis.rmsAmplitude < 0.00045 &&
+                analysis.speechSampleRatio < 0.0005 &&
+                analysis.peakAmplitude < 0.005 {
                 return true
             }
 
@@ -248,15 +248,15 @@ enum AudioSignalAnalyzer {
         }
 
         if analysis.durationSeconds <= 3 &&
-            analysis.peakAmplitude < 0.02 &&
-            analysis.rmsAmplitude < 0.004 {
+            analysis.peakAmplitude < 0.008 &&
+            analysis.rmsAmplitude < 0.0015 {
             return true
         }
 
         if analysis.durationSeconds >= 4 &&
-            analysis.rmsAmplitude < 0.01 &&
-            analysis.speechSampleRatio < 0.015 &&
-            analysis.peakAmplitude < 0.08 {
+            analysis.rmsAmplitude < 0.002 &&
+            analysis.speechSampleRatio < 0.0015 &&
+            analysis.peakAmplitude < 0.015 {
             return true
         }
 

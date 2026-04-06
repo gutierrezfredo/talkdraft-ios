@@ -261,10 +261,7 @@ extension NoteDetailView {
                     return
                 }
 
-                if TranscriptionService.shouldUseShortRecordingFallback(
-                    for: transcribedText,
-                    durationSeconds: recordingDuration
-                ) || TranscriptionService.shouldUseLowSpeechFallback(
+                if TranscriptionService.shouldUseLowSpeechFallback(
                     for: transcribedText,
                     analysis: signalAnalysis,
                     speechMetrics: result.speechMetrics
